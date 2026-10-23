@@ -56,6 +56,14 @@ export class ControlsView {
     }
   }
 
+  /** Debug readout under the buttons: tick, run state, measured speed. */
+  public setStatus(text: string): void {
+    const status = this.container.querySelector<HTMLElement>('#sim-status');
+    if (status && status.textContent !== text) {
+      status.textContent = text;
+    }
+  }
+
   public getSpeed(): number {
     return this.currentSpeed;
   }
@@ -87,6 +95,8 @@ export class ControlsView {
           <button type="button" id="btn-reset" class="btn btn-secondary" title="Reset with current seed">Reset</button>
           <button type="button" id="btn-new-seed" class="btn btn-secondary" title="Generate new random seed">New Seed</button>
         </div>
+
+        <p id="sim-status" class="sim-status">Tick 0 · Paused</p>
       </div>
     `;
 

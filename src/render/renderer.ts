@@ -24,19 +24,18 @@ export class CanvasRenderer {
   }
 
   public resize(): void {
+    // CSS owns the on-screen size (a square wrapper that fits the layout);
+    // here we only match the drawing buffer to it for crisp high-DPI output.
+    // Setting an inline px size would stop the layout column from shrinking.
     const parent = this.canvas.parentElement;
-    const containerWidth = parent ? parent.clientWidth : window.innerWidth;
-    // Keep it square and responsive, bounded to parent width (mobile safe)
-    const displaySize = Math.max(280, Math.min(containerWidth, 600));
+    const displaySize = Math.max(1, parent ? parent.clientWidth : this.canvas.clientWidth);
     this.canvasSize = displaySize;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
     this.canvas.width = Math.floor(displaySize * dpr);
     this.canvas.height = Math.floor(displaySize * dpr);
-    this.canvas.style.width = `${displaySize}px`;
-    this.canvas.style.height = `${displaySize}px`;
 
-    this.ctx.scale(dpr, dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.cellSize = displaySize / this.world.config.gridWidth;
   }
 

@@ -1,4 +1,5 @@
 import type { WorldMetrics } from '../sim/types';
+import { setHTMLPreservingDetails } from './dom';
 
 export class MetricsView {
   private readonly container: HTMLElement;
@@ -21,7 +22,9 @@ export class MetricsView {
       diversity,
     } = metrics;
 
-    this.container.innerHTML = `
+    setHTMLPreservingDetails(
+      this.container,
+      `
       <div class="metrics-bar">
         <div class="metric-card">
           <span class="m-label">Tick</span>
@@ -85,6 +88,7 @@ export class MetricsView {
           </div>
         </div>
       </details>
-    `;
+    `
+    );
   }
 }

@@ -41,7 +41,7 @@ body {
 }
 
 .app {
-  max-width: 1080px;
+  max-width: 1400px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -178,16 +178,21 @@ body {
   color: var(--text-main);
 }
 
-/* Layout */
+/* Layout: phone = one column (world, controls, metrics, inspector);
+   wider screens = world on the left, panels on the right. */
 .main-simulation-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+}
+
+.main-simulation-layout > * {
+  min-width: 0;
 }
 
 @media (min-width: 820px) {
   .main-simulation-layout {
-    grid-template-columns: minmax(320px, 540px) 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 440px);
     align-items: start;
   }
 }
@@ -202,14 +207,18 @@ body {
 .canvas-wrapper {
   position: relative;
   width: 100%;
-  max-width: 540px;
+  /* Square, but never taller than the screen (landscape phones, desktop). */
+  max-width: calc(100vh - 140px);
+  max-width: calc(100svh - 140px);
+  min-width: 240px;
   aspect-ratio: 1 / 1;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
   background: #0f171e;
-  touch-action: none;
+  /* Taps select organisms; swipes must still scroll the page. */
+  touch-action: manipulation;
 }
 
 #sim-canvas {
@@ -324,6 +333,7 @@ body {
 
 .seed-controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
@@ -335,7 +345,8 @@ body {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 0 8px;
-  flex: 1;
+  flex: 1 1 100px;
+  min-width: 0;
   height: 44px;
 }
 
@@ -352,6 +363,23 @@ body {
   width: 100%;
   outline: none;
   font-weight: 600;
+}
+
+
+.sim-status {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 /* Inspector */

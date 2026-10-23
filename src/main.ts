@@ -20,8 +20,6 @@ app.innerHTML = `
       </div>
     </header>
 
-    <section id="metrics-container" class="metrics-section" aria-label="Simulation Metrics"></section>
-
     <div class="main-simulation-layout">
       <section class="canvas-panel" aria-label="World Viewport">
         <div class="canvas-wrapper">
@@ -32,6 +30,7 @@ app.innerHTML = `
 
       <section class="interaction-panel">
         <div id="controls-container"></div>
+        <section id="metrics-container" class="metrics-section" aria-label="Simulation Metrics"></section>
         <div id="inspector-container"></div>
       </section>
     </div>
@@ -79,8 +78,32 @@ const BASE_TICKS_PER_SECOND = 6;
 let lastTimestamp = performance.now();
 let tickAccumulator = 0;
 
-function stepSimulation(): void {
-  world.step();
+// The text panels are rebuilt from HTML, so while running they refresh at a
+// modest rate; the canvas still redraws every frame that a tick happened.
+const PANEL_REFRESH_MS = 200;
+let lastPanelRefresh = 0;
+
+// Rolling window of recent tick timestamps, for the measured ticks/s readout.
+const recentTickTimes: number[] = [];
+
+function updateStatus(): void {
+  const now = performance.now();
+  while (recentTickTimes.length > 0 && now - recentTickTimes[0] > 1000) {
+    recentTickTimes.shift();
+  }
+  const population = world.organisms.size;
+  let state: string;
+  if (isRunning) {
+    const target = BASE_TICKS_PER_SECOND * speedMultiplier;
+    state = `Running ${speedMultiplier}× · ${recentTickTimes.length}/${target} ticks/s`;
+  } else {
+    state = world.tick === 0 ? 'Paused · press Start or Step' : 'Paused';
+  }
+  const extinct = population === 0 ? ' · Extinct' : '';
+  controlsView.setStatus(`Tick ${world.tick} · ${state}${extinct}`);
+}
+
+function refreshPanels(): void {
   const selected = world.getSelectedOrganism();
 
   if (selected) {
@@ -100,7 +123,13 @@ function stepSimulation(): void {
   }
 
   metricsView.render(world.getMetrics());
-  renderer.render();
+  updateStatus();
+  lastPanelRefresh = performance.now();
+}
+
+function stepSimulation(): void {
+  world.step();
+  recentTickTimes.push(performance.now());
 }
 
 const controlsView = new ControlsView(controlsContainer, initialSeed, {
@@ -109,12 +138,18 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, {
     controlsView.setRunning(isRunning);
     lastTimestamp = performance.now();
     tickAccumulator = 0;
+    recentTickTimes.length = 0;
+    refreshPanels();
   },
   onStep: () => {
     stepSimulation();
+    refreshPanels();
+    renderer.render();
   },
   onSpeedChange: (speed) => {
     speedMultiplier = speed;
+    recentTickTimes.length = 0;
+    updateStatus();
   },
   onReset: (seed) => {
     isRunning = false;
@@ -123,8 +158,10 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, {
     world.selectOrganism(null);
     lastSelectedId = null;
     lastSelectedOrganismSnapshot = null;
+    recentTickTimes.length = 0;
     metricsView.render(world.getMetrics());
     inspectorView.render(undefined, world.config);
+    updateStatus();
     renderer.render();
   },
   onNewSeed: () => {
@@ -136,11 +173,14 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, {
     world.selectOrganism(null);
     lastSelectedId = null;
     lastSelectedOrganismSnapshot = null;
+    recentTickTimes.length = 0;
     metricsView.render(world.getMetrics());
     inspectorView.render(undefined, world.config);
+    updateStatus();
     renderer.render();
   },
 });
+updateStatus();
 
 // 5. Main animation & tick loop
 function loop(timestamp: number): void {
@@ -152,9 +192,18 @@ function loop(timestamp: number): void {
     const intervalMs = 1000 / targetTps;
 
     tickAccumulator += Math.min(elapsedMs, 250); // cap to avoid spiral on tab switch
+    let stepped = false;
     while (tickAccumulator >= intervalMs) {
       stepSimulation();
       tickAccumulator -= intervalMs;
+      stepped = true;
+    }
+
+    if (stepped) {
+      renderer.render();
+    }
+    if (timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) {
+      refreshPanels();
     }
   }
 
@@ -183,12 +232,15 @@ function handleCanvasPointer(clientX: number, clientY: number): void {
   renderer.render();
 }
 
-canvas.addEventListener('pointerdown', (e) => {
+// 'click' rather than 'pointerdown' so a swipe that starts on the canvas
+// scrolls the page instead of selecting an organism.
+canvas.addEventListener('click', (e) => {
   handleCanvasPointer(e.clientX, e.clientY);
 });
 
-// 7. Responsive handling
-window.addEventListener('resize', () => {
+// 7. Responsive handling: the wrapper's size changes on window resize,
+// phone rotation, and layout breakpoints; follow it directly.
+new ResizeObserver(() => {
   renderer.resize();
   renderer.render();
-});
+}).observe(canvas.parentElement!);

@@ -1,4 +1,5 @@
 import type { Organism, SimulationConfig } from '../sim/types';
+import { setHTMLPreservingDetails } from './dom';
 
 export class InspectorView {
   private readonly container: HTMLElement;
@@ -7,6 +8,13 @@ export class InspectorView {
   constructor(container: HTMLElement, onDeselect?: () => void) {
     this.container = container;
     this.onDeselectCallback = onDeselect;
+    // One delegated listener on the persistent container: the close button
+    // itself is recreated on every render, which can swallow taps mid-press.
+    this.container.addEventListener('click', (e) => {
+      if ((e.target as Element).closest('.btn-close-inspector')) {
+        this.onDeselectCallback?.();
+      }
+    });
   }
 
   public render(organism: Organism | undefined, config: SimulationConfig): void {
@@ -127,7 +135,9 @@ export class InspectorView {
       )
       .join('');
 
-    this.container.innerHTML = `
+    setHTMLPreservingDetails(
+      this.container,
+      `
       <div class="inspector-card">
         <header class="inspector-header">
           <div>
@@ -234,15 +244,7 @@ export class InspectorView {
           </div>
         </details>
       </div>
-    `;
-
-    const closeBtn = this.container.querySelector<HTMLButtonElement>('.btn-close-inspector');
-    if (closeBtn && this.onDeselectCallback) {
-      closeBtn.addEventListener('click', () => {
-        if (this.onDeselectCallback) {
-          this.onDeselectCallback();
-        }
-      });
-    }
+    `
+    );
   }
 }
