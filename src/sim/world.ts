@@ -19,6 +19,7 @@ import {
   mutatePolicy,
 } from './policy';
 import { computeWorldMetrics } from './metrics';
+import { MetricsHistory } from './history';
 
 export class World {
   public readonly config: SimulationConfig;
@@ -36,6 +37,8 @@ export class World {
 
   public selectedOrganismId: string | null = null;
   public metrics!: WorldMetrics;
+  /** Sampled metrics over the whole run, for trend charts and export. */
+  public readonly history = new MetricsHistory();
 
   constructor(configOverrides?: Partial<SimulationConfig>) {
     this.config = createConfig(configOverrides);
@@ -56,6 +59,7 @@ export class World {
     this.foodPatches.clear();
     this.organisms.clear();
     this.selectedOrganismId = null;
+    this.history.clear();
 
     this.prng.reset();
 
@@ -564,15 +568,17 @@ export class World {
       }
     }
 
+    const organisms = Array.from(this.organisms.values());
     this.metrics = computeWorldMetrics(
       this.tick,
-      Array.from(this.organisms.values()),
+      organisms,
       totalFoodStock,
       activePatchCount,
       this.birthsTotal,
       this.deathsTotal,
       this.deceasedLifespans
     );
+    this.history.record(this.metrics, organisms);
   }
 
   public getOrganism(id: string): Organism | undefined {

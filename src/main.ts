@@ -4,6 +4,7 @@ import { CanvasRenderer } from './render/renderer';
 import { MetricsView } from './ui/metrics-view';
 import { ControlsView } from './ui/controls';
 import { InspectorView } from './ui/inspector';
+import { HistoryView } from './ui/history-view';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -32,6 +33,7 @@ app.innerHTML = `
         <div id="controls-container"></div>
         <section id="metrics-container" class="metrics-section" aria-label="Simulation Metrics"></section>
         <div id="inspector-container"></div>
+        <section id="history-container" aria-label="Trends over time"></section>
       </section>
     </div>
 
@@ -45,6 +47,7 @@ const canvas = document.querySelector<HTMLCanvasElement>('#sim-canvas')!;
 const metricsContainer = document.querySelector<HTMLDivElement>('#metrics-container')!;
 const controlsContainer = document.querySelector<HTMLDivElement>('#controls-container')!;
 const inspectorContainer = document.querySelector<HTMLDivElement>('#inspector-container')!;
+const historyContainer = document.querySelector<HTMLElement>('#history-container')!;
 
 // 1. Initialize Simulation World
 const initialSeed = 42;
@@ -66,8 +69,18 @@ const inspectorView = new InspectorView(inspectorContainer, () => {
   renderer.render();
 });
 
+const historyView = new HistoryView(historyContainer, () => {
+  const csv = world.history.toCSV();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  link.download = `alife-seed-${world.config.seed}-tick-${world.tick}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
 // Update initial views
 metricsView.render(world.getMetrics());
+historyView.render(world.history.getSamples());
 inspectorView.render(undefined, world.config);
 renderer.render();
 
@@ -123,6 +136,7 @@ function refreshPanels(): void {
   }
 
   metricsView.render(world.getMetrics());
+  historyView.render(world.history.getSamples());
   updateStatus();
   lastPanelRefresh = performance.now();
 }
@@ -161,6 +175,7 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, {
     recentTickTimes.length = 0;
     metricsView.render(world.getMetrics());
     inspectorView.render(undefined, world.config);
+    historyView.render(world.history.getSamples());
     updateStatus();
     renderer.render();
   },
@@ -176,6 +191,7 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, {
     recentTickTimes.length = 0;
     metricsView.render(world.getMetrics());
     inspectorView.render(undefined, world.config);
+    historyView.render(world.history.getSamples());
     updateStatus();
     renderer.render();
   },
