@@ -34,7 +34,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   strangerSimilarity: 0.25,
   sharingEnabled: true,
   shareAmount: 10,
-  shareMultiplier: 1.5,
+  shareMultiplier: 1.0, // Pure transfer: sharing moves energy, never creates it
   shareMinEnergyAfter: 25,
   parentalMinEnergyAfter: 5,
   immigrationInterval: 25,

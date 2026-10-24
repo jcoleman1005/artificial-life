@@ -113,6 +113,20 @@ describe('Sharing', () => {
     expect(world.kinSharesTotal).toBe(1);
   });
 
+  it('conserves energy by default: the recipient gains exactly what the donor gives', () => {
+    const world = emptyWorld();
+    const donor = makeOrganism('donor', 5, 5, { energy: 90, policy: { ...NEUTRAL, shareWithKin: 2 } });
+    const recipient = makeOrganism('recipient', 6, 5, { energy: 20 });
+    world.organisms.set(donor.id, donor);
+    world.organisms.set(recipient.id, recipient);
+
+    world.step();
+
+    expect(donor.energy).toBe(80);
+    expect(recipient.energy).toBe(30);
+    expect(donor.energy + recipient.energy).toBe(110);
+  });
+
   it('uses the kin weight for look-alikes and the stranger weight for others', () => {
     const world = emptyWorld();
     // Shares generously with kin, refuses strangers.

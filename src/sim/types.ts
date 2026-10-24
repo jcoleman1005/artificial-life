@@ -199,7 +199,7 @@ export interface SimulationConfig {
   strangerSimilarity: number; // Tag similarity at/below which neighbours count as strangers
   sharingEnabled: boolean; // Experiment switch for the SHARE action
   shareAmount: number; // Energy the donor gives up per share
-  shareMultiplier: number; // Recipient gets shareAmount × this (> 1 = cooperation pays)
+  shareMultiplier: number; // Recipient gets shareAmount × this (1 = pure transfer; > 1 creates energy)
   shareMinEnergyAfter: number; // Donor must keep at least this much after sharing
   parentalMinEnergyAfter: number; // Lower floor when feeding one's own hungry child
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
