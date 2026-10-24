@@ -235,6 +235,46 @@ body {
   text-align: center;
 }
 
+/* Legend */
+.legend {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+
+.legend summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.legend-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 12px;
+  padding: 0 12px 4px;
+}
+
+.legend-grid li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.legend-grid svg {
+  flex: none;
+}
+
+.legend-note {
+  padding: 4px 12px 10px;
+  color: var(--text-muted);
+}
+
 /* Interaction Panel */
 .interaction-panel {
   display: flex;

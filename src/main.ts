@@ -33,6 +33,23 @@ app.innerHTML = `
 
       <section class="interaction-panel">
         <div id="controls-container"></div>
+        <details class="legend" open>
+          <summary>What the symbols mean</summary>
+          <ul class="legend-grid">
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#60a5fa"/><path d="M15 10 L7.5 6 L7.5 14 Z" fill="#0b1016"/></svg>Moving</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="M10 10 L15.4 6.4 A7 7 0 1 0 15.4 13.6 Z" fill="#60a5fa"/><circle cx="17.5" cy="10" r="2" fill="#4ade80"/></svg>Eating</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="11" r="7" fill="#60a5fa"/><rect x="7.5" y="8.5" width="5" height="5" fill="#0b1016"/></svg>Picking up food</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="12" r="6" fill="#60a5fa"/><circle cx="7" cy="3.5" r="2" fill="#4ade80"/><circle cx="13" cy="3.5" r="2" fill="#4ade80"/></svg>Carrying food</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="4.5" cy="10" r="4" fill="#60a5fa"/><circle cx="17.5" cy="10" r="3" fill="#60a5fa"/><circle cx="17.5" cy="10" r="4.6" fill="none" stroke="#fbbf24" stroke-width="1.4"/><path d="M7 10 H11.5" stroke="#fbbf24" stroke-width="2"/><path d="M14 10 L10.5 7.5 L10.5 12.5 Z" fill="#fbbf24"/></svg>Giving food</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#60a5fa"/><circle cx="10" cy="10" r="2" fill="#0b1016"/></svg>Resting</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#60a5fa"/><path d="M13 5.5 V14.5" stroke="#0b1016" stroke-width="2.4" stroke-linecap="round"/></svg>Blocked (bar = side it pushed)</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="5" cy="10" r="4" fill="#60a5fa"/><path d="M5 10 H16" stroke="rgba(255,255,255,0.7)" stroke-width="1"/><circle cx="16" cy="10" r="2.6" fill="#60a5fa"/><circle cx="16" cy="10" r="4" fill="none" stroke="#fff" stroke-width="1"/></svg>Birth (newborn ring)</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="5" fill="#60a5fa"/><circle cx="10" cy="10" r="8" fill="none" stroke="#f87171" stroke-width="1.2" stroke-dasharray="2 2"/></svg>Starving (under 25%)</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="rgba(34,197,94,0.2)"/><circle cx="10" cy="10" r="5" fill="#4ade80"/><circle cx="10" cy="10" r="1.6" fill="#14532d"/></svg>Food patch</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" fill="#17130c" stroke="#3a3020"/></svg>Lean season</li>
+          </ul>
+          <p class="legend-note">Body colour is the tribe tag (or family); size shows energy. Symbols show what it did last tick.</p>
+        </details>
         <section id="metrics-container" class="metrics-section" aria-label="Simulation Metrics"></section>
         <div id="inspector-container"></div>
         <section id="history-container" aria-label="Trends over time"></section>

@@ -4,6 +4,15 @@ import type { World } from '../sim/world';
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
 
+/** Unit vector for an action that ends in a compass direction. */
+function directionOf(type: string): [number, number] {
+  if (type.endsWith('_NORTH')) return [0, -1];
+  if (type.endsWith('_SOUTH')) return [0, 1];
+  if (type.endsWith('_EAST')) return [1, 0];
+  if (type.endsWith('_WEST')) return [-1, 0];
+  return [0, 0];
+}
+
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -141,6 +150,61 @@ export class CanvasRenderer {
       const isSelected = selectedOrg ? org.id === selectedOrg.id : false;
       this.drawOrganism(org, isSelected);
     }
+
+    // 7. Interactions that span two cells: food gifts and births
+    this.drawInteractions();
+  }
+
+  /** Gold arrows from givers to receivers, and thin lines from parents to newborns. */
+  private drawInteractions(): void {
+    const { ctx, cellSize } = this;
+    const centre = (o: { x: number; y: number }) => [(o.x + 0.5) * cellSize, (o.y + 0.5) * cellSize];
+
+    for (const org of this.world.organisms.values()) {
+      const last = org.recentHistory[0];
+      if (!last || last.outcome !== 'success') continue;
+      const type = last.chosenAction.type;
+
+      if (type.startsWith('GIVE_') && last.chosenAction.recipientId) {
+        const recipient = this.world.organisms.get(last.chosenAction.recipientId);
+        if (!recipient) continue;
+        const [x1, y1] = centre(org);
+        const [x2, y2] = centre(recipient);
+        const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+        const [ux, uy] = [(x2 - x1) / len, (y2 - y1) / len];
+        const head = Math.max(3, cellSize * 0.28);
+        // Shaft and head, stopping at the receiver's edge
+        const ex = x2 - ux * cellSize * 0.3;
+        const ey = y2 - uy * cellSize * 0.3;
+        ctx.strokeStyle = '#fbbf24';
+        ctx.fillStyle = '#fbbf24';
+        ctx.lineWidth = Math.max(1.5, cellSize * 0.12);
+        ctx.beginPath();
+        ctx.moveTo(x1 + ux * cellSize * 0.2, y1 + uy * cellSize * 0.2);
+        ctx.lineTo(ex - ux * head * 0.6, ey - uy * head * 0.6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex - ux * head - uy * head * 0.6, ey - uy * head + ux * head * 0.6);
+        ctx.lineTo(ex - ux * head + uy * head * 0.6, ey - uy * head - ux * head * 0.6);
+        ctx.closePath();
+        ctx.fill();
+        // The receiver gets a gold ring
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x2, y2, cellSize * 0.47, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (type.startsWith('REPRODUCE_') && last.chosenAction.target) {
+        const [x1, y1] = centre(org);
+        const [x2, y2] = centre(last.chosenAction.target);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+    }
   }
 
   private drawFoodPatch(patch: FoodPatch): void {
@@ -197,44 +261,85 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
-    // Outer energy ring
-    ctx.strokeStyle = `hsla(${hue}, 80%, ${lightness}%, 0.35)`;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2);
-    ctx.stroke();
+    // Organism body (radius proportional to energy). Its shape and the dark
+    // glyph cut into it show what the organism did last tick.
+    // Kept from 60% to 100% of full size so action glyphs stay readable.
+    const bodyRadius = Math.max(2.8, baseRadius * (0.6 + energyRatio * 0.4));
+    const body = `hsl(${hue}, 85%, ${lightness}%)`;
+    const glyph = '#0b1016';
+    const last = org.recentHistory[0];
+    const type = last?.chosenAction.type ?? 'REST';
+    const succeeded = last?.outcome === 'success';
 
-    // Organism body (radius proportional to energy)
-    const bodyRadius = Math.max(2.5, baseRadius * (0.4 + energyRatio * 0.55));
-    ctx.fillStyle = `hsl(${hue}, 85%, ${lightness}%)`;
+    ctx.fillStyle = body;
     ctx.beginPath();
-    ctx.arc(cx, cy, bodyRadius, 0, Math.PI * 2);
+    if (type === 'EAT' && succeeded) {
+      // Eating: a Pac-Man mouth
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, bodyRadius, Math.PI * 0.22, Math.PI * 1.78);
+      ctx.closePath();
+    } else {
+      ctx.arc(cx, cy, bodyRadius, 0, Math.PI * 2);
+    }
     ctx.fill();
 
-    // Heading indicator for the last move, or a gold dot toward a gift recipient
-    const lastDecision = org.recentHistory[0];
-    const lastType = lastDecision?.chosenAction.type ?? 'REST';
-    const isMove = lastType.startsWith('MOVE_');
-    const isShare = lastType.startsWith('GIVE_') && lastDecision?.outcome === 'success';
-    if (isMove || isShare) {
-      let hx = 0;
-      let hy = 0;
-      if (lastType.endsWith('_NORTH')) hy = -1;
-      if (lastType.endsWith('_SOUTH')) hy = 1;
-      if (lastType.endsWith('_EAST')) hx = 1;
-      if (lastType.endsWith('_WEST')) hx = -1;
-
-      ctx.fillStyle = isShare ? '#fbbf24' : '#ffffff';
+    if (type.startsWith('MOVE_') && succeeded) {
+      // Moving: an arrowhead pointing the way it went
+      const [hx, hy] = directionOf(type);
+      const tip = bodyRadius * 0.75;
+      const back = bodyRadius * 0.35;
+      const wing = bodyRadius * 0.5;
+      ctx.fillStyle = glyph;
       ctx.beginPath();
-      const dotRadius = isShare ? 2.5 : 1.5;
-      ctx.arc(cx + hx * (bodyRadius * 0.6), cy + hy * (bodyRadius * 0.6), dotRadius, 0, Math.PI * 2);
+      ctx.moveTo(cx + hx * tip, cy + hy * tip);
+      ctx.lineTo(cx - hx * back - hy * wing, cy - hy * back + hx * wing);
+      ctx.lineTo(cx - hx * back + hy * wing, cy - hy * back - hx * wing);
+      ctx.closePath();
       ctx.fill();
-    } else {
-      // Resting/eating core
-      ctx.fillStyle = '#0f171e';
+    } else if (type === 'PICK_UP' && succeeded) {
+      // Harvesting: a pouch
+      const half = bodyRadius * 0.38;
+      ctx.fillStyle = glyph;
+      ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
+    } else if (type.startsWith('MOVE_')) {
+      // Blocked: a dark bar on the side it tried to move toward
+      const [hx, hy] = directionOf(type);
+      const off = bodyRadius * 0.45;
+      const half = bodyRadius * 0.6;
+      ctx.strokeStyle = glyph;
+      ctx.lineWidth = Math.max(1.5, bodyRadius * 0.35);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx + hx * off - hy * half, cy + hy * off + hx * half);
+      ctx.lineTo(cx + hx * off + hy * half, cy + hy * off - hx * half);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+    } else if (type !== 'EAT' || !succeeded) {
+      // Resting or anything else: a small dark core
+      ctx.fillStyle = glyph;
       ctx.beginPath();
       ctx.arc(cx, cy, Math.max(1, bodyRadius * 0.3), 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    // Newborn: a thin white ring for its first few ticks
+    if (org.age < 4) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, bodyRadius + 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Starving (below a quarter of max energy): a red dashed ring hugging the body
+    if (org.energy < maxEnergy * 0.25) {
+      ctx.strokeStyle = '#f87171';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([1.5, 1.5]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, bodyRadius + 1.2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     // Carried food: one small green pip per unit, centred along the top edge
