@@ -135,7 +135,9 @@ export function senseEnvironment(
   }
 
   // Check action preconditions
-  const canEat = currentCellFood > 0 && energy < config.maxEnergy;
+  const { carriedFood } = organism;
+  const canEat = (currentCellFood > 0 || carriedFood > 0) && energy < config.maxEnergy;
+  const canPickUp = currentCellFood > 0 && carriedFood < config.carryCapacity;
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
   let canReproduce = energy >= config.reproductionThreshold;
@@ -162,13 +164,13 @@ export function senseEnvironment(
     canReproduce = hasValidCell;
   }
 
-  const canShare =
-    config.sharingEnabled && energy - config.shareAmount >= config.shareMinEnergyAfter;
+  const canGive = config.sharingEnabled && carriedFood > 0;
 
   return {
     currentEnergy: energy,
     energyRatio: Math.min(1, Math.max(0, energy / config.maxEnergy)),
     currentCellFood,
+    carriedFood,
     nearestFood,
     nearestObstacle,
     nearestOrganism,
@@ -180,7 +182,8 @@ export function senseEnvironment(
         ? { dx: Number(kinPullX.toFixed(3)), dy: Number(kinPullY.toFixed(3)) }
         : null,
     canEat,
+    canPickUp,
     canReproduce,
-    canShare,
+    canGive,
   };
 }

@@ -17,6 +17,7 @@ const NEUTRAL: PolicyWeights = {
   shareWithKin: 0,
   shareWithStrangers: 0,
   careForChildren: 0,
+  forageDrive: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -31,16 +32,17 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     age: 0,
     offspringCount: 0,
     foodEatenCount: 0,
-    energyGiven: 0,
-    energyReceived: 0,
+    carriedFood: 0,
+    foodGiven: 0,
+    foodReceived: 0,
     recentHistory: [],
     ...overrides,
   };
 }
 
 /**
- * An empty 10×10 world where only sharing changes energy: no metabolism,
- * free movement, and reproduction out of reach.
+ * An empty 10×10 world where only eating changes energy: no metabolism,
+ * free movement, reproduction out of reach, no seasons or newcomers.
  */
 function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
@@ -54,6 +56,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     moveCost: 0,
     reproductionThreshold: 1000,
     immigrationInterval: 0,
+    seasonLength: 0,
     foodSpawnInterval: 9999,
     ...overrides,
   });
@@ -90,11 +93,36 @@ describe('Tags', () => {
   });
 });
 
-describe('Sharing', () => {
-  it('moves energy from donor to an adjacent recipient with the configured multiplier', () => {
-    const world = emptyWorld({ shareAmount: 10, shareMultiplier: 1.5 });
+describe('Carrying food', () => {
+  it('picks up food into a limited carry, then eats it away from any patch', () => {
+    const world = emptyWorld({ carryCapacity: 2, foodEnergyYield: 25, foodRegenInterval: 9999 });
+    world.foodPatches.set('5,5', { x: 5, y: 5, stock: 5, capacity: 5 });
+    // Full energy, so eating is impossible and picking up is the only food action.
+    const forager = makeOrganism('forager', 5, 5, { energy: 100, policy: { ...NEUTRAL, forageDrive: 2 } });
+    world.organisms.set(forager.id, forager);
+
+    for (let t = 0; t < 4; t++) world.step();
+    expect(forager.carriedFood).toBe(2); // capped at carryCapacity
+    expect(world.foodPatches.get('5,5')!.stock).toBe(3);
+
+    // Away from the patch and hungry: eating uses carried food.
+    forager.x = 1;
+    forager.y = 1;
+    forager.energy = 40;
+    forager.policy.eatDrive = 2;
+    world.step();
+    expect(forager.recentHistory[0].chosenAction.type).toBe('EAT');
+    expect(forager.energy).toBe(65);
+    expect(forager.carriedFood).toBe(1);
+  });
+});
+
+describe('Giving food', () => {
+  it('hands one carried unit to a hungry neighbour, who eats it; no energy moves', () => {
+    const world = emptyWorld({ foodEnergyYield: 25 });
     const donor = makeOrganism('donor', 5, 5, {
       energy: 90,
+      carriedFood: 1,
       policy: { ...NEUTRAL, shareWithKin: 2 },
     });
     const recipient = makeOrganism('recipient', 6, 5, { energy: 20 });
@@ -103,36 +131,23 @@ describe('Sharing', () => {
 
     world.step();
 
-    expect(donor.recentHistory[0].chosenAction.type).toBe('SHARE_EAST');
-    expect(donor.recentHistory[0].energyDelta).toBe(-10);
-    expect(donor.energy).toBe(80);
-    expect(recipient.energy).toBe(35);
-    expect(donor.energyGiven).toBe(10);
-    expect(recipient.energyReceived).toBe(15);
+    expect(donor.recentHistory[0].chosenAction.type).toBe('GIVE_EAST');
+    expect(donor.energy).toBe(90); // the donor gives food, not energy
+    expect(donor.carriedFood).toBe(0);
+    expect(donor.foodGiven).toBe(1);
+    expect(recipient.energy).toBe(45);
+    expect(recipient.foodReceived).toBe(1);
     expect(world.sharesTotal).toBe(1);
     expect(world.kinSharesTotal).toBe(1);
   });
 
-  it('conserves energy by default: the recipient gains exactly what the donor gives', () => {
-    const world = emptyWorld();
-    const donor = makeOrganism('donor', 5, 5, { energy: 90, policy: { ...NEUTRAL, shareWithKin: 2 } });
-    const recipient = makeOrganism('recipient', 6, 5, { energy: 20 });
-    world.organisms.set(donor.id, donor);
-    world.organisms.set(recipient.id, recipient);
-
-    world.step();
-
-    expect(donor.energy).toBe(80);
-    expect(recipient.energy).toBe(30);
-    expect(donor.energy + recipient.energy).toBe(110);
-  });
-
   it('uses the kin weight for look-alikes and the stranger weight for others', () => {
     const world = emptyWorld();
-    // Shares generously with kin, refuses strangers.
+    // Gives generously to kin, refuses strangers.
     const donor = makeOrganism('donor', 5, 5, {
       energy: 90,
       tag: 100,
+      carriedFood: 1,
       policy: { ...NEUTRAL, shareWithKin: 2, shareWithStrangers: -2 },
     });
     const stranger = makeOrganism('stranger', 6, 5, { tag: 280, energy: 20 });
@@ -141,71 +156,97 @@ describe('Sharing', () => {
 
     world.step();
 
-    expect(donor.recentHistory[0].chosenAction.type).toBe('SHARE_WEST');
-    expect(kin.energyReceived).toBeGreaterThan(0);
-    expect(stranger.energyReceived).toBe(0);
+    expect(donor.recentHistory[0].chosenAction.type).toBe('GIVE_WEST');
+    expect(kin.foodReceived).toBe(1);
+    expect(stranger.foodReceived).toBe(0);
   });
 
-  it('is never chosen when switched off, or when the donor would drop too low', () => {
-    for (const config of [
-      { sharingEnabled: false },
-      { shareAmount: 10, shareMinEnergyAfter: 25 }, // 30 - 10 < 25
-    ]) {
+  it('is only offered when switched on, carrying food, and the neighbour is hungry', () => {
+    const giveOptions = (config: Partial<SimulationConfig>, carried: number, recipientEnergy: number) => {
       const world = emptyWorld(config);
       const donor = makeOrganism('donor', 5, 5, {
-        energy: 30,
+        energy: 90,
+        carriedFood: carried,
         policy: { ...NEUTRAL, shareWithKin: 2, shareWithStrangers: 2 },
       });
-      if (!config.shareAmount) donor.energy = 100;
-      const recipient = makeOrganism('recipient', 6, 5, { energy: 20 });
+      const recipient = makeOrganism('recipient', 6, 5, { energy: recipientEnergy });
       world.organisms.set(donor.id, donor);
       world.organisms.set(recipient.id, recipient);
-
       world.step();
+      return donor.recentHistory[0].scores.filter((s) => s.action.type.startsWith('GIVE_')).length;
+    };
+    expect(giveOptions({}, 1, 20)).toBe(1);
+    expect(giveOptions({ sharingEnabled: false }, 1, 20)).toBe(0);
+    expect(giveOptions({}, 0, 20)).toBe(0); // nothing to give
+    expect(giveOptions({}, 1, 50)).toBe(0); // at half energy: not hungry
+  });
 
-      const actions = donor.recentHistory[0].scores.map((s) => s.action.type);
-      expect(actions.some((a) => a.startsWith('SHARE_'))).toBe(false);
-      expect(recipient.energyReceived).toBe(0);
-    }
+  it('scores giving by how hungry the neighbour is', () => {
+    const scoreFor = (recipientEnergy: number) => {
+      const world = emptyWorld();
+      const donor = makeOrganism('donor', 5, 5, {
+        energy: 90,
+        carriedFood: 1,
+        policy: { ...NEUTRAL, shareWithKin: 1 },
+      });
+      const recipient = makeOrganism('recipient', 6, 5, { energy: recipientEnergy });
+      world.organisms.set(donor.id, donor);
+      world.organisms.set(recipient.id, recipient);
+      world.step();
+      return donor.recentHistory[0].scores.find((s) => s.action.type === 'GIVE_EAST')?.totalScore;
+    };
+    // need = (50 - e) / 50; score = 1 × need × 2 − 0.1
+    expect(scoreFor(25)).toBeCloseTo(0.9);
+    expect(scoreFor(5)).toBeCloseTo(1.7);
   });
 
   it('never pushes a recipient above maximum energy', () => {
-    const world = emptyWorld({ maxEnergy: 100, shareMultiplier: 6 });
-    const donor = makeOrganism('donor', 5, 5, { energy: 100, policy: { ...NEUTRAL, shareWithKin: 2 } });
-    const recipient = makeOrganism('recipient', 5, 6, { energy: 45 });
+    const world = emptyWorld({ maxEnergy: 100, foodEnergyYield: 100 });
+    const donor = makeOrganism('donor', 5, 5, { energy: 90, carriedFood: 1, policy: { ...NEUTRAL, shareWithKin: 2 } });
+    const recipient = makeOrganism('recipient', 5, 6, { energy: 10 });
     world.organisms.set(donor.id, donor);
     world.organisms.set(recipient.id, recipient);
 
     world.step();
 
     expect(recipient.energy).toBe(100);
-    expect(recipient.energyReceived).toBe(55);
   });
 
-  it('only offers sharing to hungry neighbours, scored by how hungry they are', () => {
-    const scoreFor = (recipientEnergy: number) => {
-      const world = emptyWorld();
-      const donor = makeOrganism('donor', 5, 5, { energy: 90, policy: { ...NEUTRAL, shareWithKin: 1 } });
-      const recipient = makeOrganism('recipient', 6, 5, { energy: recipientEnergy });
-      world.organisms.set(donor.id, donor);
-      world.organisms.set(recipient.id, recipient);
+  it('cannot keep a boxed-in family alive by passing energy around', () => {
+    // A parent surrounded by its four children, no food anywhere and none carried.
+    const world = emptyWorld({ tickMetabolismCost: 0.25 });
+    const caring = { ...NEUTRAL, shareWithKin: 2, careForChildren: 2 };
+    const parent = makeOrganism('parent', 5, 5, { energy: 20, policy: caring });
+    world.organisms.set(parent.id, parent);
+    [[5, 4], [5, 6], [4, 5], [6, 5]].forEach(([cx, cy], i) => {
+      const child = makeOrganism(`child-${i}`, cx, cy, {
+        energy: 20,
+        policy: caring,
+        lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
+      });
+      world.organisms.set(child.id, child);
+    });
+
+    const totalEnergy = () => Array.from(world.organisms.values()).reduce((a, o) => a + o.energy, 0);
+    let previous = totalEnergy();
+    for (let t = 0; t < 20; t++) {
       world.step();
-      return donor.recentHistory[0].scores.find((s) => s.action.type === 'SHARE_EAST')?.totalScore;
-    };
-    expect(scoreFor(50)).toBeUndefined(); // at half energy: not hungry
-    expect(scoreFor(70)).toBeUndefined();
-    // need = (50 - e) / 50; score = 1 × need × 2 − 0.1
-    expect(scoreFor(25)).toBeCloseTo(0.9);
-    expect(scoreFor(5)).toBeCloseTo(1.7);
+      const now = totalEnergy();
+      expect(now).toBeLessThan(previous);
+      previous = now;
+    }
+    expect(world.sharesTotal).toBe(0);
   });
 });
 
 describe('Parental care', () => {
-  function parentAndChild(parentEnergy: number, childEnergy: number, care: number) {
-    const world = emptyWorld({ shareAmount: 10, shareMultiplier: 1.5, parentalMinEnergyAfter: 5 });
+  function parentAndChild(parentEnergy: number, childEnergy: number, carried: number) {
+    const world = emptyWorld({ foodEnergyYield: 25 });
     const parent = makeOrganism('parent', 5, 5, {
       energy: parentEnergy,
-      policy: { ...NEUTRAL, careForChildren: care },
+      carriedFood: carried,
+      // Eats as eagerly as it cares, so giving really competes with eating.
+      policy: { ...NEUTRAL, careForChildren: 2, eatDrive: 1 },
     });
     const child = makeOrganism('child', 6, 5, {
       energy: childEnergy,
@@ -217,33 +258,34 @@ describe('Parental care', () => {
     return { world, parent, child };
   }
 
-  it('feeds a hungry child even when the parent is below the normal sharing floor', () => {
-    // 30 - 10 = 20 is below shareMinEnergyAfter (25) but above the parental floor (5).
-    const { world, parent, child } = parentAndChild(30, 10, 2);
-    expect(parent.recentHistory[0].chosenAction.type).toBe('SHARE_EAST');
+  it('gives its only carried food to a starving child even when hungry itself', () => {
+    const { world, parent, child } = parentAndChild(20, 5, 1);
+    const decision = parent.recentHistory[0];
+    expect(decision.scores.some((s) => s.action.type === 'EAT')).toBe(true);
+    expect(decision.chosenAction.type).toBe('GIVE_EAST');
+    expect(parent.carriedFood).toBe(0);
     expect(parent.energy).toBe(20);
-    expect(child.energy).toBe(25);
+    expect(child.energy).toBe(30);
     expect(world.parentalSharesTotal).toBe(1);
   });
 
-  it('scores care by the child’s hunger and never goes below the parental floor', () => {
-    expect(parentAndChild(30, 10, 2).parent.recentHistory[0].scores.some((s) => 'parentalCare' in s.components)).toBe(true);
-    // Child at or above half energy: no parental care on offer.
-    const fed = parentAndChild(30, 60, 2);
-    expect(fed.parent.recentHistory[0].scores.some((s) => 'parentalCare' in s.components)).toBe(false);
-    // Parent would drop below the floor: 14 - 10 < 5.
-    const weak = parentAndChild(14, 10, 2);
-    expect(weak.parent.recentHistory[0].scores.some((s) => s.action.type.startsWith('SHARE_'))).toBe(false);
+  it('scores care on the child’s hunger, and only for hungry children', () => {
+    const careOffered = (childEnergy: number) =>
+      parentAndChild(80, childEnergy, 1).parent.recentHistory[0].scores.some(
+        (s) => 'parentalCare' in s.components
+      );
+    expect(careOffered(10)).toBe(true);
+    expect(careOffered(60)).toBe(false);
   });
 
   it('does not treat an unrelated hungry neighbour as a child', () => {
     const world = emptyWorld();
-    const adult = makeOrganism('adult', 5, 5, { energy: 30, policy: { ...NEUTRAL, careForChildren: 2 } });
+    const adult = makeOrganism('adult', 5, 5, { energy: 80, carriedFood: 1, policy: { ...NEUTRAL, careForChildren: 2 } });
     const other = makeOrganism('other', 6, 5, { energy: 10 });
     world.organisms.set(adult.id, adult);
     world.organisms.set(other.id, other);
     world.step();
-    expect(other.energyReceived).toBe(0);
+    expect(other.foodReceived).toBe(0);
   });
 });
 
@@ -328,6 +370,9 @@ describe('Long run with sharing', () => {
         const key = `${o.x},${o.y}`;
         if (!(o.energy > 0 && o.energy <= world.config.maxEnergy)) violations.push(`energy ${o.energy}`);
         if (!(o.tag >= 0 && o.tag < 360)) violations.push(`tag ${o.tag}`);
+        if (!(o.carriedFood >= 0 && o.carriedFood <= world.config.carryCapacity)) {
+          violations.push(`carried ${o.carriedFood}`);
+        }
         if (cells.has(key)) violations.push(`overlap at ${key}`);
         cells.add(key);
       }

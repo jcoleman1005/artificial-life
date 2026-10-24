@@ -81,8 +81,8 @@ export class CanvasRenderer {
     const { gridWidth, gridHeight } = this.world.config;
     const selectedOrg = this.world.getSelectedOrganism();
 
-    // 1. Background
-    ctx.fillStyle = '#0f171e';
+    // 1. Background (warmer and darker in a lean season)
+    ctx.fillStyle = this.world.getMetrics().season === 'lean' ? '#17130c' : '#0f171e';
     ctx.fillRect(0, 0, canvasSize, canvasSize);
 
     // 2. Subtle grid lines
@@ -211,11 +211,11 @@ export class CanvasRenderer {
     ctx.arc(cx, cy, bodyRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Heading indicator for the last move, or a gold dot toward a share recipient
+    // Heading indicator for the last move, or a gold dot toward a gift recipient
     const lastDecision = org.recentHistory[0];
     const lastType = lastDecision?.chosenAction.type ?? 'REST';
     const isMove = lastType.startsWith('MOVE_');
-    const isShare = lastType.startsWith('SHARE_') && lastDecision?.outcome === 'success';
+    const isShare = lastType.startsWith('GIVE_') && lastDecision?.outcome === 'success';
     if (isMove || isShare) {
       let hx = 0;
       let hy = 0;
@@ -234,6 +234,19 @@ export class CanvasRenderer {
       ctx.fillStyle = '#0f171e';
       ctx.beginPath();
       ctx.arc(cx, cy, Math.max(1, bodyRadius * 0.3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Carried food: one small green pip per unit along the top edge of the cell
+    for (let i = 0; i < org.carriedFood; i++) {
+      const px = cx - cellSize * 0.18 + i * cellSize * 0.36;
+      ctx.fillStyle = '#0f171e';
+      ctx.beginPath();
+      ctx.arc(px, cy - cellSize * 0.36, Math.max(1.6, cellSize * 0.1), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#4ade80';
+      ctx.beginPath();
+      ctx.arc(px, cy - cellSize * 0.36, Math.max(1, cellSize * 0.07), 0, Math.PI * 2);
       ctx.fill();
     }
   }

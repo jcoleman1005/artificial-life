@@ -12,6 +12,7 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['shareWithKin', 'Share With Kin'],
   ['shareWithStrangers', 'Share With Strangers'],
   ['careForChildren', 'Care For Children'],
+  ['forageDrive', 'Forage Drive'],
 ];
 
 export class InspectorView {
@@ -196,12 +197,12 @@ export class InspectorView {
             <span class="pill-value">${foodEatenCount}</span>
           </div>
           <div class="summary-pill">
-            <span class="pill-title">Energy Given</span>
-            <span class="pill-value">${Math.round(organism.energyGiven)}</span>
+            <span class="pill-title">Carrying</span>
+            <span class="pill-value">${organism.carriedFood} / ${config.carryCapacity}</span>
           </div>
           <div class="summary-pill">
-            <span class="pill-title">Energy Received</span>
-            <span class="pill-value">${Math.round(organism.energyReceived)}</span>
+            <span class="pill-title">Given / Got</span>
+            <span class="pill-value">${organism.foodGiven} / ${organism.foodReceived}</span>
           </div>
         </div>
 

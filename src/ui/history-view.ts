@@ -21,9 +21,11 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   shareWithKin: 'Share with kin',
   shareWithStrangers: 'Share with strangers',
   careForChildren: 'Care for children',
+  forageDrive: 'Forage drive',
 };
 
 const REFERENCE = '#64748b';
+const LEAN_WASH = 'rgba(251, 191, 36, 0.09)';
 
 interface Panel {
   readonly section: string;
@@ -49,7 +51,7 @@ function ratePer100(total: (s: HistorySample) => number) {
     !prev || s.tick === prev.tick ? 0 : ((total(s) - total(prev)) / (s.tick - prev.tick)) * 100;
 }
 
-// Ordinary shares exclude parent-to-child care, which has its own chart.
+// Ordinary gifts exclude parent-to-child care, which has its own chart.
 const sharesPer100Ticks = ratePer100((s) => s.sharesTotal - s.parentalSharesTotal);
 const parentalSharesPer100Ticks = ratePer100((s) => s.parentalSharesTotal);
 
@@ -112,17 +114,17 @@ export class HistoryView {
       },
       {
         section: 'Tribes & sharing',
-        label: 'Shares per 100 ticks',
+        label: 'Gifts to others',
         fixedRange: null,
         value: sharesPer100Ticks,
-        format: (s, prev) => sharesPer100Ticks(s, prev).toFixed(1),
+        format: (s, prev) => `${sharesPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
       },
       {
         section: 'Tribes & sharing',
-        label: 'Parent → child per 100 ticks',
+        label: 'Gifts to own children',
         fixedRange: null,
         value: parentalSharesPer100Ticks,
-        format: (s, prev) => parentalSharesPer100Ticks(s, prev).toFixed(1),
+        format: (s, prev) => `${parentalSharesPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
       },
       {
         section: 'Tribes & sharing',
@@ -154,7 +156,7 @@ export class HistoryView {
       <details open class="trends-card">
         <summary class="trends-summary">
           <strong>Trends</strong>
-          <span class="trends-hint">Band = ±1 SD · grey = chance · bias = kin − stranger sharing</span>
+          <span class="trends-hint">Shaded = lean season · band = ±1 SD · grey = chance · bias = kin − stranger giving</span>
         </summary>
         <div class="trends-body">
           <div class="trends-toolbar">
@@ -296,6 +298,15 @@ export class HistoryView {
       return bottom - ((clamped - yMin) / (yMax - yMin)) * (bottom - top);
     };
     const valueAt = (i: number) => panel.value(samples[i], samples[i - 1]);
+
+    // Lean seasons: a faint wash behind everything else.
+    if (n > 1) {
+      ctx.fillStyle = LEAN_WASH;
+      const half = (right - left) / (n - 1) / 2;
+      samples.forEach((s, i) => {
+        if (s.lean) ctx.fillRect(x(i) - half, top, half * 2, bottom - top);
+      });
+    }
 
     ctx.strokeStyle = GRID;
     ctx.lineWidth = 1;

@@ -33,12 +33,12 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   kinSimilarity: 0.75,
   strangerSimilarity: 0.25,
   sharingEnabled: true,
-  shareAmount: 10,
-  shareMultiplier: 1.0, // Pure transfer: sharing moves energy, never creates it
-  shareMinEnergyAfter: 25,
-  parentalMinEnergyAfter: 5,
+  carryCapacity: 2,
   immigrationInterval: 25,
   immigrationCount: 1,
+  seasonLength: 800,
+  leanFraction: 0.4,
+  leanSlowdown: 8,
   seed: 42,
 };
 

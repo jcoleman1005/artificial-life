@@ -31,6 +31,7 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     shareWithStrangers: Number(prng.nextFloat(-0.75, 0.75).toFixed(3)),
     // Parents start out caring; evolution can weaken or strengthen it.
     careForChildren: Number(prng.nextFloat(1.0, 2.0).toFixed(3)),
+    forageDrive: Number(prng.nextFloat(-0.5, 1.0).toFixed(3)),
   };
 }
 
@@ -64,6 +65,7 @@ export function mutatePolicy(
     shareWithKin: mutateWeight(parentPolicy.shareWithKin),
     shareWithStrangers: mutateWeight(parentPolicy.shareWithStrangers),
     careForChildren: mutateWeight(parentPolicy.careForChildren),
+    forageDrive: mutateWeight(parentPolicy.forageDrive),
   };
 }
 
@@ -120,7 +122,15 @@ export function getLegalActions(
     });
   }
 
-  // 3. Reproduce actions
+  // 3. Pick up food to carry
+  if (sensed.canPickUp) {
+    actions.push({
+      type: 'PICK_UP',
+      target: { x, y },
+    });
+  }
+
+  // 4. Reproduce actions
   if (sensed.canReproduce) {
     const candidateRepros: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'REPRODUCE_NORTH', dx: 0, dy: -1 },
@@ -155,44 +165,37 @@ export function getLegalActions(
     }
   }
 
-  // 4. Share actions: give energy to an orthogonally adjacent organism that
-  // is below half energy (organisms can see whether a neighbour is hungry).
-  // Ordinary sharing needs canShare; feeding one's own child is allowed
-  // down to the lower parentalMinEnergyAfter floor.
-  if (config.sharingEnabled) {
+  // 5. Give actions: hand one carried food unit to an orthogonally adjacent
+  // organism that is below half energy (organisms can see whether a
+  // neighbour is hungry). The recipient eats it; energy is never transferred.
+  if (sensed.canGive) {
     const half = config.maxEnergy / 2;
-    const canFeedChild =
-      organism.energy - config.shareAmount >= config.parentalMinEnergyAfter;
-    const candidateShares: { type: LegalAction['type']; dx: number; dy: number }[] = [
-      { type: 'SHARE_NORTH', dx: 0, dy: -1 },
-      { type: 'SHARE_SOUTH', dx: 0, dy: 1 },
-      { type: 'SHARE_EAST', dx: 1, dy: 0 },
-      { type: 'SHARE_WEST', dx: -1, dy: 0 },
+    const candidateGives: { type: LegalAction['type']; dx: number; dy: number }[] = [
+      { type: 'GIVE_NORTH', dx: 0, dy: -1 },
+      { type: 'GIVE_SOUTH', dx: 0, dy: 1 },
+      { type: 'GIVE_EAST', dx: 1, dy: 0 },
+      { type: 'GIVE_WEST', dx: -1, dy: 0 },
     ];
 
-    for (const share of candidateShares) {
-      const targetX = x + share.dx;
-      const targetY = y + share.dy;
+    for (const give of candidateGives) {
+      const targetX = x + give.dx;
+      const targetY = y + give.dy;
       const recipient = snapshot.organismAt.get(`${targetX},${targetY}`);
-      if (!recipient) continue;
-
-      if (recipient.energy >= half) continue;
-      const isChild = recipient.lineage.parentId === organism.id;
-      if (!(isChild ? canFeedChild : sensed.canShare)) continue;
+      if (!recipient || recipient.energy >= half) continue;
 
       actions.push({
-        type: share.type,
+        type: give.type,
         target: { x: targetX, y: targetY },
         recipientId: recipient.id,
         recipientSimilarity: Number(tagSimilarity(organism.tag, recipient.tag).toFixed(3)),
         recipientIsKin: isKin(organism.tag, recipient.tag, config),
         recipientNeed: Number(((half - recipient.energy) / half).toFixed(3)),
-        recipientIsChild: isChild,
+        recipientIsChild: recipient.lineage.parentId === organism.id,
       });
     }
   }
 
-  // 5. Rest action (always a fallback option)
+  // 6. Rest action (always a fallback option)
   actions.push({
     type: 'REST',
     target: { x, y },
@@ -239,12 +242,22 @@ export function scoreAction(
       break;
     }
 
-    case 'SHARE_NORTH':
-    case 'SHARE_SOUTH':
-    case 'SHARE_EAST':
-    case 'SHARE_WEST': {
-      // Both kinds of sharing scale with the recipient's hunger. A small
-      // fixed cost means sharing needs a positive drive, never a tie-break.
+    case 'PICK_UP': {
+      // Stocking up is driven by forageDrive and how much room is left.
+      const room = 1 - sensed.carriedFood / Math.max(1, config.carryCapacity);
+      const forageComponent = policy.forageDrive * room * 1.5 - 0.1;
+      components['forage'] = Number(forageComponent.toFixed(3));
+      totalScore = forageComponent;
+      break;
+    }
+
+    case 'GIVE_NORTH':
+    case 'GIVE_SOUTH':
+    case 'GIVE_EAST':
+    case 'GIVE_WEST': {
+      // Giving scales with the recipient's hunger. It competes with eating
+      // the same food oneself. A small fixed cost means giving needs a
+      // positive drive, never a tie-break.
       const need = action.recipientNeed ?? 0;
       if (action.recipientIsChild) {
         const careComponent = policy.careForChildren * need * 2.0 - 0.1;
@@ -255,7 +268,7 @@ export function scoreAction(
         const similarity = action.recipientSimilarity ?? 0;
         const weight = shareWeightFor(policy, similarity, config);
         const shareComponent = weight * need * 2.0 - 0.1;
-        components[`share (${Math.round(similarity * 100)}% alike)`] = Number(
+        components[`give (${Math.round(similarity * 100)}% alike)`] = Number(
           shareComponent.toFixed(3)
         );
         totalScore = shareComponent;

@@ -5,6 +5,8 @@ import { MetricsView } from './ui/metrics-view';
 import { ControlsView } from './ui/controls';
 import { InspectorView } from './ui/inspector';
 import { HistoryView } from './ui/history-view';
+import { seasonAt } from './sim/seasons';
+import { DEFAULT_CONFIG } from './sim/config';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -113,7 +115,11 @@ function updateStatus(): void {
     state = world.tick === 0 ? 'Paused · press Start or Step' : 'Paused';
   }
   const extinct = population === 0 ? ' · Extinct' : '';
-  controlsView.setStatus(`Tick ${world.tick} · ${state}${extinct}`);
+  const season = seasonAt(world.tick, world.config);
+  const seasonText = season
+    ? ` · ${season.season === 'lean' ? 'Lean' : 'Plenty'} (${season.ticksLeft} left)`
+    : '';
+  controlsView.setStatus(`Tick ${world.tick} · ${state}${seasonText}${extinct}`);
 }
 
 function refreshPanels(): void {
@@ -146,7 +152,11 @@ function stepSimulation(): void {
   recentTickTimes.push(performance.now());
 }
 
-const controlsView = new ControlsView(controlsContainer, initialSeed, world.config.sharingEnabled, {
+const controlsView = new ControlsView(
+  controlsContainer,
+  initialSeed,
+  { sharingEnabled: world.config.sharingEnabled, seasonsEnabled: world.config.seasonLength > 0 },
+  {
   onPlayPause: () => {
     isRunning = !isRunning;
     controlsView.setRunning(isRunning);
@@ -186,6 +196,11 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, world.conf
   onSharingChange: (enabled) => {
     // Takes effect from the next tick; use Reset to rerun a seed from the start.
     world.config.sharingEnabled = enabled;
+  },
+  onSeasonsChange: (enabled) => {
+    world.config.seasonLength = enabled ? DEFAULT_CONFIG.seasonLength : 0;
+    updateStatus();
+    renderer.render();
   },
   onNewSeed: () => {
     isRunning = false;

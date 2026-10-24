@@ -11,6 +11,7 @@ export const POLICY_WEIGHT_KEYS = [
   'shareWithKin',
   'shareWithStrangers',
   'careForChildren',
+  'forageDrive',
 ] as const satisfies readonly (keyof PolicyWeights)[];
 
 export type PolicyWeightKey = (typeof POLICY_WEIGHT_KEYS)[number];
@@ -38,6 +39,8 @@ export interface HistorySample {
   readonly kinSharesTotal: number;
   readonly parentalSharesTotal: number;
   readonly immigrantsTotal: number;
+  /** Whether this sample fell in a lean season. */
+  readonly lean: boolean;
   /** Population mean and standard deviation of each inherited policy weight. */
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
 }
@@ -110,6 +113,7 @@ export class MetricsHistory {
       kinSharesTotal: metrics.kinSharesTotal,
       parentalSharesTotal: metrics.parentalSharesTotal,
       immigrantsTotal: metrics.immigrantsTotal,
+      lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
     });
 
@@ -138,6 +142,7 @@ export class MetricsHistory {
       'kin_shares_total',
       'parental_shares_total',
       'immigrants_total',
+      'lean_season',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
     ];
     const rows = this.samples.map((s) =>
@@ -158,6 +163,7 @@ export class MetricsHistory {
         s.kinSharesTotal,
         s.parentalSharesTotal,
         s.immigrantsTotal,
+        s.lean ? 1 : 0,
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

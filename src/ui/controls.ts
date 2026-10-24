@@ -8,6 +8,12 @@ export interface ControlCallbacks {
   onNewSeed: () => void;
   onColorModeChange: (mode: ColorMode) => void;
   onSharingChange: (enabled: boolean) => void;
+  onSeasonsChange: (enabled: boolean) => void;
+}
+
+export interface ExperimentToggles {
+  sharingEnabled: boolean;
+  seasonsEnabled: boolean;
 }
 
 export class ControlsView {
@@ -17,17 +23,17 @@ export class ControlsView {
   private currentSpeed = 1;
   private currentSeed: string | number = 42;
   private callbacks: ControlCallbacks;
-  private readonly sharingEnabled: boolean;
+  private readonly toggles: ExperimentToggles;
 
   constructor(
     container: HTMLElement,
     initialSeed: string | number,
-    sharingEnabled: boolean,
+    toggles: ExperimentToggles,
     callbacks: ControlCallbacks
   ) {
     this.container = container;
     this.currentSeed = initialSeed;
-    this.sharingEnabled = sharingEnabled;
+    this.toggles = toggles;
     this.callbacks = callbacks;
     this.render();
   }
@@ -118,8 +124,15 @@ export class ControlsView {
           <div class="toggle-field">
             <span class="toggle-label">Sharing</span>
             <div class="speed-selector" role="group" aria-label="Sharing">
-              <button type="button" class="btn-speed ${this.sharingEnabled ? 'active' : ''}" data-sharing="on">On</button>
-              <button type="button" class="btn-speed ${this.sharingEnabled ? '' : 'active'}" data-sharing="off">Off</button>
+              <button type="button" class="btn-speed ${this.toggles.sharingEnabled ? 'active' : ''}" data-sharing="on">On</button>
+              <button type="button" class="btn-speed ${this.toggles.sharingEnabled ? '' : 'active'}" data-sharing="off">Off</button>
+            </div>
+          </div>
+          <div class="toggle-field">
+            <span class="toggle-label">Seasons</span>
+            <div class="speed-selector" role="group" aria-label="Lean seasons">
+              <button type="button" class="btn-speed ${this.toggles.seasonsEnabled ? 'active' : ''}" data-seasons="on">On</button>
+              <button type="button" class="btn-speed ${this.toggles.seasonsEnabled ? '' : 'active'}" data-seasons="off">Off</button>
             </div>
           </div>
         </div>
@@ -170,6 +183,14 @@ export class ControlsView {
       btn.addEventListener('click', () => {
         sharingButtons.forEach((b) => b.classList.toggle('active', b === btn));
         this.callbacks.onSharingChange(btn.dataset.sharing === 'on');
+      });
+    });
+
+    const seasonButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-seasons]');
+    seasonButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        seasonButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onSeasonsChange(btn.dataset.seasons === 'on');
       });
     });
 

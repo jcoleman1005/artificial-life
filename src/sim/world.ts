@@ -21,6 +21,7 @@ import {
 import { computeWorldMetrics } from './metrics';
 import { MetricsHistory } from './history';
 import { inheritTag } from './tags';
+import { seasonAt } from './seasons';
 
 export class World {
   public readonly config: SimulationConfig;
@@ -158,8 +159,9 @@ export class World {
       age: 0,
       offspringCount: 0,
       foodEatenCount: 0,
-      energyGiven: 0,
-      energyReceived: 0,
+      carriedFood: 0,
+      foodGiven: 0,
+      foodReceived: 0,
       recentHistory: [],
     };
   }
@@ -214,8 +216,9 @@ export class World {
    */
   public step(): void {
     if (this.organisms.size === 0) {
-      this.updateEnvironment();
+      // Same order as a populated tick: advance, then update the environment.
       this.tick++;
+      this.updateEnvironment();
       this.updateMetrics();
       return;
     }
@@ -380,9 +383,10 @@ export class World {
 
     // Phase 4: Action Execution & Energy Accounting
     const newBorns: Organism[] = [];
-    // Shares are paid by the donor during its action and delivered after all
-    // actions, so every organism acts on the same pre-tick energy levels.
-    const pendingGifts: { recipientId: string; amount: number }[] = [];
+    // Food gifts leave the donor during its action and are eaten by the
+    // recipient after all actions, so every organism acts on the same
+    // pre-tick state.
+    const pendingGifts: { recipientId: string }[] = [];
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
@@ -396,13 +400,16 @@ export class World {
         case 'EAT': {
           const key = `${organism.x},${organism.y}`;
           const patch = this.foodPatches.get(key);
-          if (patch && patch.stock > 0 && organism.energy < this.config.maxEnergy) {
+          // Eat from the patch underfoot if there is one, otherwise from carried food.
+          const fromPatch = patch !== undefined && patch.stock > 0;
+          if ((fromPatch || organism.carriedFood > 0) && organism.energy < this.config.maxEnergy) {
             const energyGain = Math.min(
               this.config.maxEnergy - organism.energy,
               this.config.foodEnergyYield
             );
             organism.energy += energyGain;
-            patch.stock -= 1;
+            if (fromPatch) patch.stock -= 1;
+            else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
             outcome = 'success';
@@ -467,8 +474,9 @@ export class World {
                 age: 0,
                 offspringCount: 0,
                 foodEatenCount: 0,
-                energyGiven: 0,
-                energyReceived: 0,
+                carriedFood: 0,
+                foodGiven: 0,
+                foodReceived: 0,
                 recentHistory: [],
               };
 
@@ -482,25 +490,32 @@ export class World {
           break;
         }
 
-        case 'SHARE_NORTH':
-        case 'SHARE_SOUTH':
-        case 'SHARE_EAST':
-        case 'SHARE_WEST': {
-          const { shareAmount, shareMultiplier } = this.config;
-          if (chosenAction.recipientId && organism.energy > shareAmount) {
-            organism.energy -= shareAmount;
-            organism.energyGiven += shareAmount;
-            energyDelta -= shareAmount;
-            pendingGifts.push({
-              recipientId: chosenAction.recipientId,
-              amount: shareAmount * shareMultiplier,
-            });
+        case 'PICK_UP': {
+          const patch = this.foodPatches.get(`${organism.x},${organism.y}`);
+          if (patch && patch.stock > 0 && organism.carriedFood < this.config.carryCapacity) {
+            patch.stock -= 1;
+            organism.carriedFood += 1;
+            outcome = 'success';
+          } else {
+            outcome = 'no_food';
+          }
+          break;
+        }
+
+        case 'GIVE_NORTH':
+        case 'GIVE_SOUTH':
+        case 'GIVE_EAST':
+        case 'GIVE_WEST': {
+          if (chosenAction.recipientId && organism.carriedFood > 0) {
+            organism.carriedFood -= 1;
+            organism.foodGiven += 1;
+            pendingGifts.push({ recipientId: chosenAction.recipientId });
             this.sharesTotal++;
             if (chosenAction.recipientIsKin) this.kinSharesTotal++;
             if (chosenAction.recipientIsChild) this.parentalSharesTotal++;
             outcome = 'success';
           } else {
-            outcome = 'energy_too_low';
+            outcome = 'no_food';
           }
           break;
         }
@@ -532,13 +547,15 @@ export class World {
       }
     }
 
-    // Deliver shared energy (capped at the recipient's capacity; excess is lost)
+    // Deliver food gifts: the recipient eats each one (energy capped at the
+    // maximum; any excess from that unit is lost).
     for (const gift of pendingGifts) {
       const recipient = this.organisms.get(gift.recipientId);
       if (!recipient) continue;
-      const gain = Math.min(this.config.maxEnergy - recipient.energy, gift.amount);
+      const gain = Math.min(this.config.maxEnergy - recipient.energy, this.config.foodEnergyYield);
       recipient.energy += gain;
-      recipient.energyReceived += gain;
+      recipient.foodReceived += 1;
+      recipient.foodEatenCount++;
     }
 
     // Add newborns to population
@@ -579,8 +596,14 @@ export class World {
       gridHeight,
     } = this.config;
 
+    // Lean times: food regrows more slowly and no new patches appear.
+    const lean = seasonAt(this.tick, this.config)?.season === 'lean';
+    const regenInterval = lean
+      ? foodRegenInterval * Math.max(1, this.config.leanSlowdown)
+      : foodRegenInterval;
+
     // 1. Food patch stock regeneration
-    if (this.tick > 0 && this.tick % foodRegenInterval === 0) {
+    if (this.tick > 0 && this.tick % regenInterval === 0) {
       for (const patch of this.foodPatches.values()) {
         if (patch.stock < patch.capacity) {
           patch.stock = Math.min(patch.capacity, patch.stock + foodRegenAmount);
@@ -589,7 +612,7 @@ export class World {
     }
 
     // 2. Food patch spawning
-    if (this.tick > 0 && this.tick % foodSpawnInterval === 0) {
+    if (!lean && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
       let spawned = 0;
       let attempts = 0;
       while (
@@ -652,20 +675,23 @@ export class World {
     }
 
     const organisms = Array.from(this.organisms.values());
-    this.metrics = computeWorldMetrics(
-      this.tick,
-      organisms,
-      totalFoodStock,
-      activePatchCount,
-      this.birthsTotal,
-      this.deathsTotal,
-      this.deceasedLifespans,
-      this.sharesTotal,
-      this.kinSharesTotal,
-      this.parentalSharesTotal,
-      this.immigrantsTotal,
-      this.config
-    );
+    this.metrics = {
+      ...computeWorldMetrics(
+        this.tick,
+        organisms,
+        totalFoodStock,
+        activePatchCount,
+        this.birthsTotal,
+        this.deathsTotal,
+        this.deceasedLifespans,
+        this.sharesTotal,
+        this.kinSharesTotal,
+        this.parentalSharesTotal,
+        this.immigrantsTotal,
+        this.config
+      ),
+      season: seasonAt(this.tick, this.config)?.season ?? null,
+    };
     this.history.record(this.metrics, organisms);
   }
 

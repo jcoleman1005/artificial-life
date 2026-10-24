@@ -32,27 +32,28 @@ export type ActionType =
   | 'REPRODUCE_SOUTH'
   | 'REPRODUCE_EAST'
   | 'REPRODUCE_WEST'
-  | 'SHARE_NORTH'
-  | 'SHARE_SOUTH'
-  | 'SHARE_EAST'
-  | 'SHARE_WEST'
+  | 'PICK_UP'
+  | 'GIVE_NORTH'
+  | 'GIVE_SOUTH'
+  | 'GIVE_EAST'
+  | 'GIVE_WEST'
   | 'REST';
 
 export interface LegalAction {
   readonly type: ActionType;
   readonly target?: Point;
-  /** SHARE only: the adjacent organism receiving energy. */
+  /** GIVE only: the adjacent organism receiving a carried food unit. */
   readonly recipientId?: string;
-  /** SHARE only: how alike the recipient's tag looks (0..1). */
+  /** GIVE only: how alike the recipient's tag looks (0..1). */
   readonly recipientSimilarity?: number;
-  /** SHARE only: whether the recipient counts as kin (similarity >= kinSimilarity). */
+  /** GIVE only: whether the recipient counts as kin (similarity >= kinSimilarity). */
   readonly recipientIsKin?: boolean;
   /**
-   * SHARE only: how hungry the recipient is, 0 at half energy rising to 1
-   * at empty. Sharing is only offered to neighbours below half energy.
+   * GIVE only: how hungry the recipient is, 0 at half energy rising to 1
+   * at empty. Food is only offered to neighbours below half energy.
    */
   readonly recipientNeed?: number;
-  /** SHARE only: the recipient is the donor's own child (parental care). */
+  /** GIVE only: the recipient is the donor's own child (parental care). */
   readonly recipientIsChild?: boolean;
 }
 
@@ -71,12 +72,14 @@ export interface PolicyWeights {
   reproduceDrive: number;
   /** Positive: move toward look-alikes and away from strangers. Negative: the reverse ([-2, 2]). */
   kinAffinity: number;
-  /** Willingness to give surplus energy to an adjacent look-alike ([-2, 2]). */
+  /** Willingness to give carried food to a hungry look-alike ([-2, 2]). */
   shareWithKin: number;
-  /** Willingness to give surplus energy to an adjacent stranger ([-2, 2]). */
+  /** Willingness to give carried food to a hungry stranger ([-2, 2]). */
   shareWithStrangers: number;
-  /** Willingness to feed one's own hungry child, even at a cost to oneself ([-2, 2]). */
+  /** Willingness to give carried food to one's own hungry child, even when hungry oneself ([-2, 2]). */
   careForChildren: number;
+  /** Drive to pick up food and carry it for later or for others ([-2, 2]). */
+  forageDrive: number;
 }
 
 export interface SensedEntity {
@@ -92,6 +95,8 @@ export interface SensedInputs {
   readonly currentEnergy: number;
   readonly energyRatio: number; // [0, 1]
   readonly currentCellFood: number;
+  /** Food units this organism is carrying. */
+  readonly carriedFood: number;
   readonly nearestFood: SensedEntity | null;
   readonly nearestObstacle: SensedEntity | null;
   readonly nearestOrganism: SensedEntity | null;
@@ -105,9 +110,12 @@ export interface SensedInputs {
    * dissimilar ones, graded by similarity (null when none are in range).
    */
   readonly kinPull: { readonly dx: number; readonly dy: number } | null;
-  readonly canEat: boolean;
   readonly canReproduce: boolean;
-  readonly canShare: boolean;
+  /** Food available to eat here or in hand, and room for energy. */
+  readonly canEat: boolean;
+  readonly canPickUp: boolean;
+  /** Carrying food and the GIVE experiment switch is on. */
+  readonly canGive: boolean;
 }
 
 export interface ActionScore {
@@ -158,9 +166,11 @@ export interface Organism {
   age: number;
   offspringCount: number;
   foodEatenCount: number;
-  /** Cumulative energy given to and received from other organisms. */
-  energyGiven: number;
-  energyReceived: number;
+  /** Food units carried, eaten later or given away (at most carryCapacity). */
+  carriedFood: number;
+  /** Cumulative food units given to and received from other organisms. */
+  foodGiven: number;
+  foodReceived: number;
   recentHistory: DecisionRecord[];
 }
 
@@ -199,13 +209,13 @@ export interface SimulationConfig {
   tagMutationStdDev: number; // Degrees of hue shift when it does
   kinSimilarity: number; // Tag similarity at/above which neighbours count as kin (0..1)
   strangerSimilarity: number; // Tag similarity at/below which neighbours count as strangers
-  sharingEnabled: boolean; // Experiment switch for the SHARE action
-  shareAmount: number; // Energy the donor gives up per share
-  shareMultiplier: number; // Recipient gets shareAmount × this (1 = pure transfer; > 1 creates energy)
-  shareMinEnergyAfter: number; // Donor must keep at least this much after sharing
-  parentalMinEnergyAfter: number; // Lower floor when feeding one's own hungry child
+  sharingEnabled: boolean; // Experiment switch for giving carried food to neighbours
+  carryCapacity: number; // Food units an organism can carry
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
+  seasonLength: number; // Ticks per plenty + lean cycle (0 = no seasons)
+  leanFraction: number; // Fraction of each cycle that is lean (at the end)
+  leanSlowdown: number; // During lean, food regrows this many times slower and no patches spawn
   seed: number | string;
 }
 
@@ -248,6 +258,8 @@ export interface WorldMetrics {
   kinSharesTotal: number;
   parentalSharesTotal: number;
   immigrantsTotal: number;
+  /** Current season, or null when seasons are off. */
+  season: 'plenty' | 'lean' | null;
 }
 
 export interface WorldSnapshot {
