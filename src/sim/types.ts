@@ -43,8 +43,15 @@ export interface LegalAction {
   readonly target?: Point;
   /** SHARE only: the adjacent organism receiving energy. */
   readonly recipientId?: string;
-  /** SHARE only: whether the recipient's tag looks like the donor's. */
+  /** SHARE only: how alike the recipient's tag looks (0..1). */
+  readonly recipientSimilarity?: number;
+  /** SHARE only: whether the recipient counts as kin (similarity >= kinSimilarity). */
   readonly recipientIsKin?: boolean;
+  /**
+   * SHARE only: set when the recipient is the donor's own child and below
+   * half energy; how hungry it is (0..1). Parental care scores on this.
+   */
+  readonly childNeed?: number;
 }
 
 export interface PolicyWeights {
@@ -66,6 +73,8 @@ export interface PolicyWeights {
   shareWithKin: number;
   /** Willingness to give surplus energy to an adjacent stranger ([-2, 2]). */
   shareWithStrangers: number;
+  /** Willingness to feed one's own hungry child, even at a cost to oneself ([-2, 2]). */
+  careForChildren: number;
 }
 
 export interface SensedEntity {
@@ -85,12 +94,13 @@ export interface SensedInputs {
   readonly nearestObstacle: SensedEntity | null;
   readonly nearestOrganism: SensedEntity | null;
   readonly surroundingOrganismCount: number;
-  /** Organisms in sensing radius whose tag is within kinToleranceDegrees of ours. */
+  /** Organisms in sensing radius at least kinSimilarity alike. */
   readonly nearbyKinCount: number;
+  /** Organisms in sensing radius at most strangerSimilarity alike. */
   readonly nearbyStrangerCount: number;
   /**
-   * Distance-weighted direction toward nearby look-alikes minus toward
-   * strangers (unit-less; null when no organisms are in range).
+   * Distance-weighted direction toward similar organisms and away from
+   * dissimilar ones, graded by similarity (null when none are in range).
    */
   readonly kinPull: { readonly dx: number; readonly dy: number } | null;
   readonly canEat: boolean;
@@ -185,11 +195,15 @@ export interface SimulationConfig {
   sensingRadius: number; // Distance for local sensing (Chebyshev radius)
   tagMutationRate: number; // Probability a child's tag shifts at birth
   tagMutationStdDev: number; // Degrees of hue shift when it does
-  kinToleranceDegrees: number; // Tags this close (hue distance) count as "kin"
+  kinSimilarity: number; // Tag similarity at/above which neighbours count as kin (0..1)
+  strangerSimilarity: number; // Tag similarity at/below which neighbours count as strangers
   sharingEnabled: boolean; // Experiment switch for the SHARE action
   shareAmount: number; // Energy the donor gives up per share
   shareMultiplier: number; // Recipient gets shareAmount × this (> 1 = cooperation pays)
   shareMinEnergyAfter: number; // Donor must keep at least this much after sharing
+  parentalMinEnergyAfter: number; // Lower floor when feeding one's own hungry child
+  immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
+  immigrationCount: number; // Newcomers per arrival
   seed: number | string;
 }
 
@@ -230,6 +244,8 @@ export interface WorldMetrics {
   tribes: TribeMetrics;
   sharesTotal: number;
   kinSharesTotal: number;
+  parentalSharesTotal: number;
+  immigrantsTotal: number;
 }
 
 export interface WorldSnapshot {

@@ -98,6 +98,7 @@ describe('Artificial Life Core Mechanics', () => {
         kinAffinity: 0,
         shareWithKin: 0,
         shareWithStrangers: 0,
+        careForChildren: 0,
       },
       lineage: { id: 'lineage-1', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -165,6 +166,7 @@ describe('Artificial Life Core Mechanics', () => {
         kinAffinity: 0,
         shareWithKin: 0,
         shareWithStrangers: 0,
+        careForChildren: 0,
       },
       lineage: { id: 'lineage-1', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -226,6 +228,7 @@ describe('Artificial Life Core Mechanics', () => {
         kinAffinity: 0,
         shareWithKin: 0,
         shareWithStrangers: 0,
+        careForChildren: 0,
       },
       lineage: { id: 'lin-A', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -252,6 +255,7 @@ describe('Artificial Life Core Mechanics', () => {
         kinAffinity: 0,
         shareWithKin: 0,
         shareWithStrangers: 0,
+        careForChildren: 0,
       },
       lineage: { id: 'lin-B', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -323,6 +327,7 @@ describe('Artificial Life Core Mechanics', () => {
         kinAffinity: 0,
         shareWithKin: 0,
         shareWithStrangers: 0,
+        careForChildren: 0,
       },
       lineage: { id: 'clan-alpha', parentId: null, generation: 1, birthTick: 0 },
       age: 5,
@@ -378,6 +383,7 @@ describe('Artificial Life Core Mechanics', () => {
       kinAffinity: 0,
       shareWithKin: 0,
       shareWithStrangers: 0,
+      careForChildren: 0,
     };
 
     // If mutation rate is 0, offspring policy is strictly identical to parent

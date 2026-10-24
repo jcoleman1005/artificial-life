@@ -30,11 +30,15 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   sensingRadius: 3,
   tagMutationRate: 0.2,
   tagMutationStdDev: 8,
-  kinToleranceDegrees: 30,
+  kinSimilarity: 0.75,
+  strangerSimilarity: 0.25,
   sharingEnabled: true,
   shareAmount: 10,
   shareMultiplier: 1.5,
   shareMinEnergyAfter: 25,
+  parentalMinEnergyAfter: 5,
+  immigrationInterval: 25,
+  immigrationCount: 1,
   seed: 42,
 };
 

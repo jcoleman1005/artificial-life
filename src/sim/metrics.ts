@@ -5,7 +5,7 @@ import type {
   TribeMetrics,
   WorldMetrics,
 } from './types';
-import { isKin, tagDistance } from './tags';
+import { isKin, tagSimilarity } from './tags';
 
 /** Smallest group of nearby look-alikes that counts as a tribe. */
 export const MIN_TRIBE_SIZE = 5;
@@ -88,7 +88,7 @@ export function computeTribeMetrics(
     if (buckets[a] === 0) continue;
     kinPairs += (buckets[a] * (buckets[a] - 1)) / 2;
     for (let b = a + 1; b < 360; b++) {
-      if (buckets[b] > 0 && tagDistance(a, b) <= config.kinToleranceDegrees) {
+      if (buckets[b] > 0 && tagSimilarity(a, b) >= config.kinSimilarity) {
         kinPairs += buckets[a] * buckets[b];
       }
     }
@@ -183,6 +183,8 @@ export function computeWorldMetrics(
   deceasedLifespans: readonly number[],
   sharesTotal: number,
   kinSharesTotal: number,
+  parentalSharesTotal: number,
+  immigrantsTotal: number,
   config: Readonly<SimulationConfig>
 ): WorldMetrics {
   const population = organisms.length;
@@ -233,5 +235,7 @@ export function computeWorldMetrics(
     tribes: computeTribeMetrics(organisms, config),
     sharesTotal,
     kinSharesTotal,
+    parentalSharesTotal,
+    immigrantsTotal,
   };
 }

@@ -8,7 +8,7 @@ import type {
   WorldSnapshot,
 } from './types';
 import { PRNG } from './prng';
-import { isKin } from './tags';
+import { isKin, shareWeightFor, tagSimilarity } from './tags';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -24,11 +24,13 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     exploreTendency: Number(prng.nextFloat(0.1, 0.9).toFixed(3)),
     eatDrive: Number(prng.nextFloat(0.5, 1.5).toFixed(3)),
     reproduceDrive: Number(prng.nextFloat(0.3, 1.2).toFixed(3)),
-    // Social weights start near neutral and identical for kin and strangers,
-    // so any in-group bias has to evolve.
+    // Social weights start centred on zero and identical for kin and
+    // strangers, so any in-group bias has to evolve.
     kinAffinity: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
-    shareWithKin: Number(prng.nextFloat(-1.0, 0.5).toFixed(3)),
-    shareWithStrangers: Number(prng.nextFloat(-1.0, 0.5).toFixed(3)),
+    shareWithKin: Number(prng.nextFloat(-0.75, 0.75).toFixed(3)),
+    shareWithStrangers: Number(prng.nextFloat(-0.75, 0.75).toFixed(3)),
+    // Parents start out caring; evolution can weaken or strengthen it.
+    careForChildren: Number(prng.nextFloat(1.0, 2.0).toFixed(3)),
   };
 }
 
@@ -61,6 +63,7 @@ export function mutatePolicy(
     kinAffinity: mutateWeight(parentPolicy.kinAffinity),
     shareWithKin: mutateWeight(parentPolicy.shareWithKin),
     shareWithStrangers: mutateWeight(parentPolicy.shareWithStrangers),
+    careForChildren: mutateWeight(parentPolicy.careForChildren),
   };
 }
 
@@ -152,8 +155,13 @@ export function getLegalActions(
     }
   }
 
-  // 4. Share actions: give energy to an orthogonally adjacent organism
-  if (sensed.canShare) {
+  // 4. Share actions: give energy to an orthogonally adjacent organism.
+  // Ordinary sharing needs canShare; feeding one's own hungry child is
+  // allowed down to the lower parentalMinEnergyAfter floor.
+  if (config.sharingEnabled) {
+    const half = config.maxEnergy / 2;
+    const canFeedChild =
+      organism.energy - config.shareAmount >= config.parentalMinEnergyAfter;
     const candidateShares: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'SHARE_NORTH', dx: 0, dy: -1 },
       { type: 'SHARE_SOUTH', dx: 0, dy: 1 },
@@ -167,11 +175,19 @@ export function getLegalActions(
       const recipient = snapshot.organismAt.get(`${targetX},${targetY}`);
       if (!recipient) continue;
 
+      const isHungryChild =
+        recipient.lineage.parentId === organism.id && recipient.energy < half;
+      if (!(isHungryChild ? canFeedChild : sensed.canShare)) continue;
+
       actions.push({
         type: share.type,
         target: { x: targetX, y: targetY },
         recipientId: recipient.id,
+        recipientSimilarity: Number(tagSimilarity(organism.tag, recipient.tag).toFixed(3)),
         recipientIsKin: isKin(organism.tag, recipient.tag, config),
+        childNeed: isHungryChild
+          ? Number(((half - recipient.energy) / half).toFixed(3))
+          : undefined,
       });
     }
   }
@@ -227,15 +243,23 @@ export function scoreAction(
     case 'SHARE_SOUTH':
     case 'SHARE_EAST':
     case 'SHARE_WEST': {
-      // Giving scales with how full the donor is (nothing below half energy).
       // A small fixed cost means sharing needs a positive drive, never a tie-break.
-      const surplus = Math.max(0, sensed.energyRatio - 0.5) * 2;
-      const weight = action.recipientIsKin ? policy.shareWithKin : policy.shareWithStrangers;
-      const shareComponent = weight * surplus * 2.0 - 0.1;
-      components[action.recipientIsKin ? 'kinShare' : 'strangerShare'] = Number(
-        shareComponent.toFixed(3)
-      );
-      totalScore = shareComponent;
+      if (action.childNeed !== undefined) {
+        // Parental care scales with the child's hunger, not the parent's surplus.
+        const careComponent = policy.careForChildren * action.childNeed * 2.0 - 0.1;
+        components['parentalCare'] = Number(careComponent.toFixed(3));
+        totalScore = careComponent;
+      } else {
+        // Ordinary sharing scales with how full the donor is, and with a
+        // weight graded by how alike the recipient looks.
+        const similarity = action.recipientSimilarity ?? 0;
+        const weight = shareWeightFor(policy, similarity, config);
+        const shareComponent = weight * sensed.energyRatio * 2.0 - 0.1;
+        components[`share (${Math.round(similarity * 100)}% alike)`] = Number(
+          shareComponent.toFixed(3)
+        );
+        totalScore = shareComponent;
+      }
       break;
     }
 

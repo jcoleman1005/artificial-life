@@ -36,6 +36,8 @@ export class World {
   public deathsTotal = 0;
   public sharesTotal = 0;
   public kinSharesTotal = 0;
+  public parentalSharesTotal = 0;
+  public immigrantsTotal = 0;
   public readonly deceasedLifespans: number[] = [];
 
   public selectedOrganismId: string | null = null;
@@ -58,6 +60,8 @@ export class World {
     this.deathsTotal = 0;
     this.sharesTotal = 0;
     this.kinSharesTotal = 0;
+    this.parentalSharesTotal = 0;
+    this.immigrantsTotal = 0;
     this.deceasedLifespans.length = 0;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -120,39 +124,44 @@ export class World {
 
       if (!this.obstacles.has(key) && !occupiedCells.has(key)) {
         occupiedCells.add(key);
-        this.nextOrganismSeq++;
-        const id = `org-${this.nextOrganismSeq}`;
-        const policy = createRandomPolicy(this.prng);
-        const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
-
-        const organism: Organism = {
-          id,
-          x,
-          y,
-          energy: this.config.initialEnergy,
-          policy,
-          tag,
-          lineage: {
-            id: `lineage-${this.nextOrganismSeq}`,
-            parentId: null,
-            generation: 1,
-            birthTick: 0,
-          },
-          age: 0,
-          offspringCount: 0,
-          foodEatenCount: 0,
-          energyGiven: 0,
-          energyReceived: 0,
-          recentHistory: [],
-        };
-
-        this.organisms.set(id, organism);
+        const organism = this.createFounder(x, y);
+        this.organisms.set(organism.id, organism);
         placedOrganisms++;
       }
     }
 
     this.birthsTotal = placedOrganisms;
     this.updateMetrics();
+  }
+
+  /**
+   * A founder of a new lineage with a random policy and tag: the initial
+   * pioneers, and later immigrants.
+   */
+  private createFounder(x: number, y: number): Organism {
+    this.nextOrganismSeq++;
+    const policy = createRandomPolicy(this.prng);
+    const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
+    return {
+      id: `org-${this.nextOrganismSeq}`,
+      x,
+      y,
+      energy: this.config.initialEnergy,
+      policy,
+      tag,
+      lineage: {
+        id: `lineage-${this.nextOrganismSeq}`,
+        parentId: null,
+        generation: 1,
+        birthTick: this.tick,
+      },
+      age: 0,
+      offspringCount: 0,
+      foodEatenCount: 0,
+      energyGiven: 0,
+      energyReceived: 0,
+      recentHistory: [],
+    };
   }
 
   /**
@@ -488,6 +497,7 @@ export class World {
             });
             this.sharesTotal++;
             if (chosenAction.recipientIsKin) this.kinSharesTotal++;
+            if (chosenAction.childNeed !== undefined) this.parentalSharesTotal++;
             outcome = 'success';
           } else {
             outcome = 'energy_too_low';
@@ -603,6 +613,28 @@ export class World {
         }
       }
     }
+
+    // 3. Immigration: newcomers with random tags and policies arrive in
+    // random free cells, so look-alike groups are not just families.
+    const { immigrationInterval, immigrationCount } = this.config;
+    if (immigrationInterval > 0 && this.tick > 0 && this.tick % immigrationInterval === 0) {
+      const occupied = new Set<string>();
+      for (const o of this.organisms.values()) occupied.add(`${o.x},${o.y}`);
+      let arrived = 0;
+      let attempts = 0;
+      while (arrived < immigrationCount && attempts < 50) {
+        attempts++;
+        const x = this.prng.nextInt(0, gridWidth - 1);
+        const y = this.prng.nextInt(0, gridHeight - 1);
+        const key = `${x},${y}`;
+        if (this.obstacles.has(key) || occupied.has(key)) continue;
+        const immigrant = this.createFounder(x, y);
+        this.organisms.set(immigrant.id, immigrant);
+        occupied.add(key);
+        this.immigrantsTotal++;
+        arrived++;
+      }
+    }
   }
 
   /**
@@ -630,6 +662,8 @@ export class World {
       this.deceasedLifespans,
       this.sharesTotal,
       this.kinSharesTotal,
+      this.parentalSharesTotal,
+      this.immigrantsTotal,
       this.config
     );
     this.history.record(this.metrics, organisms);

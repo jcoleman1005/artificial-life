@@ -5,7 +5,7 @@ import type {
   SimulationConfig,
   WorldSnapshot,
 } from './types';
-import { isKin } from './tags';
+import { tagSimilarity } from './tags';
 
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
@@ -110,11 +110,12 @@ export function senseEnvironment(
       surroundingOrganismCount++;
       const manhattanDist = Math.abs(dx) + Math.abs(dy);
 
-      // Look-alikes pull, strangers push; nearer ones count more.
-      const kin = isKin(organism.tag, other.tag, config);
-      if (kin) nearbyKinCount++;
-      else nearbyStrangerCount++;
-      const sign = kin ? 1 : -1;
+      // Similar organisms pull, dissimilar ones push, graded from +1
+      // (identical tag) to -1 (opposite tag); nearer ones count more.
+      const similarity = tagSimilarity(organism.tag, other.tag);
+      if (similarity >= config.kinSimilarity) nearbyKinCount++;
+      if (similarity <= config.strangerSimilarity) nearbyStrangerCount++;
+      const sign = similarity * 2 - 1;
       const norm = Math.hypot(dx, dy);
       const weight = 1 / (1 + 0.3 * manhattanDist);
       kinPullX += (sign * weight * dx) / norm;

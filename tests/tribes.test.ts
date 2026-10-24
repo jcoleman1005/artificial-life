@@ -3,7 +3,7 @@ import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { computeTribeMetrics } from '../src/sim/metrics';
-import { inheritTag, isKin, tagDistance } from '../src/sim/tags';
+import { inheritTag, isKin, shareWeightFor, tagDistance, tagSimilarity } from '../src/sim/tags';
 import type { Organism, PolicyWeights, SimulationConfig } from '../src/sim/types';
 
 const NEUTRAL: PolicyWeights = {
@@ -16,6 +16,7 @@ const NEUTRAL: PolicyWeights = {
   kinAffinity: 0,
   shareWithKin: 0,
   shareWithStrangers: 0,
+  careForChildren: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -52,6 +53,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     tickMetabolismCost: 0,
     moveCost: 0,
     reproductionThreshold: 1000,
+    immigrationInterval: 0,
     foodSpawnInterval: 9999,
     ...overrides,
   });
@@ -61,8 +63,19 @@ describe('Tags', () => {
   it('measures hue distance around the colour wheel', () => {
     expect(tagDistance(10, 350)).toBe(20);
     expect(tagDistance(0, 180)).toBe(180);
-    expect(isKin(10, 350, DEFAULT_CONFIG)).toBe(true); // 20° <= 30° tolerance
-    expect(isKin(0, 90, DEFAULT_CONFIG)).toBe(false);
+    expect(tagSimilarity(0, 180)).toBe(0);
+    expect(tagSimilarity(30, 30)).toBe(1);
+    expect(isKin(10, 350, DEFAULT_CONFIG)).toBe(true); // 89% alike >= 75%
+    expect(isKin(0, 90, DEFAULT_CONFIG)).toBe(false); // 50% alike
+  });
+
+  it('grades the sharing weight from the stranger weight to the kin weight', () => {
+    const policy = { ...NEUTRAL, shareWithKin: 2, shareWithStrangers: -2 };
+    expect(shareWeightFor(policy, 1, DEFAULT_CONFIG)).toBe(2);
+    expect(shareWeightFor(policy, 0.75, DEFAULT_CONFIG)).toBe(2);
+    expect(shareWeightFor(policy, 0.5, DEFAULT_CONFIG)).toBeCloseTo(0);
+    expect(shareWeightFor(policy, 0.25, DEFAULT_CONFIG)).toBe(-2);
+    expect(shareWeightFor(policy, 0, DEFAULT_CONFIG)).toBe(-2);
   });
 
   it('inherits unchanged without mutation and always stays in [0, 360)', () => {
@@ -156,6 +169,74 @@ describe('Sharing', () => {
   });
 });
 
+describe('Parental care', () => {
+  function parentAndChild(parentEnergy: number, childEnergy: number, care: number) {
+    const world = emptyWorld({ shareAmount: 10, shareMultiplier: 1.5, parentalMinEnergyAfter: 5 });
+    const parent = makeOrganism('parent', 5, 5, {
+      energy: parentEnergy,
+      policy: { ...NEUTRAL, careForChildren: care },
+    });
+    const child = makeOrganism('child', 6, 5, {
+      energy: childEnergy,
+      lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
+    });
+    world.organisms.set(parent.id, parent);
+    world.organisms.set(child.id, child);
+    world.step();
+    return { world, parent, child };
+  }
+
+  it('feeds a hungry child even when the parent is below the normal sharing floor', () => {
+    // 30 - 10 = 20 is below shareMinEnergyAfter (25) but above the parental floor (5).
+    const { world, parent, child } = parentAndChild(30, 10, 2);
+    expect(parent.recentHistory[0].chosenAction.type).toBe('SHARE_EAST');
+    expect(parent.energy).toBe(20);
+    expect(child.energy).toBe(25);
+    expect(world.parentalSharesTotal).toBe(1);
+  });
+
+  it('scores care by the child’s hunger and never goes below the parental floor', () => {
+    expect(parentAndChild(30, 10, 2).parent.recentHistory[0].scores.some((s) => 'parentalCare' in s.components)).toBe(true);
+    // Child at or above half energy: no parental care on offer.
+    const fed = parentAndChild(30, 60, 2);
+    expect(fed.parent.recentHistory[0].scores.some((s) => 'parentalCare' in s.components)).toBe(false);
+    // Parent would drop below the floor: 14 - 10 < 5.
+    const weak = parentAndChild(14, 10, 2);
+    expect(weak.parent.recentHistory[0].scores.some((s) => s.action.type.startsWith('SHARE_'))).toBe(false);
+  });
+
+  it('does not treat an unrelated hungry neighbour as a child', () => {
+    const world = emptyWorld();
+    const adult = makeOrganism('adult', 5, 5, { energy: 30, policy: { ...NEUTRAL, careForChildren: 2 } });
+    const other = makeOrganism('other', 6, 5, { energy: 10 });
+    world.organisms.set(adult.id, adult);
+    world.organisms.set(other.id, other);
+    world.step();
+    expect(other.energyReceived).toBe(0);
+  });
+});
+
+describe('Immigration', () => {
+  it('adds founders with new lineages at the configured interval', () => {
+    const world = emptyWorld({ immigrationInterval: 10, immigrationCount: 2 });
+    for (let t = 0; t < 30; t++) world.step();
+    expect(world.immigrantsTotal).toBe(6);
+    const lineages = new Set(Array.from(world.organisms.values(), (o) => o.lineage.id));
+    expect(lineages.size).toBe(world.organisms.size);
+    for (const o of world.organisms.values()) {
+      expect(o.lineage.parentId).toBeNull();
+      expect(o.lineage.birthTick).toBeGreaterThan(0);
+    }
+  });
+
+  it('is off when the interval is 0', () => {
+    const world = emptyWorld({ immigrationInterval: 0 });
+    for (let t = 0; t < 60; t++) world.step();
+    expect(world.immigrantsTotal).toBe(0);
+    expect(world.organisms.size).toBe(0);
+  });
+});
+
 describe('Kin affinity', () => {
   it('moves a positive-affinity organism toward a look-alike and a negative one away', () => {
     for (const [affinity, expected] of [
@@ -195,8 +276,9 @@ describe('Tribe metrics', () => {
   });
 
   it('does not count a mixed crowd of strangers as a tribe', () => {
-    const organisms = Array.from({ length: 9 }, (_, i) =>
-      makeOrganism(`m${i}`, i % 3, Math.floor(i / 3), { tag: i * 40 })
+    // Six neighbours whose tags are all at least 60° apart (at most 67% alike).
+    const organisms = Array.from({ length: 6 }, (_, i) =>
+      makeOrganism(`m${i}`, i % 3, Math.floor(i / 3), { tag: i * 60 })
     );
     const m = computeTribeMetrics(organisms, DEFAULT_CONFIG);
     expect(m.tribeCount).toBe(0);

@@ -20,6 +20,7 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   kinAffinity: 'Kin affinity',
   shareWithKin: 'Share with kin',
   shareWithStrangers: 'Share with strangers',
+  careForChildren: 'Care for children',
 };
 
 const REFERENCE = '#64748b';
@@ -42,10 +43,15 @@ interface Panel {
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
-function sharesPer100Ticks(s: HistorySample, prev?: HistorySample): number {
-  if (!prev || s.tick === prev.tick) return 0;
-  return ((s.sharesTotal - prev.sharesTotal) / (s.tick - prev.tick)) * 100;
+/** Per-100-tick rate of a cumulative counter between two samples. */
+function ratePer100(total: (s: HistorySample) => number) {
+  return (s: HistorySample, prev?: HistorySample): number =>
+    !prev || s.tick === prev.tick ? 0 : ((total(s) - total(prev)) / (s.tick - prev.tick)) * 100;
 }
+
+// Ordinary shares exclude parent-to-child care, which has its own chart.
+const sharesPer100Ticks = ratePer100((s) => s.sharesTotal - s.parentalSharesTotal);
+const parentalSharesPer100Ticks = ratePer100((s) => s.parentalSharesTotal);
 
 function inGroupBias(s: HistorySample): number {
   return s.weights.shareWithKin.mean - s.weights.shareWithStrangers.mean;
@@ -110,6 +116,20 @@ export class HistoryView {
         fixedRange: null,
         value: sharesPer100Ticks,
         format: (s, prev) => sharesPer100Ticks(s, prev).toFixed(1),
+      },
+      {
+        section: 'Tribes & sharing',
+        label: 'Parent → child per 100 ticks',
+        fixedRange: null,
+        value: parentalSharesPer100Ticks,
+        format: (s, prev) => parentalSharesPer100Ticks(s, prev).toFixed(1),
+      },
+      {
+        section: 'Tribes & sharing',
+        label: 'Immigrants (total)',
+        fixedRange: null,
+        value: (s) => s.immigrantsTotal,
+        format: (s) => String(s.immigrantsTotal),
       },
       {
         section: 'Tribes & sharing',

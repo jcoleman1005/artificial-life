@@ -11,6 +11,7 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['kinAffinity', 'Kin Affinity'],
   ['shareWithKin', 'Share With Kin'],
   ['shareWithStrangers', 'Share With Strangers'],
+  ['careForChildren', 'Care For Children'],
 ];
 
 export class InspectorView {
@@ -112,7 +113,7 @@ export class InspectorView {
             <span class="sense-val">${sensed.surroundingOrganismCount} peers (${orgSenseStr})</span>
           </div>
           <div class="sense-item">
-            <span class="sense-label">Look-alikes / Strangers</span>
+            <span class="sense-label">Similar ≥${Math.round(config.kinSimilarity * 100)}% / Different ≤${Math.round(config.strangerSimilarity * 100)}%</span>
             <span class="sense-val">${sensed.nearbyKinCount} / ${sensed.nearbyStrangerCount}</span>
           </div>
           <div class="sense-item">
@@ -168,7 +169,9 @@ export class InspectorView {
           <div>
             <div class="header-pre">
               <span class="tag-swatch" style="background: hsl(${organism.tag}, 85%, 60%)" aria-hidden="true"></span>
-              ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°
+              ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°${
+                lineage.parentId === null && lineage.birthTick > 0 ? ` · immigrant (tick ${lineage.birthTick})` : ''
+              }
             </div>
             <h2>Organism Details</h2>
           </div>
