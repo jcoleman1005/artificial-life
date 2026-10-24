@@ -61,6 +61,7 @@ describe('Carry capacity trait', () => {
         seasonLength: 0,
         tickMetabolismCost: 0,
         carryUpkeep: 0,
+        reproductionThreshold: 1000, // no offspring wandering through it
         foodRegenInterval: 9999,
         foodSpawnInterval: 9999,
       });

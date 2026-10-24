@@ -295,17 +295,21 @@ describe('Parental care', () => {
 describe('Passing through children', () => {
   /**
    * A parent pulled east toward food, with its own child directly east of it.
-   * By default the child leans toward its parent (same tag), so it stays put:
-   * its own move west is blocked because the parent's cell is reserved.
+   * By default the child stands on a food patch and eats (eating outranks
+   * everything), so it stays put for the tick.
    */
-  function parentBehindChild(childPolicy: Partial<PolicyWeights> = {}, childIsOwn = true) {
+  function parentBehindChild(
+    childPolicy: Partial<PolicyWeights> = {},
+    childIsOwn = true,
+    childEats = true
+  ) {
     const world = emptyWorld({ moveCost: 1, foodRegenInterval: 9999 });
     world.foodPatches.set('8,5', { x: 8, y: 5, stock: 5, capacity: 5 });
+    if (childEats) world.foodPatches.set('6,5', { x: 6, y: 5, stock: 5, capacity: 5 });
     const parent = makeOrganism('parent', 5, 5, { energy: 40, policy: { ...NEUTRAL, foodAttraction: 2 } });
-    // Well fed (not hungry), so food does not override the child's own leanings.
     const child = makeOrganism('child', 6, 5, {
       energy: 60,
-      policy: { ...NEUTRAL, kinAffinity: 2, ...childPolicy },
+      policy: { ...NEUTRAL, ...childPolicy },
       lineage: { id: 'lin-parent', parentId: childIsOwn ? 'parent' : 'someone-else', generation: 2, birthTick: 0 },
     });
     world.organisms.set(parent.id, parent);
@@ -321,7 +325,8 @@ describe('Passing through children', () => {
     expect([parent.x, parent.y]).toEqual([6, 5]);
     expect([child.x, child.y]).toEqual([5, 5]);
     expect(parent.energy).toBe(39);
-    expect(child.energy).toBe(60); // swapped for free
+    expect(child.recentHistory[0].chosenAction.type).toBe('EAT');
+    expect(child.energy).toBe(85); // ate (+25) and was swapped for free
   });
 
   it('does not pass through organisms that are not its children', () => {
@@ -334,12 +339,77 @@ describe('Passing through children', () => {
 
   it('fails that tick if the child moves away, without costing the parent', () => {
     // The child is also pulled to the food and steps east first.
-    const { parent, child } = parentBehindChild({ foodAttraction: 2, kinAffinity: 0 });
+    const { parent, child } = parentBehindChild({ foodAttraction: 2 }, true, false);
     expect(child.recentHistory[0].outcome).toBe('success');
     expect([child.x, child.y]).toEqual([7, 5]);
     expect(parent.recentHistory[0].outcome).toBe('blocked_by_organism');
     expect([parent.x, parent.y]).toEqual([5, 5]);
     expect(parent.energy).toBe(40);
+  });
+
+  it('lets a child pass through its parent to reach food underneath', () => {
+    // A well-fed parent sits on a patch; its starving child next to it heads for the food.
+    const world = emptyWorld({ foodRegenInterval: 9999 });
+    world.foodPatches.set('5,5', { x: 5, y: 5, stock: 5, capacity: 5 });
+    const parent = makeOrganism('parent', 5, 5, { energy: 95 });
+    const child = makeOrganism('child', 4, 5, {
+      energy: 10,
+      lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
+    });
+    // Walls keep the parent from wandering off the patch on its own.
+    for (const cell of ['5,4', '5,6', '6,5']) world.obstacles.add(cell);
+    world.organisms.set(parent.id, parent);
+    world.organisms.set(child.id, child);
+
+    world.step(); // child swaps onto the patch
+    expect(child.recentHistory[0].scores.some((s) => 'passesParent' in s.components)).toBe(true);
+    expect([child.x, child.y]).toEqual([5, 5]);
+    world.step(); // and eats
+    expect(child.recentHistory[0].chosenAction.type).toBe('EAT');
+  });
+
+  it('treats a parent and child moving into each other as one trade', () => {
+    const world = emptyWorld({ moveCost: 1, foodRegenInterval: 9999 });
+    // Food to the east: the parent is drawn toward it, the child (with an
+    // aversion to food) away from it, so each moves into the other's cell.
+    world.foodPatches.set('8,5', { x: 8, y: 5, stock: 5, capacity: 5 });
+    const parent = makeOrganism('parent', 4, 5, { energy: 60, policy: { ...NEUTRAL, foodAttraction: 2 } });
+    const child = makeOrganism('child', 5, 5, {
+      energy: 60,
+      policy: { ...NEUTRAL, foodAttraction: -2 },
+      lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
+    });
+    world.organisms.set(parent.id, parent);
+    world.organisms.set(child.id, child);
+
+    world.step();
+
+    expect(parent.recentHistory[0].chosenAction.type).toBe('MOVE_EAST');
+    expect(child.recentHistory[0].chosenAction.type).toBe('MOVE_WEST');
+    expect([parent.x, child.x]).toEqual([5, 4]); // traded once, not twice
+    expect([parent.energy, child.energy]).toEqual([59, 59]); // both moved, both paid
+  });
+
+  it('lets only one of several children pass through the same parent in a tick', () => {
+    const world = emptyWorld({ foodRegenInterval: 9999 });
+    world.foodPatches.set('5,5', { x: 5, y: 5, stock: 5, capacity: 5 });
+    const parent = makeOrganism('parent', 5, 5, { energy: 95 });
+    world.organisms.set(parent.id, parent);
+    for (const cell of ['5,4', '5,6']) world.obstacles.add(cell);
+    [[4, 5], [6, 5]].forEach(([cx, cy], i) => {
+      const child = makeOrganism(`child-${i}`, cx, cy, {
+        energy: 10,
+        lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
+      });
+      world.organisms.set(child.id, child);
+    });
+    world.step();
+    const swapped = Array.from(world.organisms.values()).filter(
+      (o) => o.id !== 'parent' && o.recentHistory[0].outcome === 'success'
+    );
+    expect(swapped).toHaveLength(1);
+    const cells = new Set(Array.from(world.organisms.values(), (o) => `${o.x},${o.y}`));
+    expect(cells.size).toBe(world.organisms.size);
   });
 
   it('frees a parent boxed in by its four children', () => {

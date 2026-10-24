@@ -115,15 +115,20 @@ export function getLegalActions(
       continue;
     }
 
-    // A parent may pass through its own child by trading places with it.
+    // Parents and their children may pass through each other by trading places.
     const occupant = snapshot.organismAt.get(`${targetX},${targetY}`);
-    const swapWithChildId =
-      occupant && occupant.lineage.parentId === organism.id ? occupant.id : undefined;
+    const swapRelation =
+      occupant?.lineage.parentId === organism.id
+        ? 'child'
+        : occupant && organism.lineage.parentId === occupant.id
+          ? 'parent'
+          : undefined;
 
     actions.push({
       type: move.type,
       target: { x: targetX, y: targetY },
-      swapWithChildId,
+      swapWithId: swapRelation ? occupant!.id : undefined,
+      swapRelation,
     });
   }
 
@@ -357,9 +362,9 @@ export function scoreAction(
         totalScore += kinComp;
       }
 
-      if (action.swapWithChildId) {
-        // Not a score term: marks that this move trades places with a child.
-        components['passesChild'] = 0;
+      if (action.swapRelation) {
+        // Not a score term: marks that this move trades places with family.
+        components[action.swapRelation === 'child' ? 'passesChild' : 'passesParent'] = 0;
       }
 
       // 5. Explore tendency (seeded stochastic wander preference)
