@@ -29,6 +29,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     energy: 50,
     policy: { ...NEUTRAL },
     tag: 0,
+    carryCapacity: 2,
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },
     age: 0,
     offspringCount: 0,
@@ -54,6 +55,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     initialFoodPatches: 0,
     obstacleDensity: 0,
     tickMetabolismCost: 0,
+    carryUpkeep: 0,
     moveCost: 0,
     reproductionThreshold: 1000,
     immigrationInterval: 0,
@@ -96,14 +98,14 @@ describe('Tags', () => {
 
 describe('Carrying food', () => {
   it('picks up food into a limited carry, then eats it away from any patch', () => {
-    const world = emptyWorld({ carryCapacity: 2, foodEnergyYield: 25, foodRegenInterval: 9999 });
+    const world = emptyWorld({ foodEnergyYield: 25, foodRegenInterval: 9999 });
     world.foodPatches.set('5,5', { x: 5, y: 5, stock: 5, capacity: 5 });
     // Full energy, so eating is impossible and picking up is the only food action.
     const forager = makeOrganism('forager', 5, 5, { energy: 100, policy: { ...NEUTRAL, forageDrive: 2 } });
     world.organisms.set(forager.id, forager);
 
     for (let t = 0; t < 4; t++) world.step();
-    expect(forager.carriedFood).toBe(2); // capped at carryCapacity
+    expect(forager.carriedFood).toBe(2); // capped at its carry capacity
     expect(world.foodPatches.get('5,5')!.stock).toBe(3);
 
     // Away from the patch and hungry: eating uses carried food.
@@ -511,7 +513,7 @@ describe('Long run with sharing', () => {
         const key = `${o.x},${o.y}`;
         if (!(o.energy > 0 && o.energy <= world.config.maxEnergy)) violations.push(`energy ${o.energy}`);
         if (!(o.tag >= 0 && o.tag < 360)) violations.push(`tag ${o.tag}`);
-        if (!(o.carriedFood >= 0 && o.carriedFood <= world.config.carryCapacity)) {
+        if (!(o.carriedFood >= 0 && o.carriedFood <= o.carryCapacity)) {
           violations.push(`carried ${o.carriedFood}`);
         }
         if (cells.has(key)) violations.push(`overlap at ${key}`);

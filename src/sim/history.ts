@@ -43,6 +43,15 @@ export interface HistorySample {
   readonly lean: boolean;
   /** Population mean and standard deviation of each inherited policy weight. */
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
+  /** Population mean and standard deviation of the carry-capacity body trait. */
+  readonly carryCapacity: WeightStat;
+}
+
+function meanAndSd(values: readonly number[]): WeightStat {
+  if (values.length === 0) return { mean: 0, sd: 0 };
+  const mean = values.reduce((a, v) => a + v, 0) / values.length;
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length;
+  return { mean, sd: Math.sqrt(variance) };
 }
 
 /** Mean and (population) standard deviation of each policy weight. */
@@ -115,6 +124,7 @@ export class MetricsHistory {
       immigrantsTotal: metrics.immigrantsTotal,
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
+      carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
     });
 
     if (this.samples.length > this.capacity) {
@@ -143,6 +153,8 @@ export class MetricsHistory {
       'parental_shares_total',
       'immigrants_total',
       'lean_season',
+      'carry_capacity_mean',
+      'carry_capacity_sd',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
     ];
     const rows = this.samples.map((s) =>
@@ -164,6 +176,8 @@ export class MetricsHistory {
         s.parentalSharesTotal,
         s.immigrantsTotal,
         s.lean ? 1 : 0,
+        s.carryCapacity.mean.toFixed(4),
+        s.carryCapacity.sd.toFixed(4),
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

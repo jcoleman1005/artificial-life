@@ -250,7 +250,7 @@ export function scoreAction(
 
     case 'PICK_UP': {
       // Stocking up is driven by forageDrive and how much room is left.
-      const room = 1 - sensed.carriedFood / Math.max(1, config.carryCapacity);
+      const room = 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity);
       const forageComponent = policy.forageDrive * room * 1.5 - 0.1;
       components['forage'] = Number(forageComponent.toFixed(3));
       totalScore = forageComponent;

@@ -22,6 +22,7 @@ import { computeWorldMetrics } from './metrics';
 import { MetricsHistory } from './history';
 import { inheritTag } from './tags';
 import { seasonAt } from './seasons';
+import { founderCarryCapacity, inheritCarryCapacity, metabolismCost } from './traits';
 
 export class World {
   public readonly config: SimulationConfig;
@@ -143,6 +144,7 @@ export class World {
     this.nextOrganismSeq++;
     const policy = createRandomPolicy(this.prng);
     const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
+    const carryCapacity = founderCarryCapacity(this.config, this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -150,6 +152,7 @@ export class World {
       energy: this.config.initialEnergy,
       policy,
       tag,
+      carryCapacity,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
         parentId: null,
@@ -415,10 +418,10 @@ export class World {
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
       let outcome = item.outcome;
-      let energyDelta = -this.config.tickMetabolismCost;
-
-      // Base metabolism deduction
-      organism.energy -= this.config.tickMetabolismCost;
+      // Base metabolism, plus the upkeep of carry capacity
+      const metabolism = metabolismCost(organism, this.config);
+      let energyDelta = -metabolism;
+      organism.energy -= metabolism;
 
       switch (chosenAction.type) {
         case 'EAT': {
@@ -487,6 +490,11 @@ export class World {
                 this.prng
               );
               const childTag = inheritTag(organism.tag, this.config, this.prng);
+              const childCapacity = inheritCarryCapacity(
+                organism.carryCapacity,
+                this.config,
+                this.prng
+              );
 
               const child: Organism = {
                 id: childId,
@@ -495,6 +503,7 @@ export class World {
                 energy: childEnergy,
                 policy: childPolicy,
                 tag: childTag,
+                carryCapacity: childCapacity,
                 lineage: {
                   id: organism.lineage.id,
                   parentId: organism.id,
@@ -522,7 +531,7 @@ export class World {
 
         case 'PICK_UP': {
           const patch = this.foodPatches.get(`${organism.x},${organism.y}`);
-          if (patch && patch.stock > 0 && organism.carriedFood < this.config.carryCapacity) {
+          if (patch && patch.stock > 0 && organism.carriedFood < organism.carryCapacity) {
             patch.stock -= 1;
             organism.carriedFood += 1;
             outcome = 'success';

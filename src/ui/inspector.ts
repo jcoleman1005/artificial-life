@@ -200,7 +200,7 @@ export class InspectorView {
           </div>
           <div class="summary-pill">
             <span class="pill-title">Carrying</span>
-            <span class="pill-value">${organism.carriedFood} / ${config.carryCapacity}</span>
+            <span class="pill-value">${organism.carriedFood} / ${organism.carryCapacity}</span>
           </div>
           <div class="summary-pill">
             <span class="pill-title">Given / Got</span>

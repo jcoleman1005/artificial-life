@@ -237,9 +237,10 @@ export class CanvasRenderer {
       ctx.fill();
     }
 
-    // Carried food: one small green pip per unit along the top edge of the cell
+    // Carried food: one small green pip per unit, centred along the top edge
+    const pipSpacing = cellSize * (org.carriedFood > 2 ? 0.2 : 0.36);
     for (let i = 0; i < org.carriedFood; i++) {
-      const px = cx - cellSize * 0.18 + i * cellSize * 0.36;
+      const px = cx + (i - (org.carriedFood - 1) / 2) * pipSpacing;
       ctx.fillStyle = '#0f171e';
       ctx.beginPath();
       ctx.arc(px, cy - cellSize * 0.36, Math.max(1.6, cellSize * 0.1), 0, Math.PI * 2);

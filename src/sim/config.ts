@@ -33,7 +33,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   kinSimilarity: 0.75,
   strangerSimilarity: 0.25,
   sharingEnabled: true,
-  carryCapacity: 2,
+  carryUpkeep: 0.03,
+  maxCarryCapacity: 6,
+  traitMutationRate: 0.1,
   childhoodTicks: 800, // One full plenty-to-lean season cycle
   immigrationInterval: 25,
   immigrationCount: 1,

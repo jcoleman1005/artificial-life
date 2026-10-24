@@ -140,6 +140,14 @@ export class HistoryView {
         value: inGroupBias,
         format: (s) => `${inGroupBias(s) >= 0 ? '+' : ''}${inGroupBias(s).toFixed(2)}`,
       },
+      {
+        section: 'Body traits',
+        label: 'Carry capacity',
+        fixedRange: [0, 6],
+        value: (s) => s.carryCapacity.mean,
+        spread: (s) => s.carryCapacity.sd,
+        format: (s) => `${s.carryCapacity.mean.toFixed(2)} ± ${s.carryCapacity.sd.toFixed(2)} units`,
+      },
       ...POLICY_WEIGHT_KEYS.map(
         (key): Panel => ({
           section: 'Inherited weights',

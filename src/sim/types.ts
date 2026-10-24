@@ -173,6 +173,11 @@ export interface Organism {
   age: number;
   offspringCount: number;
   foodEatenCount: number;
+  /**
+   * Inherited body trait: how many food units this organism can carry.
+   * Each unit of capacity adds carryUpkeep to its metabolism every tick.
+   */
+  readonly carryCapacity: number;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
   carriedFood: number;
   /** Cumulative food units given to and received from other organisms. */
@@ -217,7 +222,9 @@ export interface SimulationConfig {
   kinSimilarity: number; // Tag similarity at/above which neighbours count as kin (0..1)
   strangerSimilarity: number; // Tag similarity at/below which neighbours count as strangers
   sharingEnabled: boolean; // Experiment switch for giving carried food to neighbours
-  carryCapacity: number; // Food units an organism can carry
+  carryUpkeep: number; // Extra energy per tick for each unit of carry capacity
+  maxCarryCapacity: number; // Upper bound on the inherited carry capacity
+  traitMutationRate: number; // Probability a child's body trait shifts by ±1 at birth
   childhoodTicks: number; // For this long after birth, a parent carrying food senses as a food source
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
