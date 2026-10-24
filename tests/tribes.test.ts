@@ -135,8 +135,8 @@ describe('Sharing', () => {
       tag: 100,
       policy: { ...NEUTRAL, shareWithKin: 2, shareWithStrangers: -2 },
     });
-    const stranger = makeOrganism('stranger', 6, 5, { tag: 280 });
-    const kin = makeOrganism('kin', 4, 5, { tag: 110 });
+    const stranger = makeOrganism('stranger', 6, 5, { tag: 280, energy: 20 });
+    const kin = makeOrganism('kin', 4, 5, { tag: 110, energy: 20 });
     for (const o of [donor, stranger, kin]) world.organisms.set(o.id, o);
 
     world.step();
@@ -157,7 +157,7 @@ describe('Sharing', () => {
         policy: { ...NEUTRAL, shareWithKin: 2, shareWithStrangers: 2 },
       });
       if (!config.shareAmount) donor.energy = 100;
-      const recipient = makeOrganism('recipient', 6, 5);
+      const recipient = makeOrganism('recipient', 6, 5, { energy: 20 });
       world.organisms.set(donor.id, donor);
       world.organisms.set(recipient.id, recipient);
 
@@ -170,16 +170,33 @@ describe('Sharing', () => {
   });
 
   it('never pushes a recipient above maximum energy', () => {
-    const world = emptyWorld({ maxEnergy: 100 });
+    const world = emptyWorld({ maxEnergy: 100, shareMultiplier: 6 });
     const donor = makeOrganism('donor', 5, 5, { energy: 100, policy: { ...NEUTRAL, shareWithKin: 2 } });
-    const recipient = makeOrganism('recipient', 5, 6, { energy: 95 });
+    const recipient = makeOrganism('recipient', 5, 6, { energy: 45 });
     world.organisms.set(donor.id, donor);
     world.organisms.set(recipient.id, recipient);
 
     world.step();
 
     expect(recipient.energy).toBe(100);
-    expect(recipient.energyReceived).toBe(5);
+    expect(recipient.energyReceived).toBe(55);
+  });
+
+  it('only offers sharing to hungry neighbours, scored by how hungry they are', () => {
+    const scoreFor = (recipientEnergy: number) => {
+      const world = emptyWorld();
+      const donor = makeOrganism('donor', 5, 5, { energy: 90, policy: { ...NEUTRAL, shareWithKin: 1 } });
+      const recipient = makeOrganism('recipient', 6, 5, { energy: recipientEnergy });
+      world.organisms.set(donor.id, donor);
+      world.organisms.set(recipient.id, recipient);
+      world.step();
+      return donor.recentHistory[0].scores.find((s) => s.action.type === 'SHARE_EAST')?.totalScore;
+    };
+    expect(scoreFor(50)).toBeUndefined(); // at half energy: not hungry
+    expect(scoreFor(70)).toBeUndefined();
+    // need = (50 - e) / 50; score = 1 × need × 2 − 0.1
+    expect(scoreFor(25)).toBeCloseTo(0.9);
+    expect(scoreFor(5)).toBeCloseTo(1.7);
   });
 });
 

@@ -155,9 +155,10 @@ export function getLegalActions(
     }
   }
 
-  // 4. Share actions: give energy to an orthogonally adjacent organism.
-  // Ordinary sharing needs canShare; feeding one's own hungry child is
-  // allowed down to the lower parentalMinEnergyAfter floor.
+  // 4. Share actions: give energy to an orthogonally adjacent organism that
+  // is below half energy (organisms can see whether a neighbour is hungry).
+  // Ordinary sharing needs canShare; feeding one's own child is allowed
+  // down to the lower parentalMinEnergyAfter floor.
   if (config.sharingEnabled) {
     const half = config.maxEnergy / 2;
     const canFeedChild =
@@ -175,9 +176,9 @@ export function getLegalActions(
       const recipient = snapshot.organismAt.get(`${targetX},${targetY}`);
       if (!recipient) continue;
 
-      const isHungryChild =
-        recipient.lineage.parentId === organism.id && recipient.energy < half;
-      if (!(isHungryChild ? canFeedChild : sensed.canShare)) continue;
+      if (recipient.energy >= half) continue;
+      const isChild = recipient.lineage.parentId === organism.id;
+      if (!(isChild ? canFeedChild : sensed.canShare)) continue;
 
       actions.push({
         type: share.type,
@@ -185,9 +186,8 @@ export function getLegalActions(
         recipientId: recipient.id,
         recipientSimilarity: Number(tagSimilarity(organism.tag, recipient.tag).toFixed(3)),
         recipientIsKin: isKin(organism.tag, recipient.tag, config),
-        childNeed: isHungryChild
-          ? Number(((half - recipient.energy) / half).toFixed(3))
-          : undefined,
+        recipientNeed: Number(((half - recipient.energy) / half).toFixed(3)),
+        recipientIsChild: isChild,
       });
     }
   }
@@ -243,18 +243,18 @@ export function scoreAction(
     case 'SHARE_SOUTH':
     case 'SHARE_EAST':
     case 'SHARE_WEST': {
-      // A small fixed cost means sharing needs a positive drive, never a tie-break.
-      if (action.childNeed !== undefined) {
-        // Parental care scales with the child's hunger, not the parent's surplus.
-        const careComponent = policy.careForChildren * action.childNeed * 2.0 - 0.1;
+      // Both kinds of sharing scale with the recipient's hunger. A small
+      // fixed cost means sharing needs a positive drive, never a tie-break.
+      const need = action.recipientNeed ?? 0;
+      if (action.recipientIsChild) {
+        const careComponent = policy.careForChildren * need * 2.0 - 0.1;
         components['parentalCare'] = Number(careComponent.toFixed(3));
         totalScore = careComponent;
       } else {
-        // Ordinary sharing scales with how full the donor is, and with a
-        // weight graded by how alike the recipient looks.
+        // The weight is graded by how alike the recipient looks.
         const similarity = action.recipientSimilarity ?? 0;
         const weight = shareWeightFor(policy, similarity, config);
-        const shareComponent = weight * sensed.energyRatio * 2.0 - 0.1;
+        const shareComponent = weight * need * 2.0 - 0.1;
         components[`share (${Math.round(similarity * 100)}% alike)`] = Number(
           shareComponent.toFixed(3)
         );

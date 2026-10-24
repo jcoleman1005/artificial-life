@@ -497,7 +497,7 @@ export class World {
             });
             this.sharesTotal++;
             if (chosenAction.recipientIsKin) this.kinSharesTotal++;
-            if (chosenAction.childNeed !== undefined) this.parentalSharesTotal++;
+            if (chosenAction.recipientIsChild) this.parentalSharesTotal++;
             outcome = 'success';
           } else {
             outcome = 'energy_too_low';

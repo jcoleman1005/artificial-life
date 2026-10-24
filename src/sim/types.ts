@@ -48,10 +48,12 @@ export interface LegalAction {
   /** SHARE only: whether the recipient counts as kin (similarity >= kinSimilarity). */
   readonly recipientIsKin?: boolean;
   /**
-   * SHARE only: set when the recipient is the donor's own child and below
-   * half energy; how hungry it is (0..1). Parental care scores on this.
+   * SHARE only: how hungry the recipient is, 0 at half energy rising to 1
+   * at empty. Sharing is only offered to neighbours below half energy.
    */
-  readonly childNeed?: number;
+  readonly recipientNeed?: number;
+  /** SHARE only: the recipient is the donor's own child (parental care). */
+  readonly recipientIsChild?: boolean;
 }
 
 export interface PolicyWeights {
