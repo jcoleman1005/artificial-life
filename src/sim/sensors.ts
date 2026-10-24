@@ -121,6 +121,27 @@ export function senseEnvironment(
       kinPullX += (sign * weight * dx) / norm;
       kinPullY += (sign * weight * dy) / norm;
 
+      // In childhood, a parent carrying food senses like a food source.
+      // A real patch at the same distance is preferred.
+      const isChild = organism.lineage.parentId === other.id;
+      if (
+        isChild &&
+        organism.age < config.childhoodTicks &&
+        other.carriedFood > 0 &&
+        manhattanDist < minFoodDist
+      ) {
+        minFoodDist = manhattanDist;
+        nearestFood = {
+          x: other.x,
+          y: other.y,
+          distance: manhattanDist,
+          dx,
+          dy,
+          value: other.carriedFood,
+          isParent: true,
+        };
+      }
+
       if (manhattanDist < minOrganismDist) {
         minOrganismDist = manhattanDist;
         nearestOrganism = {

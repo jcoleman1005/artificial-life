@@ -94,6 +94,8 @@ export interface SensedEntity {
   readonly dx: number;
   readonly dy: number;
   readonly value?: number;
+  /** Food only: this "food source" is the organism's parent, carrying food. */
+  readonly isParent?: boolean;
 }
 
 export interface SensedInputs {
@@ -216,6 +218,7 @@ export interface SimulationConfig {
   strangerSimilarity: number; // Tag similarity at/below which neighbours count as strangers
   sharingEnabled: boolean; // Experiment switch for giving carried food to neighbours
   carryCapacity: number; // Food units an organism can carry
+  childhoodTicks: number; // For this long after birth, a parent carrying food senses as a food source
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
   seasonLength: number; // Ticks per plenty + lean cycle (0 = no seasons)

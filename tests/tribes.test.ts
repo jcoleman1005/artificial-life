@@ -3,6 +3,7 @@ import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { computeTribeMetrics } from '../src/sim/metrics';
+import { senseEnvironment } from '../src/sim/sensors';
 import { inheritTag, isKin, shareWeightFor, tagDistance, tagSimilarity } from '../src/sim/tags';
 import type { Organism, PolicyWeights, SimulationConfig } from '../src/sim/types';
 
@@ -356,6 +357,76 @@ describe('Passing through children', () => {
     expect(parent.foodEatenCount).toBeGreaterThan(0);
     const cells = new Set(Array.from(world.organisms.values(), (o) => `${o.x},${o.y}`));
     expect(cells.size).toBe(world.organisms.size); // never two in one cell
+  });
+});
+
+describe('Childhood', () => {
+  /** What a child at (2, 5) senses as its nearest food, with its parent at (5, 5). */
+  function childSensesFood(opts: {
+    childAge?: number;
+    parentCarries?: number;
+    related?: boolean;
+    patchAt?: [number, number];
+  }) {
+    const world = emptyWorld({ childhoodTicks: 800 });
+    if (opts.patchAt) {
+      const [px, py] = opts.patchAt;
+      world.foodPatches.set(`${px},${py}`, { x: px, y: py, stock: 3, capacity: 3 });
+    }
+    const parent = makeOrganism('parent', 5, 5, { carriedFood: opts.parentCarries ?? 1 });
+    const child = makeOrganism('child', 2, 5, {
+      age: opts.childAge ?? 10,
+      lineage: { id: 'lin', parentId: opts.related === false ? 'someone-else' : 'parent', generation: 2, birthTick: 0 },
+    });
+    world.organisms.set(parent.id, parent);
+    world.organisms.set(child.id, child);
+    return senseEnvironment(child, world.getSnapshot(), world.config).nearestFood;
+  }
+
+  it('senses a food-carrying parent as a food source', () => {
+    const food = childSensesFood({});
+    expect(food).toMatchObject({ x: 5, y: 5, distance: 3, isParent: true, value: 1 });
+  });
+
+  it('ignores the parent when it carries nothing, after childhood, or if it is not the parent', () => {
+    expect(childSensesFood({ parentCarries: 0 })).toBeNull();
+    expect(childSensesFood({ childAge: 800 })).toBeNull();
+    expect(childSensesFood({ related: false })).toBeNull();
+  });
+
+  it('prefers a real patch that is as near or nearer', () => {
+    expect(childSensesFood({ patchAt: [2, 3] })).toMatchObject({ x: 2, y: 3, distance: 2 });
+    expect(childSensesFood({ patchAt: [2, 2] })?.isParent).toBeUndefined(); // tie at distance 3
+    expect(childSensesFood({ patchAt: [2, 1] })?.isParent).toBe(true); // patch farther
+  });
+
+  it('draws a hungry child toward its parent, who then feeds it', () => {
+    const world = emptyWorld();
+    // The parent is walled in on three sides and leans away from its child,
+    // so it waits in place; only the child's approach brings them together.
+    for (const cell of ['5,4', '5,6', '6,5']) world.obstacles.add(cell);
+    const parent = makeOrganism('parent', 5, 5, {
+      energy: 80,
+      carriedFood: 2,
+      policy: { ...NEUTRAL, careForChildren: 2, kinAffinity: -2 },
+    });
+    const child = makeOrganism('child', 2, 5, {
+      energy: 20,
+      policy: { ...NEUTRAL, foodAttraction: 2 },
+      lineage: { id: 'lin', parentId: 'parent', generation: 2, birthTick: 0 },
+    });
+    world.organisms.set(parent.id, parent);
+    world.organisms.set(child.id, child);
+
+    // The child starts 3 cells away, so it can only be fed by walking over.
+    let closest = Infinity;
+    for (let t = 0; t < 4; t++) {
+      world.step();
+      closest = Math.min(closest, Math.abs(child.x - parent.x) + Math.abs(child.y - parent.y));
+    }
+
+    expect(closest).toBe(1);
+    expect(child.foodReceived).toBeGreaterThan(0);
   });
 });
 

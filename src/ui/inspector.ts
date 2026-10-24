@@ -88,7 +88,9 @@ export class InspectorView {
 
       // Sensed inputs
       const foodSenseStr = sensed.nearestFood
-        ? `dx:${sensed.nearestFood.dx}, dy:${sensed.nearestFood.dy} (dist: ${sensed.nearestFood.distance}, stock: ${sensed.nearestFood.value})`
+        ? `dx:${sensed.nearestFood.dx}, dy:${sensed.nearestFood.dy} (dist: ${sensed.nearestFood.distance}, ${
+            sensed.nearestFood.isParent ? 'parent carrying' : 'stock'
+          }: ${sensed.nearestFood.value})`
         : 'None in radius';
 
       const obsSenseStr = sensed.nearestObstacle

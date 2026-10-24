@@ -34,6 +34,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   strangerSimilarity: 0.25,
   sharingEnabled: true,
   carryCapacity: 2,
+  childhoodTicks: 800, // One full plenty-to-lean season cycle
   immigrationInterval: 25,
   immigrationCount: 1,
   seasonLength: 800,
