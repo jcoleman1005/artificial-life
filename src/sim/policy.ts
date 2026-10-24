@@ -8,6 +8,7 @@ import type {
   WorldSnapshot,
 } from './types';
 import { PRNG } from './prng';
+import { isKin } from './tags';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -23,6 +24,11 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     exploreTendency: Number(prng.nextFloat(0.1, 0.9).toFixed(3)),
     eatDrive: Number(prng.nextFloat(0.5, 1.5).toFixed(3)),
     reproduceDrive: Number(prng.nextFloat(0.3, 1.2).toFixed(3)),
+    // Social weights start near neutral and identical for kin and strangers,
+    // so any in-group bias has to evolve.
+    kinAffinity: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
+    shareWithKin: Number(prng.nextFloat(-1.0, 0.5).toFixed(3)),
+    shareWithStrangers: Number(prng.nextFloat(-1.0, 0.5).toFixed(3)),
   };
 }
 
@@ -52,6 +58,9 @@ export function mutatePolicy(
     exploreTendency: mutateWeight(parentPolicy.exploreTendency),
     eatDrive: mutateWeight(parentPolicy.eatDrive),
     reproduceDrive: mutateWeight(parentPolicy.reproduceDrive),
+    kinAffinity: mutateWeight(parentPolicy.kinAffinity),
+    shareWithKin: mutateWeight(parentPolicy.shareWithKin),
+    shareWithStrangers: mutateWeight(parentPolicy.shareWithStrangers),
   };
 }
 
@@ -61,7 +70,7 @@ export function mutatePolicy(
 export function getLegalActions(
   organism: Readonly<Organism>,
   snapshot: Readonly<WorldSnapshot>,
-  _config: Readonly<SimulationConfig>,
+  config: Readonly<SimulationConfig>,
   sensed: Readonly<SensedInputs>
 ): LegalAction[] {
   const actions: LegalAction[] = [];
@@ -143,7 +152,31 @@ export function getLegalActions(
     }
   }
 
-  // 4. Rest action (always a fallback option)
+  // 4. Share actions: give energy to an orthogonally adjacent organism
+  if (sensed.canShare) {
+    const candidateShares: { type: LegalAction['type']; dx: number; dy: number }[] = [
+      { type: 'SHARE_NORTH', dx: 0, dy: -1 },
+      { type: 'SHARE_SOUTH', dx: 0, dy: 1 },
+      { type: 'SHARE_EAST', dx: 1, dy: 0 },
+      { type: 'SHARE_WEST', dx: -1, dy: 0 },
+    ];
+
+    for (const share of candidateShares) {
+      const targetX = x + share.dx;
+      const targetY = y + share.dy;
+      const recipient = snapshot.organismAt.get(`${targetX},${targetY}`);
+      if (!recipient) continue;
+
+      actions.push({
+        type: share.type,
+        target: { x: targetX, y: targetY },
+        recipientId: recipient.id,
+        recipientIsKin: isKin(organism.tag, recipient.tag, config),
+      });
+    }
+  }
+
+  // 5. Rest action (always a fallback option)
   actions.push({
     type: 'REST',
     target: { x, y },
@@ -187,6 +220,22 @@ export function scoreAction(
       const reproComponent = policy.reproduceDrive * fullness * 3.5 + 0.2;
       components['surplusDrive'] = Number(reproComponent.toFixed(3));
       totalScore = reproComponent;
+      break;
+    }
+
+    case 'SHARE_NORTH':
+    case 'SHARE_SOUTH':
+    case 'SHARE_EAST':
+    case 'SHARE_WEST': {
+      // Giving scales with how full the donor is (nothing below half energy).
+      // A small fixed cost means sharing needs a positive drive, never a tie-break.
+      const surplus = Math.max(0, sensed.energyRatio - 0.5) * 2;
+      const weight = action.recipientIsKin ? policy.shareWithKin : policy.shareWithStrangers;
+      const shareComponent = weight * surplus * 2.0 - 0.1;
+      components[action.recipientIsKin ? 'kinShare' : 'strangerShare'] = Number(
+        shareComponent.toFixed(3)
+      );
+      totalScore = shareComponent;
       break;
     }
 
@@ -242,7 +291,16 @@ export function scoreAction(
         totalScore += crowdComp;
       }
 
-      // 4. Explore tendency (seeded stochastic wander preference)
+      // 4. Kin affinity: toward look-alikes / away from strangers (or the reverse)
+      if (sensed.kinPull) {
+        const { dx: px, dy: py } = sensed.kinPull;
+        const scale = Math.max(1, Math.hypot(px, py));
+        const kinComp = (policy.kinAffinity * (dx * px + dy * py)) / scale;
+        components['kinPull'] = Number(kinComp.toFixed(3));
+        totalScore += kinComp;
+      }
+
+      // 5. Explore tendency (seeded stochastic wander preference)
       const exploreValue = prng.nextFloat(-0.8, 0.8);
       const exploreComp = policy.exploreTendency * exploreValue;
       components['explore'] = Number(exploreComp.toFixed(3));

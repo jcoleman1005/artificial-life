@@ -1,9 +1,13 @@
+import type { ColorMode } from '../render/renderer';
+
 export interface ControlCallbacks {
   onPlayPause: () => void;
   onStep: () => void;
   onSpeedChange: (speedMultiplier: number) => void;
   onReset: (seed: string | number) => void;
   onNewSeed: () => void;
+  onColorModeChange: (mode: ColorMode) => void;
+  onSharingChange: (enabled: boolean) => void;
 }
 
 export class ControlsView {
@@ -13,10 +17,17 @@ export class ControlsView {
   private currentSpeed = 1;
   private currentSeed: string | number = 42;
   private callbacks: ControlCallbacks;
+  private readonly sharingEnabled: boolean;
 
-  constructor(container: HTMLElement, initialSeed: string | number, callbacks: ControlCallbacks) {
+  constructor(
+    container: HTMLElement,
+    initialSeed: string | number,
+    sharingEnabled: boolean,
+    callbacks: ControlCallbacks
+  ) {
     this.container = container;
     this.currentSeed = initialSeed;
+    this.sharingEnabled = sharingEnabled;
     this.callbacks = callbacks;
     this.render();
   }
@@ -96,6 +107,23 @@ export class ControlsView {
           <button type="button" id="btn-new-seed" class="btn btn-secondary" title="Generate new random seed">New Seed</button>
         </div>
 
+        <div class="experiment-controls">
+          <div class="toggle-field">
+            <span class="toggle-label">Colour</span>
+            <div class="speed-selector" role="group" aria-label="Colour organisms by">
+              <button type="button" class="btn-speed active" data-color="tag">Tribe tag</button>
+              <button type="button" class="btn-speed" data-color="lineage">Family</button>
+            </div>
+          </div>
+          <div class="toggle-field">
+            <span class="toggle-label">Sharing</span>
+            <div class="speed-selector" role="group" aria-label="Sharing">
+              <button type="button" class="btn-speed ${this.sharingEnabled ? 'active' : ''}" data-sharing="on">On</button>
+              <button type="button" class="btn-speed ${this.sharingEnabled ? '' : 'active'}" data-sharing="off">Off</button>
+            </div>
+          </div>
+        </div>
+
         <p id="sim-status" class="sim-status">Tick 0 · Paused</p>
       </div>
     `;
@@ -118,7 +146,7 @@ export class ControlsView {
       });
     }
 
-    const speedButtons = this.container.querySelectorAll<HTMLButtonElement>('.btn-speed');
+    const speedButtons = this.container.querySelectorAll<HTMLButtonElement>('.btn-speed[data-speed]');
     speedButtons.forEach((btn) => {
       btn.addEventListener('click', () => {
         speedButtons.forEach((b) => b.classList.remove('active'));
@@ -126,6 +154,22 @@ export class ControlsView {
         const speed = Number(btn.getAttribute('data-speed')) || 1;
         this.currentSpeed = speed;
         this.callbacks.onSpeedChange(speed);
+      });
+    });
+
+    const colorButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-color]');
+    colorButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        colorButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onColorModeChange(btn.dataset.color as ColorMode);
+      });
+    });
+
+    const sharingButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-sharing]');
+    sharingButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        sharingButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onSharingChange(btn.dataset.sharing === 'on');
       });
     });
 

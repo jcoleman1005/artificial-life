@@ -20,6 +20,7 @@ import {
 } from './policy';
 import { computeWorldMetrics } from './metrics';
 import { MetricsHistory } from './history';
+import { inheritTag } from './tags';
 
 export class World {
   public readonly config: SimulationConfig;
@@ -33,6 +34,8 @@ export class World {
   private nextOrganismSeq = 0;
   public birthsTotal = 0;
   public deathsTotal = 0;
+  public sharesTotal = 0;
+  public kinSharesTotal = 0;
   public readonly deceasedLifespans: number[] = [];
 
   public selectedOrganismId: string | null = null;
@@ -53,6 +56,8 @@ export class World {
     this.tick = 0;
     this.birthsTotal = 0;
     this.deathsTotal = 0;
+    this.sharesTotal = 0;
+    this.kinSharesTotal = 0;
     this.deceasedLifespans.length = 0;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -118,6 +123,7 @@ export class World {
         this.nextOrganismSeq++;
         const id = `org-${this.nextOrganismSeq}`;
         const policy = createRandomPolicy(this.prng);
+        const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
 
         const organism: Organism = {
           id,
@@ -125,6 +131,7 @@ export class World {
           y,
           energy: this.config.initialEnergy,
           policy,
+          tag,
           lineage: {
             id: `lineage-${this.nextOrganismSeq}`,
             parentId: null,
@@ -134,6 +141,8 @@ export class World {
           age: 0,
           offspringCount: 0,
           foodEatenCount: 0,
+          energyGiven: 0,
+          energyReceived: 0,
           recentHistory: [],
         };
 
@@ -167,13 +176,16 @@ export class World {
     }
 
     const orgsList: Organism[] = [];
+    const organismAt = new Map<string, Organism>();
     for (const org of this.organisms.values()) {
-      orgsList.push({
+      const copy: Organism = {
         ...org,
         policy: { ...org.policy },
         lineage: { ...org.lineage },
         recentHistory: [...org.recentHistory],
-      });
+      };
+      orgsList.push(copy);
+      organismAt.set(`${org.x},${org.y}`, copy);
     }
 
     return {
@@ -183,6 +195,7 @@ export class World {
       obstacles: new Set(this.obstacles),
       foodPatches: foodCopy,
       organisms: orgsList,
+      organismAt,
     };
   }
 
@@ -358,6 +371,9 @@ export class World {
 
     // Phase 4: Action Execution & Energy Accounting
     const newBorns: Organism[] = [];
+    // Shares are paid by the donor during its action and delivered after all
+    // actions, so every organism acts on the same pre-tick energy levels.
+    const pendingGifts: { recipientId: string; amount: number }[] = [];
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
@@ -424,6 +440,7 @@ export class World {
                 this.config,
                 this.prng
               );
+              const childTag = inheritTag(organism.tag, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
@@ -431,6 +448,7 @@ export class World {
                 y: chosenAction.target.y,
                 energy: childEnergy,
                 policy: childPolicy,
+                tag: childTag,
                 lineage: {
                   id: organism.lineage.id,
                   parentId: organism.id,
@@ -440,6 +458,8 @@ export class World {
                 age: 0,
                 offspringCount: 0,
                 foodEatenCount: 0,
+                energyGiven: 0,
+                energyReceived: 0,
                 recentHistory: [],
               };
 
@@ -449,6 +469,28 @@ export class World {
             } else {
               outcome = 'energy_too_low';
             }
+          }
+          break;
+        }
+
+        case 'SHARE_NORTH':
+        case 'SHARE_SOUTH':
+        case 'SHARE_EAST':
+        case 'SHARE_WEST': {
+          const { shareAmount, shareMultiplier } = this.config;
+          if (chosenAction.recipientId && organism.energy > shareAmount) {
+            organism.energy -= shareAmount;
+            organism.energyGiven += shareAmount;
+            energyDelta -= shareAmount;
+            pendingGifts.push({
+              recipientId: chosenAction.recipientId,
+              amount: shareAmount * shareMultiplier,
+            });
+            this.sharesTotal++;
+            if (chosenAction.recipientIsKin) this.kinSharesTotal++;
+            outcome = 'success';
+          } else {
+            outcome = 'energy_too_low';
           }
           break;
         }
@@ -478,6 +520,15 @@ export class World {
       if (organism.recentHistory.length > 8) {
         organism.recentHistory.pop();
       }
+    }
+
+    // Deliver shared energy (capped at the recipient's capacity; excess is lost)
+    for (const gift of pendingGifts) {
+      const recipient = this.organisms.get(gift.recipientId);
+      if (!recipient) continue;
+      const gain = Math.min(this.config.maxEnergy - recipient.energy, gift.amount);
+      recipient.energy += gain;
+      recipient.energyReceived += gain;
     }
 
     // Add newborns to population
@@ -576,7 +627,10 @@ export class World {
       activePatchCount,
       this.birthsTotal,
       this.deathsTotal,
-      this.deceasedLifespans
+      this.deceasedLifespans,
+      this.sharesTotal,
+      this.kinSharesTotal,
+      this.config
     );
     this.history.record(this.metrics, organisms);
   }

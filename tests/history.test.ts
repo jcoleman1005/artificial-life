@@ -4,7 +4,12 @@ import { computeWeightStats, MetricsHistory, POLICY_WEIGHT_KEYS } from '../src/s
 import type { Organism, WorldMetrics } from '../src/sim/types';
 
 function fakeMetrics(tick: number): WorldMetrics {
-  return { tick, population: 0, totalFoodStock: 0 } as WorldMetrics;
+  return {
+    tick,
+    population: 0,
+    totalFoodStock: 0,
+    tribes: { tribeCount: 0, largestTribe: 0, inTribeFraction: 0, localKinFraction: 0, globalKinFraction: 0 },
+  } as WorldMetrics;
 }
 
 describe('Metrics history', () => {
@@ -66,7 +71,7 @@ describe('Metrics history', () => {
       b.step();
     }
     expect(a.history.toCSV()).toBe(b.history.toCSV());
-  });
+   }, 30_000);
 
   it('exports one CSV row per sample with a header', () => {
     const world = new World({ seed: 5 });

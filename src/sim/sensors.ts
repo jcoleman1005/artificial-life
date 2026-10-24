@@ -5,6 +5,7 @@ import type {
   SimulationConfig,
   WorldSnapshot,
 } from './types';
+import { isKin } from './tags';
 
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
@@ -32,6 +33,10 @@ export function senseEnvironment(
   let nearestOrganism: SensedEntity | null = null;
   let minOrganismDist = Infinity;
   let surroundingOrganismCount = 0;
+  let nearbyKinCount = 0;
+  let nearbyStrangerCount = 0;
+  let kinPullX = 0;
+  let kinPullY = 0;
 
   // Scan local window [x - radius, x + radius] x [y - radius, y + radius]
   for (let dy = -radius; dy <= radius; dy++) {
@@ -104,6 +109,17 @@ export function senseEnvironment(
     if (Math.abs(dx) <= radius && Math.abs(dy) <= radius) {
       surroundingOrganismCount++;
       const manhattanDist = Math.abs(dx) + Math.abs(dy);
+
+      // Look-alikes pull, strangers push; nearer ones count more.
+      const kin = isKin(organism.tag, other.tag, config);
+      if (kin) nearbyKinCount++;
+      else nearbyStrangerCount++;
+      const sign = kin ? 1 : -1;
+      const norm = Math.hypot(dx, dy);
+      const weight = 1 / (1 + 0.3 * manhattanDist);
+      kinPullX += (sign * weight * dx) / norm;
+      kinPullY += (sign * weight * dy) / norm;
+
       if (manhattanDist < minOrganismDist) {
         minOrganismDist = manhattanDist;
         nearestOrganism = {
@@ -145,6 +161,9 @@ export function senseEnvironment(
     canReproduce = hasValidCell;
   }
 
+  const canShare =
+    config.sharingEnabled && energy - config.shareAmount >= config.shareMinEnergyAfter;
+
   return {
     currentEnergy: energy,
     energyRatio: Math.min(1, Math.max(0, energy / config.maxEnergy)),
@@ -153,7 +172,14 @@ export function senseEnvironment(
     nearestObstacle,
     nearestOrganism,
     surroundingOrganismCount,
+    nearbyKinCount,
+    nearbyStrangerCount,
+    kinPull:
+      surroundingOrganismCount > 0
+        ? { dx: Number(kinPullX.toFixed(3)), dy: Number(kinPullY.toFixed(3)) }
+        : null,
     canEat,
     canReproduce,
+    canShare,
   };
 }

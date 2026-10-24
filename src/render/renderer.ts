@@ -1,12 +1,16 @@
 import type { FoodPatch, Organism } from '../sim/types';
 import type { World } from '../sim/world';
 
+/** What an organism's colour shows: its visible tag, or its founding family. */
+export type ColorMode = 'tag' | 'lineage';
+
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private world: World;
   private cellSize = 12;
   private canvasSize = 360;
+  private colorMode: ColorMode = 'tag';
 
   constructor(canvas: HTMLCanvasElement, world: World) {
     this.canvas = canvas;
@@ -21,6 +25,10 @@ export class CanvasRenderer {
 
   public setWorld(world: World): void {
     this.world = world;
+  }
+
+  public setColorMode(mode: ColorMode): void {
+    this.colorMode = mode;
   }
 
   public resize(): void {
@@ -169,9 +177,9 @@ export class CanvasRenderer {
     const energyRatio = Math.max(0.1, Math.min(1, org.energy / maxEnergy));
     const baseRadius = cellSize * 0.42;
 
-    // Determine hue based on lineage id or foodAttraction weight
-    // Lineage hash ensures relatives share family color
-    const hue = this.getLineageHue(org.lineage.id);
+    // Tag mode shows the hue other organisms see; lineage mode hashes the
+    // founding ancestor so every descendant shares a family colour.
+    const hue = this.colorMode === 'tag' ? org.tag : this.getLineageHue(org.lineage.id);
     const lightness = 45 + energyRatio * 20;
 
     // Selection ring
@@ -203,19 +211,23 @@ export class CanvasRenderer {
     ctx.arc(cx, cy, bodyRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Heading indicator if last action was movement
+    // Heading indicator for the last move, or a gold dot toward a share recipient
     const lastDecision = org.recentHistory[0];
-    if (lastDecision && lastDecision.chosenAction.type.startsWith('MOVE_')) {
+    const lastType = lastDecision?.chosenAction.type ?? 'REST';
+    const isMove = lastType.startsWith('MOVE_');
+    const isShare = lastType.startsWith('SHARE_') && lastDecision?.outcome === 'success';
+    if (isMove || isShare) {
       let hx = 0;
       let hy = 0;
-      if (lastDecision.chosenAction.type === 'MOVE_NORTH') hy = -1;
-      if (lastDecision.chosenAction.type === 'MOVE_SOUTH') hy = 1;
-      if (lastDecision.chosenAction.type === 'MOVE_EAST') hx = 1;
-      if (lastDecision.chosenAction.type === 'MOVE_WEST') hx = -1;
+      if (lastType.endsWith('_NORTH')) hy = -1;
+      if (lastType.endsWith('_SOUTH')) hy = 1;
+      if (lastType.endsWith('_EAST')) hx = 1;
+      if (lastType.endsWith('_WEST')) hx = -1;
 
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = isShare ? '#fbbf24' : '#ffffff';
       ctx.beginPath();
-      ctx.arc(cx + hx * (bodyRadius * 0.6), cy + hy * (bodyRadius * 0.6), 1.5, 0, Math.PI * 2);
+      const dotRadius = isShare ? 2.5 : 1.5;
+      ctx.arc(cx + hx * (bodyRadius * 0.6), cy + hy * (bodyRadius * 0.6), dotRadius, 0, Math.PI * 2);
       ctx.fill();
     } else {
       // Resting/eating core

@@ -28,6 +28,13 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   mutationRate: 0.25,
   mutationStdDev: 0.15,
   sensingRadius: 3,
+  tagMutationRate: 0.2,
+  tagMutationStdDev: 8,
+  kinToleranceDegrees: 30,
+  sharingEnabled: true,
+  shareAmount: 10,
+  shareMultiplier: 1.5,
+  shareMinEnergyAfter: 25,
   seed: 42,
 };
 

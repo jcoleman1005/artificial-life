@@ -1,5 +1,17 @@
-import type { Organism, SimulationConfig } from '../sim/types';
+import type { Organism, PolicyWeights, SimulationConfig } from '../sim/types';
 import { setHTMLPreservingDetails } from './dom';
+
+const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
+  ['foodAttraction', 'Food Attraction'],
+  ['obstacleAvoidance', 'Obstacle Avoidance'],
+  ['crowdingAvoidance', 'Crowd Avoidance'],
+  ['exploreTendency', 'Explore Tendency'],
+  ['eatDrive', 'Eat Drive'],
+  ['reproduceDrive', 'Reproduce Drive'],
+  ['kinAffinity', 'Kin Affinity'],
+  ['shareWithKin', 'Share With Kin'],
+  ['shareWithStrangers', 'Share With Strangers'],
+];
 
 export class InspectorView {
   private readonly container: HTMLElement;
@@ -47,6 +59,15 @@ export class InspectorView {
       `;
     };
 
+    const weightRows = WEIGHT_ROWS.map(
+      ([key, label]) => `
+            <div class="weight-row">
+              <span class="weight-name">${label}</span>
+              <span class="weight-num">${policy[key].toFixed(2)}</span>
+              ${weightBar(policy[key])}
+            </div>`
+    ).join('');
+
     let sensesHtml = '<p class="muted">No decision recorded yet.</p>';
     let actionScoresHtml = '';
     let outcomeBadge = '';
@@ -89,6 +110,10 @@ export class InspectorView {
           <div class="sense-item">
             <span class="sense-label">Crowd (Radius ${config.sensingRadius})</span>
             <span class="sense-val">${sensed.surroundingOrganismCount} peers (${orgSenseStr})</span>
+          </div>
+          <div class="sense-item">
+            <span class="sense-label">Look-alikes / Strangers</span>
+            <span class="sense-val">${sensed.nearbyKinCount} / ${sensed.nearbyStrangerCount}</span>
           </div>
           <div class="sense-item">
             <span class="sense-label">Current Cell Food</span>
@@ -141,7 +166,10 @@ export class InspectorView {
       <div class="inspector-card">
         <header class="inspector-header">
           <div>
-            <div class="header-pre">${organism.id} · ${lineage.id}</div>
+            <div class="header-pre">
+              <span class="tag-swatch" style="background: hsl(${organism.tag}, 85%, 60%)" aria-hidden="true"></span>
+              ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°
+            </div>
             <h2>Organism Details</h2>
           </div>
           <button type="button" class="btn-close-inspector" aria-label="Close inspector">✕</button>
@@ -164,6 +192,14 @@ export class InspectorView {
             <span class="pill-title">Food Eaten</span>
             <span class="pill-value">${foodEatenCount}</span>
           </div>
+          <div class="summary-pill">
+            <span class="pill-title">Energy Given</span>
+            <span class="pill-value">${Math.round(organism.energyGiven)}</span>
+          </div>
+          <div class="summary-pill">
+            <span class="pill-title">Energy Received</span>
+            <span class="pill-value">${Math.round(organism.energyReceived)}</span>
+          </div>
         </div>
 
         <div class="energy-section">
@@ -179,36 +215,7 @@ export class InspectorView {
         <details open class="inspector-section">
           <summary><strong>Inherited Policy Weights</strong></summary>
           <div class="weights-list">
-            <div class="weight-row">
-              <span class="weight-name">Food Attraction</span>
-              <span class="weight-num">${policy.foodAttraction.toFixed(2)}</span>
-              ${weightBar(policy.foodAttraction)}
-            </div>
-            <div class="weight-row">
-              <span class="weight-name">Obstacle Avoidance</span>
-              <span class="weight-num">${policy.obstacleAvoidance.toFixed(2)}</span>
-              ${weightBar(policy.obstacleAvoidance)}
-            </div>
-            <div class="weight-row">
-              <span class="weight-name">Crowd Avoidance</span>
-              <span class="weight-num">${policy.crowdingAvoidance.toFixed(2)}</span>
-              ${weightBar(policy.crowdingAvoidance)}
-            </div>
-            <div class="weight-row">
-              <span class="weight-name">Explore Tendency</span>
-              <span class="weight-num">${policy.exploreTendency.toFixed(2)}</span>
-              ${weightBar(policy.exploreTendency)}
-            </div>
-            <div class="weight-row">
-              <span class="weight-name">Eat Drive</span>
-              <span class="weight-num">${policy.eatDrive.toFixed(2)}</span>
-              ${weightBar(policy.eatDrive)}
-            </div>
-            <div class="weight-row">
-              <span class="weight-name">Reproduce Drive</span>
-              <span class="weight-num">${policy.reproduceDrive.toFixed(2)}</span>
-              ${weightBar(policy.reproduceDrive)}
-            </div>
+            ${weightRows}
           </div>
         </details>
 

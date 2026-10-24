@@ -32,11 +32,19 @@ export type ActionType =
   | 'REPRODUCE_SOUTH'
   | 'REPRODUCE_EAST'
   | 'REPRODUCE_WEST'
+  | 'SHARE_NORTH'
+  | 'SHARE_SOUTH'
+  | 'SHARE_EAST'
+  | 'SHARE_WEST'
   | 'REST';
 
 export interface LegalAction {
   readonly type: ActionType;
   readonly target?: Point;
+  /** SHARE only: the adjacent organism receiving energy. */
+  readonly recipientId?: string;
+  /** SHARE only: whether the recipient's tag looks like the donor's. */
+  readonly recipientIsKin?: boolean;
 }
 
 export interface PolicyWeights {
@@ -52,6 +60,12 @@ export interface PolicyWeights {
   eatDrive: number;
   /** Drive to reproduce when energy threshold is reached ([-2, 2]). */
   reproduceDrive: number;
+  /** Positive: move toward look-alikes and away from strangers. Negative: the reverse ([-2, 2]). */
+  kinAffinity: number;
+  /** Willingness to give surplus energy to an adjacent look-alike ([-2, 2]). */
+  shareWithKin: number;
+  /** Willingness to give surplus energy to an adjacent stranger ([-2, 2]). */
+  shareWithStrangers: number;
 }
 
 export interface SensedEntity {
@@ -71,8 +85,17 @@ export interface SensedInputs {
   readonly nearestObstacle: SensedEntity | null;
   readonly nearestOrganism: SensedEntity | null;
   readonly surroundingOrganismCount: number;
+  /** Organisms in sensing radius whose tag is within kinToleranceDegrees of ours. */
+  readonly nearbyKinCount: number;
+  readonly nearbyStrangerCount: number;
+  /**
+   * Distance-weighted direction toward nearby look-alikes minus toward
+   * strangers (unit-less; null when no organisms are in range).
+   */
+  readonly kinPull: { readonly dx: number; readonly dy: number } | null;
   readonly canEat: boolean;
   readonly canReproduce: boolean;
+  readonly canShare: boolean;
 }
 
 export interface ActionScore {
@@ -114,10 +137,18 @@ export interface Organism {
   y: number;
   energy: number;
   policy: PolicyWeights;
+  /**
+   * Visible, inherited marker (a hue in [0, 360)). Others can see whether it
+   * looks like theirs. Mutates slowly, so groups can drift apart and split.
+   */
+  readonly tag: number;
   readonly lineage: LineageInfo;
   age: number;
   offspringCount: number;
   foodEatenCount: number;
+  /** Cumulative energy given to and received from other organisms. */
+  energyGiven: number;
+  energyReceived: number;
   recentHistory: DecisionRecord[];
 }
 
@@ -152,6 +183,13 @@ export interface SimulationConfig {
   mutationRate: number; // Probability per weight of mutating
   mutationStdDev: number; // Standard deviation of mutation perturbation
   sensingRadius: number; // Distance for local sensing (Chebyshev radius)
+  tagMutationRate: number; // Probability a child's tag shifts at birth
+  tagMutationStdDev: number; // Degrees of hue shift when it does
+  kinToleranceDegrees: number; // Tags this close (hue distance) count as "kin"
+  sharingEnabled: boolean; // Experiment switch for the SHARE action
+  shareAmount: number; // Energy the donor gives up per share
+  shareMultiplier: number; // Recipient gets shareAmount × this (> 1 = cooperation pays)
+  shareMinEnergyAfter: number; // Donor must keep at least this much after sharing
   seed: number | string;
 }
 
@@ -163,6 +201,18 @@ export interface PolicyDiversityMetrics {
   eatDriveVariance: number;
   reproduceDriveVariance: number;
   averageDiversity: number;
+}
+
+export interface TribeMetrics {
+  /** Groups of >= minTribeSize look-alikes living within 2 cells of each other. */
+  tribeCount: number;
+  largestTribe: number;
+  /** Share of the population that belongs to some tribe. */
+  inTribeFraction: number;
+  /** Average share of each organism's neighbours (within 2 cells) that are kin. */
+  localKinFraction: number;
+  /** Share of all organism pairs that are kin: what clustering would be by chance. */
+  globalKinFraction: number;
 }
 
 export interface WorldMetrics {
@@ -177,6 +227,9 @@ export interface WorldMetrics {
   averageOffspringPerParent: number;
   activeLineageCount: number;
   diversity: PolicyDiversityMetrics;
+  tribes: TribeMetrics;
+  sharesTotal: number;
+  kinSharesTotal: number;
 }
 
 export interface WorldSnapshot {
@@ -186,4 +239,6 @@ export interface WorldSnapshot {
   readonly obstacles: ReadonlySet<string>; // "x,y" strings for fast lookup
   readonly foodPatches: ReadonlyMap<string, FoodPatch>; // keyed by "x,y"
   readonly organisms: readonly Organism[];
+  /** Snapshot organisms keyed by "x,y", for adjacency checks. */
+  readonly organismAt: ReadonlyMap<string, Organism>;
 }

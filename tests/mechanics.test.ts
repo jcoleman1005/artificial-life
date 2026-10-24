@@ -95,11 +95,17 @@ describe('Artificial Life Core Mechanics', () => {
         exploreTendency: 0,
         eatDrive: 0,
         reproduceDrive: 0,
+        kinAffinity: 0,
+        shareWithKin: 0,
+        shareWithStrangers: 0,
       },
       lineage: { id: 'lineage-1', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
       offspringCount: 0,
       foodEatenCount: 0,
+      tag: 0,
+      energyGiven: 0,
+      energyReceived: 0,
       recentHistory: [],
     };
     world.organisms.set(org.id, org);
@@ -156,11 +162,17 @@ describe('Artificial Life Core Mechanics', () => {
         exploreTendency: 0,
         eatDrive: 2.0, // strong drive to eat
         reproduceDrive: -1.0,
+        kinAffinity: 0,
+        shareWithKin: 0,
+        shareWithStrangers: 0,
       },
       lineage: { id: 'lineage-1', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
       offspringCount: 0,
       foodEatenCount: 0,
+      tag: 0,
+      energyGiven: 0,
+      energyReceived: 0,
       recentHistory: [],
     };
     world.organisms.set(org.id, org);
@@ -211,11 +223,17 @@ describe('Artificial Life Core Mechanics', () => {
         exploreTendency: 0,
         eatDrive: 0,
         reproduceDrive: 0,
+        kinAffinity: 0,
+        shareWithKin: 0,
+        shareWithStrangers: 0,
       },
       lineage: { id: 'lin-A', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
       offspringCount: 0,
       foodEatenCount: 0,
+      tag: 0,
+      energyGiven: 0,
+      energyReceived: 0,
       recentHistory: [],
     };
 
@@ -231,11 +249,17 @@ describe('Artificial Life Core Mechanics', () => {
         exploreTendency: 0,
         eatDrive: 0,
         reproduceDrive: 0,
+        kinAffinity: 0,
+        shareWithKin: 0,
+        shareWithStrangers: 0,
       },
       lineage: { id: 'lin-B', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
       offspringCount: 0,
       foodEatenCount: 0,
+      tag: 0,
+      energyGiven: 0,
+      energyReceived: 0,
       recentHistory: [],
     };
 
@@ -296,11 +320,17 @@ describe('Artificial Life Core Mechanics', () => {
         exploreTendency: 0,
         eatDrive: 0,
         reproduceDrive: 2.0, // High drive to reproduce
+        kinAffinity: 0,
+        shareWithKin: 0,
+        shareWithStrangers: 0,
       },
       lineage: { id: 'clan-alpha', parentId: null, generation: 1, birthTick: 0 },
       age: 5,
       offspringCount: 0,
       foodEatenCount: 0,
+      tag: 0,
+      energyGiven: 0,
+      energyReceived: 0,
       recentHistory: [],
     };
 
@@ -345,6 +375,9 @@ describe('Artificial Life Core Mechanics', () => {
       exploreTendency: 0.5,
       eatDrive: 1.2,
       reproduceDrive: 0.9,
+      kinAffinity: 0,
+      shareWithKin: 0,
+      shareWithStrangers: 0,
     };
 
     // If mutation rate is 0, offspring policy is strictly identical to parent

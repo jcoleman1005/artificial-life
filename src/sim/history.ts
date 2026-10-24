@@ -7,6 +7,9 @@ export const POLICY_WEIGHT_KEYS = [
   'exploreTendency',
   'eatDrive',
   'reproduceDrive',
+  'kinAffinity',
+  'shareWithKin',
+  'shareWithStrangers',
 ] as const satisfies readonly (keyof PolicyWeights)[];
 
 export type PolicyWeightKey = (typeof POLICY_WEIGHT_KEYS)[number];
@@ -24,6 +27,14 @@ export interface HistorySample {
   readonly deathsTotal: number;
   readonly maxGeneration: number;
   readonly lineages: number;
+  readonly tribeCount: number;
+  readonly largestTribe: number;
+  readonly inTribeFraction: number;
+  /** Share of neighbours that are kin, and the share expected by chance. */
+  readonly localKinFraction: number;
+  readonly globalKinFraction: number;
+  readonly sharesTotal: number;
+  readonly kinSharesTotal: number;
   /** Population mean and standard deviation of each inherited policy weight. */
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
 }
@@ -87,6 +98,13 @@ export class MetricsHistory {
       deathsTotal: metrics.deathsTotal,
       maxGeneration: metrics.maxGeneration,
       lineages: metrics.activeLineageCount,
+      tribeCount: metrics.tribes.tribeCount,
+      largestTribe: metrics.tribes.largestTribe,
+      inTribeFraction: metrics.tribes.inTribeFraction,
+      localKinFraction: metrics.tribes.localKinFraction,
+      globalKinFraction: metrics.tribes.globalKinFraction,
+      sharesTotal: metrics.sharesTotal,
+      kinSharesTotal: metrics.kinSharesTotal,
       weights: computeWeightStats(organisms),
     });
 
@@ -106,6 +124,13 @@ export class MetricsHistory {
       'deaths_total',
       'max_generation',
       'lineages',
+      'tribes',
+      'largest_tribe',
+      'in_tribe_fraction',
+      'local_kin_fraction',
+      'chance_kin_fraction',
+      'shares_total',
+      'kin_shares_total',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
     ];
     const rows = this.samples.map((s) =>
@@ -117,6 +142,13 @@ export class MetricsHistory {
         s.deathsTotal,
         s.maxGeneration,
         s.lineages,
+        s.tribeCount,
+        s.largestTribe,
+        s.inTribeFraction,
+        s.localKinFraction,
+        s.globalKinFraction,
+        s.sharesTotal,
+        s.kinSharesTotal,
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

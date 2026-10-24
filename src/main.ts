@@ -146,7 +146,7 @@ function stepSimulation(): void {
   recentTickTimes.push(performance.now());
 }
 
-const controlsView = new ControlsView(controlsContainer, initialSeed, {
+const controlsView = new ControlsView(controlsContainer, initialSeed, world.config.sharingEnabled, {
   onPlayPause: () => {
     isRunning = !isRunning;
     controlsView.setRunning(isRunning);
@@ -178,6 +178,14 @@ const controlsView = new ControlsView(controlsContainer, initialSeed, {
     historyView.render(world.history.getSamples());
     updateStatus();
     renderer.render();
+  },
+  onColorModeChange: (mode) => {
+    renderer.setColorMode(mode);
+    renderer.render();
+  },
+  onSharingChange: (enabled) => {
+    // Takes effect from the next tick; use Reset to rerun a seed from the start.
+    world.config.sharingEnabled = enabled;
   },
   onNewSeed: () => {
     isRunning = false;
