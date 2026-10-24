@@ -27,6 +27,10 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 - Immigration: every `immigrationInterval` ticks, `immigrationCount` founders with random tags and policies arrive in random free cells, so look-alike groups are not purely families.
 - Offspring are born adjacent and inherit their parent's tag, so look-alike clusters form from family structure alone, even with sharing off. Claims about tribe formation must be compared against a sharing-off control, not read from cluster counts by themselves.
 - Hybrid controller: hard constraints define legal actions; an interpretable weighted policy chooses among them.
+- Food is the top motivation (a fixed priority layer above the evolved weights):
+  - Eating is possible when food is underfoot or carried and there is room for a full meal (energy <= max − `foodEnergyYield`).
+  - Whenever eating is possible it outranks every other action except giving food to one's own hungry child, which still competes with eating on the evolved weights. Outranked actions are marked `outrankedByEating` in the inspector.
+  - When hungry (below half energy), moving toward known food adds `HUNGER_FOOD_PRIORITY` × alignment, outweighing all other movement pulls, even an evolved aversion to food (`hungerPriority` in the inspector).
 - Start with a few evolvable weights. Consider a tiny neural network only after baseline experiments.
 - Organisms have no memory in Phase 1.
 - Discrete ticks: every living organism decides once per tick.

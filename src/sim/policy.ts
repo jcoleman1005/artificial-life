@@ -14,6 +14,13 @@ export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
 
 /**
+ * Food is the top motivation. When hungry (below half energy), moving toward
+ * known food gets this much per unit of alignment, more than all other
+ * movement pulls can add up to, so hunger steers regardless of evolved weights.
+ */
+export const HUNGER_FOOD_PRIORITY = 20;
+
+/**
  * Creates a randomized initial policy for pioneer organisms.
  */
 export function createRandomPolicy(prng: PRNG): PolicyWeights {
@@ -309,6 +316,13 @@ export function scoreAction(
         const foodComp = policy.foodAttraction * dotProduct * distanceFactor * 1.5;
         components['foodPull'] = Number(foodComp.toFixed(3));
         totalScore += foodComp;
+
+        // Hungry: heading toward food outranks every other movement pull.
+        if (sensed.energyRatio < 0.5) {
+          const hungerComp = HUNGER_FOOD_PRIORITY * dotProduct;
+          components['hungerPriority'] = Number(hungerComp.toFixed(3));
+          totalScore += hungerComp;
+        }
       }
 
       // 2. Obstacle avoidance component
@@ -394,10 +408,24 @@ export function evaluatePolicy(
     scoreAction(action, organism, sensed, config, prng)
   );
 
+  // Food is the top motivation: whenever eating is possible it outranks every
+  // other action, except feeding one's own hungry child, which still competes
+  // with eating on the evolved weights. Outranked actions keep their scores
+  // for the inspector and are marked.
+  const canEatNow = scores.some((s) => s.action.type === 'EAT');
+  const eligible = canEatNow
+    ? scores.filter((s) => s.action.type === 'EAT' || s.action.recipientIsChild)
+    : scores;
+  if (canEatNow) {
+    for (const s of scores) {
+      if (!eligible.includes(s)) s.components['outrankedByEating'] = 0;
+    }
+  }
+
   let bestScore = -Infinity;
   let bestCandidates: ActionScore[] = [];
 
-  for (const s of scores) {
+  for (const s of eligible) {
     if (s.totalScore > bestScore + 1e-6) {
       bestScore = s.totalScore;
       bestCandidates = [s];

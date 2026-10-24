@@ -302,8 +302,9 @@ describe('Passing through children', () => {
     const world = emptyWorld({ moveCost: 1, foodRegenInterval: 9999 });
     world.foodPatches.set('8,5', { x: 8, y: 5, stock: 5, capacity: 5 });
     const parent = makeOrganism('parent', 5, 5, { energy: 40, policy: { ...NEUTRAL, foodAttraction: 2 } });
+    // Well fed (not hungry), so food does not override the child's own leanings.
     const child = makeOrganism('child', 6, 5, {
-      energy: 40,
+      energy: 60,
       policy: { ...NEUTRAL, kinAffinity: 2, ...childPolicy },
       lineage: { id: 'lin-parent', parentId: childIsOwn ? 'parent' : 'someone-else', generation: 2, birthTick: 0 },
     });
@@ -320,7 +321,7 @@ describe('Passing through children', () => {
     expect([parent.x, parent.y]).toEqual([6, 5]);
     expect([child.x, child.y]).toEqual([5, 5]);
     expect(parent.energy).toBe(39);
-    expect(child.energy).toBe(40);
+    expect(child.energy).toBe(60); // swapped for free
   });
 
   it('does not pass through organisms that are not its children', () => {
@@ -347,8 +348,9 @@ describe('Passing through children', () => {
     const parent = makeOrganism('parent', 5, 5, { energy: 40, policy: { ...NEUTRAL, foodAttraction: 2, eatDrive: 2 } });
     world.organisms.set(parent.id, parent);
     [[5, 4], [5, 6], [4, 5], [6, 5]].forEach(([cx, cy], i) => {
+      // Well fed, so they stay put rather than racing to the food themselves.
       const child = makeOrganism(`child-${i}`, cx, cy, {
-        energy: 40,
+        energy: 60,
         lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
       });
       world.organisms.set(child.id, child);
@@ -429,6 +431,76 @@ describe('Childhood', () => {
 
     expect(closest).toBe(1);
     expect(child.foodReceived).toBeGreaterThan(0);
+  });
+});
+
+describe('Food as the top motivation', () => {
+  function decide(org: Organism, setup?: (world: World) => void) {
+    const world = emptyWorld();
+    setup?.(world);
+    world.organisms.set(org.id, org);
+    world.step();
+    return org.recentHistory[0];
+  }
+
+  it('eats whenever it can, over reproducing, picking up and moving', () => {
+    const d = decide(
+      makeOrganism('o', 5, 5, {
+        energy: 70,
+        policy: { ...NEUTRAL, reproduceDrive: 2, forageDrive: 2, foodAttraction: 2, exploreTendency: 2 },
+      }),
+      (w) => {
+        w.config.reproductionThreshold = 60;
+        w.foodPatches.set('5,5', { x: 5, y: 5, stock: 3, capacity: 3 });
+        w.foodPatches.set('7,5', { x: 7, y: 5, stock: 3, capacity: 3 });
+      }
+    );
+    expect(d.chosenAction.type).toBe('EAT');
+    // Reproducing scored higher but was outranked.
+    const repro = d.scores.find((s) => s.action.type.startsWith('REPRODUCE_'))!;
+    const eat = d.scores.find((s) => s.action.type === 'EAT')!;
+    expect(repro.totalScore).toBeGreaterThan(eat.totalScore);
+    expect('outrankedByEating' in repro.components).toBe(true);
+  });
+
+  it('only eats with room for a full meal', () => {
+    const fullish = decide(makeOrganism('o', 5, 5, { energy: 80 }), (w) =>
+      w.foodPatches.set('5,5', { x: 5, y: 5, stock: 3, capacity: 3 })
+    );
+    expect(fullish.scores.some((s) => s.action.type === 'EAT')).toBe(false);
+  });
+
+  it('still lets a caring parent feed its hungry child instead of eating', () => {
+    const world = emptyWorld();
+    const parent = makeOrganism('parent', 5, 5, {
+      energy: 30,
+      carriedFood: 1,
+      policy: { ...NEUTRAL, careForChildren: 2, eatDrive: 0.5, shareWithKin: 2 },
+    });
+    const child = makeOrganism('child', 6, 5, {
+      energy: 5,
+      lineage: { id: 'lin', parentId: 'parent', generation: 2, birthTick: 0 },
+    });
+    const stranger = makeOrganism('stranger', 4, 5, { energy: 5 });
+    for (const o of [parent, child, stranger]) world.organisms.set(o.id, o);
+    world.step();
+    expect(parent.recentHistory[0].chosenAction.type).toBe('GIVE_EAST');
+    // Giving to a non-child was outranked by eating.
+    const toStranger = parent.recentHistory[0].scores.find((s) => s.action.type === 'GIVE_WEST')!;
+    expect('outrankedByEating' in toStranger.components).toBe(true);
+  });
+
+  it('heads for food when hungry, even against its own evolved aversion to food', () => {
+    const atFood = (energy: number) =>
+      decide(
+        makeOrganism('o', 3, 5, {
+          energy,
+          policy: { ...NEUTRAL, foodAttraction: -2, crowdingAvoidance: 2 },
+        }),
+        (w) => w.foodPatches.set('5,5', { x: 5, y: 5, stock: 3, capacity: 3 })
+      ).chosenAction.type;
+    expect(atFood(30)).toBe('MOVE_EAST'); // hungry: hunger wins
+    expect(atFood(70)).not.toBe('MOVE_EAST'); // fed: its aversion wins
   });
 });
 

@@ -157,7 +157,11 @@ export function senseEnvironment(
 
   // Check action preconditions
   const { carriedFood } = organism;
-  const canEat = (currentCellFood > 0 || carriedFood > 0) && energy < config.maxEnergy;
+  // Eating needs food here or in hand, and room for a full meal, so a
+  // nearly full organism never spends a whole food unit on a few points.
+  const canEat =
+    (currentCellFood > 0 || carriedFood > 0) &&
+    energy <= config.maxEnergy - config.foodEnergyYield;
   const canPickUp = currentCellFood > 0 && carriedFood < organism.carryCapacity;
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
