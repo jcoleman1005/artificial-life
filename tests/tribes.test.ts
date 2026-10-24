@@ -289,6 +289,76 @@ describe('Parental care', () => {
   });
 });
 
+describe('Passing through children', () => {
+  /**
+   * A parent pulled east toward food, with its own child directly east of it.
+   * By default the child leans toward its parent (same tag), so it stays put:
+   * its own move west is blocked because the parent's cell is reserved.
+   */
+  function parentBehindChild(childPolicy: Partial<PolicyWeights> = {}, childIsOwn = true) {
+    const world = emptyWorld({ moveCost: 1, foodRegenInterval: 9999 });
+    world.foodPatches.set('8,5', { x: 8, y: 5, stock: 5, capacity: 5 });
+    const parent = makeOrganism('parent', 5, 5, { energy: 40, policy: { ...NEUTRAL, foodAttraction: 2 } });
+    const child = makeOrganism('child', 6, 5, {
+      energy: 40,
+      policy: { ...NEUTRAL, kinAffinity: 2, ...childPolicy },
+      lineage: { id: 'lin-parent', parentId: childIsOwn ? 'parent' : 'someone-else', generation: 2, birthTick: 0 },
+    });
+    world.organisms.set(parent.id, parent);
+    world.organisms.set(child.id, child);
+    world.step();
+    return { world, parent, child };
+  }
+
+  it('lets a parent trade places with its own child; only the parent pays to move', () => {
+    const { parent, child } = parentBehindChild();
+    expect(parent.recentHistory[0].chosenAction.type).toBe('MOVE_EAST');
+    expect(parent.recentHistory[0].outcome).toBe('success');
+    expect([parent.x, parent.y]).toEqual([6, 5]);
+    expect([child.x, child.y]).toEqual([5, 5]);
+    expect(parent.energy).toBe(39);
+    expect(child.energy).toBe(40);
+  });
+
+  it('does not pass through organisms that are not its children', () => {
+    const { parent, child } = parentBehindChild({}, false);
+    expect(parent.recentHistory[0].outcome).toBe('blocked_by_organism');
+    expect([parent.x, parent.y]).toEqual([5, 5]);
+    expect([child.x, child.y]).toEqual([6, 5]);
+    expect(parent.energy).toBe(40);
+  });
+
+  it('fails that tick if the child moves away, without costing the parent', () => {
+    // The child is also pulled to the food and steps east first.
+    const { parent, child } = parentBehindChild({ foodAttraction: 2, kinAffinity: 0 });
+    expect(child.recentHistory[0].outcome).toBe('success');
+    expect([child.x, child.y]).toEqual([7, 5]);
+    expect(parent.recentHistory[0].outcome).toBe('blocked_by_organism');
+    expect([parent.x, parent.y]).toEqual([5, 5]);
+    expect(parent.energy).toBe(40);
+  });
+
+  it('frees a parent boxed in by its four children', () => {
+    const world = emptyWorld({ foodRegenInterval: 9999 });
+    world.foodPatches.set('8,5', { x: 8, y: 5, stock: 5, capacity: 5 });
+    const parent = makeOrganism('parent', 5, 5, { energy: 40, policy: { ...NEUTRAL, foodAttraction: 2, eatDrive: 2 } });
+    world.organisms.set(parent.id, parent);
+    [[5, 4], [5, 6], [4, 5], [6, 5]].forEach(([cx, cy], i) => {
+      const child = makeOrganism(`child-${i}`, cx, cy, {
+        energy: 40,
+        lineage: { id: 'lin-parent', parentId: 'parent', generation: 2, birthTick: 0 },
+      });
+      world.organisms.set(child.id, child);
+    });
+
+    for (let t = 0; t < 6; t++) world.step();
+
+    expect(parent.foodEatenCount).toBeGreaterThan(0);
+    const cells = new Set(Array.from(world.organisms.values(), (o) => `${o.x},${o.y}`));
+    expect(cells.size).toBe(world.organisms.size); // never two in one cell
+  });
+});
+
 describe('Immigration', () => {
   it('adds founders with new lineages at the configured interval', () => {
     const world = emptyWorld({ immigrationInterval: 10, immigrationCount: 2 });

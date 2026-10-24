@@ -108,9 +108,15 @@ export function getLegalActions(
       continue;
     }
 
+    // A parent may pass through its own child by trading places with it.
+    const occupant = snapshot.organismAt.get(`${targetX},${targetY}`);
+    const swapWithChildId =
+      occupant && occupant.lineage.parentId === organism.id ? occupant.id : undefined;
+
     actions.push({
       type: move.type,
       target: { x: targetX, y: targetY },
+      swapWithChildId,
     });
   }
 
@@ -335,6 +341,11 @@ export function scoreAction(
         const kinComp = (policy.kinAffinity * (dx * px + dy * py)) / scale;
         components['kinPull'] = Number(kinComp.toFixed(3));
         totalScore += kinComp;
+      }
+
+      if (action.swapWithChildId) {
+        // Not a score term: marks that this move trades places with a child.
+        components['passesChild'] = 0;
       }
 
       // 5. Explore tendency (seeded stochastic wander preference)

@@ -238,6 +238,8 @@ export class World {
       scores: ActionScore[];
       chosenAction: LegalAction;
       moveTargetKey?: string;
+      /** A parent's move that trades places with this child instead. */
+      swapWithId?: string;
       reproTargetKey?: string;
       approved: boolean;
       outcome: DecisionOutcome;
@@ -257,9 +259,14 @@ export class World {
       );
 
       let moveTargetKey: string | undefined;
+      let swapWithId: string | undefined;
       let reproTargetKey: string | undefined;
 
-      if (chosenAction.type.startsWith('MOVE_') && chosenAction.target) {
+      if (chosenAction.type.startsWith('MOVE_') && chosenAction.swapWithChildId) {
+        // A swap keeps both cells occupied, so it stays out of the ordinary
+        // move resolution below and the parent's cell remains reserved.
+        swapWithId = chosenAction.swapWithChildId;
+      } else if (chosenAction.type.startsWith('MOVE_') && chosenAction.target) {
         moveTargetKey = `${chosenAction.target.x},${chosenAction.target.y}`;
       } else if (chosenAction.type.startsWith('REPRODUCE_') && chosenAction.target) {
         reproTargetKey = `${chosenAction.target.x},${chosenAction.target.y}`;
@@ -271,6 +278,7 @@ export class World {
         scores,
         chosenAction,
         moveTargetKey,
+        swapWithId,
         reproTargetKey,
         approved: true,
         outcome: 'success',
@@ -344,6 +352,19 @@ export class World {
       }
     }
 
+    // 3c'. Parent-child swaps: approved only if the child stays in its cell
+    // this tick (it is neither moving away nor swapping with its own child).
+    for (const item of intentions.values()) {
+      if (!item.swapWithId) continue;
+      const child = intentions.get(item.swapWithId);
+      const childStays =
+        child !== undefined && !(child.moveTargetKey && child.approved) && !child.swapWithId;
+      if (!childStays) {
+        item.approved = false;
+        item.outcome = 'blocked_by_organism';
+      }
+    }
+
     // 3d. Resolve reproduction collisions
     // Reproduction requires the target cell to be completely empty after moves are finalized
     const finalOccupiedCells = new Set<string>();
@@ -387,6 +408,9 @@ export class World {
     // recipient after all actions, so every organism acts on the same
     // pre-tick state.
     const pendingGifts: { recipientId: string }[] = [];
+    // Parent-child swaps also happen after all actions, so the child acts
+    // from the cell it stood in.
+    const pendingSwaps: { parent: Organism; childId: string }[] = [];
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
@@ -423,7 +447,13 @@ export class World {
         case 'MOVE_SOUTH':
         case 'MOVE_EAST':
         case 'MOVE_WEST': {
-          if (approved && chosenAction.target) {
+          if (approved && item.swapWithId) {
+            // Trade places with the child after all actions (see below).
+            organism.energy -= this.config.moveCost;
+            energyDelta -= this.config.moveCost;
+            pendingSwaps.push({ parent: organism, childId: item.swapWithId });
+            outcome = 'success';
+          } else if (approved && chosenAction.target) {
             organism.x = chosenAction.target.x;
             organism.y = chosenAction.target.y;
             organism.energy -= this.config.moveCost;
@@ -545,6 +575,17 @@ export class World {
       if (organism.recentHistory.length > 8) {
         organism.recentHistory.pop();
       }
+    }
+
+    // Parents and children trade places (the child pays no move cost)
+    for (const { parent, childId } of pendingSwaps) {
+      const child = this.organisms.get(childId);
+      if (!child) continue;
+      const [px, py] = [parent.x, parent.y];
+      parent.x = child.x;
+      parent.y = child.y;
+      child.x = px;
+      child.y = py;
     }
 
     // Deliver food gifts: the recipient eats each one (energy capped at the

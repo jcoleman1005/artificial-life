@@ -42,6 +42,11 @@ export type ActionType =
 export interface LegalAction {
   readonly type: ActionType;
   readonly target?: Point;
+  /**
+   * MOVE only: the target cell holds the mover's own child, and the move is a
+   * swap — parent and child trade places (parents can pass through children).
+   */
+  readonly swapWithChildId?: string;
   /** GIVE only: the adjacent organism receiving a carried food unit. */
   readonly recipientId?: string;
   /** GIVE only: how alike the recipient's tag looks (0..1). */
