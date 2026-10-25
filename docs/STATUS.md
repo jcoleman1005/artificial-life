@@ -44,7 +44,8 @@ _Last updated: 2026-10-25._
 - World events feed (seasons per region, colour groups rising / dying out / taking the lead, population records and crashes, extinction, generation milestones): latest event under the peek strip, recent events in the Stats tab.
 - Layers button over the world (one at a time): Family (lineage lit, others dimmed, lines to parent and children), Senses & signals (sight square, signal reach, signal ripples), Trails, and Crowding / Deaths / Feeding heatmaps (counted in the worker every tick, fading with a ~140-tick half-life).
 - Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
-- 124 deterministic tests.
+- **Evolving plants** (`plantsEnabled`, off by default until measured; Settings → World → Plants: Evolving). Food becomes a population of plants with a 7-trait inherited genome (growth rate, maximum size, seed size, seeding threshold, seed dispersal, root share, lean dormancy). They grow by soil, light, shade and size, pay upkeep, store roots, go dormant in lean seasons, set seed, and die when grazed bare, shaded out or starved; seed rain replaces patch spawning. Drawn as leaf rosettes in their strategy's colour (greyed while dormant, dots as seedlings) with berries for edible units; tap a plant for its genome; a Plants section in Trends, CSV columns and experiment metrics. Spec and as-built rules: `docs/specs/plants.md`. Plant updates cost ~0.4 ms/tick for ~1,000 plants.
+- 155 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -120,7 +121,7 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
 **Phase 3: big coevolution (long runs; needs the server)**
-10. Evolving plants (carrion becomes another food type).
+10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). Next: plant events in the feed, then Phase 2 (defence with an organism sense for plant colour, seed bank, seeds carried by organisms).
 11. Growth and size, then bite.
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
@@ -148,5 +149,6 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 - UI: no pinch-to-zoom yet (use the +/− buttons or the mouse wheel). Colour groups are fixed 30° hue buckets, so one family drifting across a bucket edge shows as two groups. Several lean regions are shown as compass codes (e.g. "Lean: NW, SW") to fit the peek strip. In landscape on a phone the world at 1× is small (the side panel takes ~40% of the width).
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
+- Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
 - Fingerprints changed with the mobility merge and the new dial weight; record new ones (`npm run fingerprint`) before the next engine optimisation.
 - Mobility has its own branch's experiments; none were rerun after merging with regions, signals and the brain default.
