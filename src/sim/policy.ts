@@ -25,6 +25,10 @@ export const WEIGHT_MAX = 2.0;
 export const EAT_PRIORITY_SCALE = 20;
 export const HUNGER_URGENCY_SCALE = 10;
 export const PARENT_PULL_SCALE = 3;
+/** Rest preference: at full weight, about a full-strength food pull. */
+export const REST_SCALE = 1;
+/** Signal weights: about as strong as the food pull at full weight. */
+export const SIGNAL_SCALE = 1.5;
 /** Penalty per unit of avoidOccupied for moving into a cell held by a non-family organism. */
 export const OCCUPIED_SCALE = 1.5;
 
@@ -51,6 +55,14 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     eatPriority: Number(prng.nextFloat(1.5, 2.0).toFixed(3)),
     hungerUrgency: Number(prng.nextFloat(1.5, 2.0).toFixed(3)),
     followFoodParent: Number(prng.nextFloat(0.5, 1.5).toFixed(3)),
+    // Signals start with no meaning: when to signal and how to respond are
+    // centred on zero, so any use of them has to evolve.
+    signalOnFood: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
+    signalWhenHungry: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
+    followSignal: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
+    // Resting starts close to its old fixed score of 0, so any preference
+    // for resting (or against it) has to evolve.
+    restDrive: Number(prng.nextFloat(-0.25, 0.25).toFixed(3)),
     // Head start: prefer free cells to occupied ones; evolution can change it.
     avoidOccupied: Number(prng.nextFloat(1.0, 2.0).toFixed(3)),
     leapEagerness: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
@@ -91,6 +103,10 @@ export function mutatePolicy(
     eatPriority: mutateWeight(parentPolicy.eatPriority),
     hungerUrgency: mutateWeight(parentPolicy.hungerUrgency),
     followFoodParent: mutateWeight(parentPolicy.followFoodParent),
+    signalOnFood: mutateWeight(parentPolicy.signalOnFood),
+    signalWhenHungry: mutateWeight(parentPolicy.signalWhenHungry),
+    followSignal: mutateWeight(parentPolicy.followSignal),
+    restDrive: mutateWeight(parentPolicy.restDrive),
     avoidOccupied: mutateWeight(parentPolicy.avoidOccupied),
     leapEagerness: mutateWeight(parentPolicy.leapEagerness),
   };
@@ -269,7 +285,12 @@ export function getLegalActions(
     }
   }
 
-  // 6. Rest action (always a fallback option)
+  // 6. Signal: stay put and be noticed by others within signalRadius next tick
+  if (sensed.canSignal) {
+    actions.push({ type: 'SIGNAL', target: { x, y } });
+  }
+
+  // 7. Rest action (always a fallback option)
   actions.push({
     type: 'REST',
     target: { x, y },
@@ -350,10 +371,27 @@ export function scoreAction(
       break;
     }
 
+    case 'SIGNAL': {
+      // When to signal is evolved, from two contexts: standing on food and
+      // being hungry. A small fixed cost means signalling needs a positive
+      // drive, never a tie-break.
+      const onFood = sensed.currentCellFood > 0 ? 1 : 0;
+      const hunger = 1.0 - sensed.energyRatio;
+      const foodComponent = policy.signalOnFood * onFood * SIGNAL_SCALE;
+      const hungerComponent = policy.signalWhenHungry * hunger * SIGNAL_SCALE;
+      components['signalOnFood'] = Number(foodComponent.toFixed(3));
+      components['signalHungry'] = Number(hungerComponent.toFixed(3));
+      components['cost'] = -0.1;
+      totalScore = foodComponent + hungerComponent - 0.1;
+      break;
+    }
+
     case 'REST': {
-      // Resting has neutral baseline score; organisms act if any constructive action has positive score
-      components['baseline'] = 0.0;
-      totalScore = 0.0;
+      // Resting scores the evolved restDrive, so dials can evolve "rest
+      // more, move less" as brains do (it used to be fixed at 0).
+      const restComponent = policy.restDrive * REST_SCALE;
+      components['restDrive'] = Number(restComponent.toFixed(3));
+      totalScore = restComponent;
       break;
     }
 
@@ -399,6 +437,16 @@ export function scoreAction(
         const parentComp = policy.followFoodParent * PARENT_PULL_SCALE * dot;
         components['parentPull'] = Number(parentComp.toFixed(3));
         totalScore += parentComp;
+      }
+
+      // Toward (or away from) the nearest signal, weaker with distance
+      if (sensed.nearestSignal) {
+        const { dx: sdx, dy: sdy, distance } = sensed.nearestSignal;
+        const norm = Math.sqrt(sdx * sdx + sdy * sdy) || 1;
+        const dot = dx * (sdx / norm) + dy * (sdy / norm);
+        const signalComp = (policy.followSignal * SIGNAL_SCALE * dot) / (1 + 0.15 * distance);
+        components['signalPull'] = Number(signalComp.toFixed(3));
+        totalScore += signalComp;
       }
 
       // 2. Obstacle avoidance component

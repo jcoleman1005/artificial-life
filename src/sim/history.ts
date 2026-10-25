@@ -16,6 +16,10 @@ export const POLICY_WEIGHT_KEYS = [
   'eatPriority',
   'hungerUrgency',
   'followFoodParent',
+  'signalOnFood',
+  'signalWhenHungry',
+  'followSignal',
+  'restDrive',
   'avoidOccupied',
   'leapEagerness',
 ] as const satisfies readonly (keyof PolicyWeights)[];
@@ -45,6 +49,8 @@ export interface HistorySample {
   readonly kinSharesTotal: number;
   readonly parentalSharesTotal: number;
   readonly immigrantsTotal: number;
+  readonly signalsTotal: number;
+  readonly signalsOnFoodTotal: number;
   /** Whether this sample fell in a lean season. */
   readonly lean: boolean;
   /** Population mean and standard deviation of each inherited policy weight. */
@@ -125,6 +131,16 @@ export class MetricsHistory {
     this.interval = 1;
   }
 
+  /** Plain data for a snapshot. */
+  public exportState(): { samples: HistorySample[]; interval: number } {
+    return { samples: [...this.samples], interval: this.interval };
+  }
+
+  public importState(state: { samples: readonly HistorySample[]; interval: number }): void {
+    this.samples = [...state.samples];
+    this.interval = state.interval;
+  }
+
   /** Whether a sample is due at this tick (so callers can skip computing metrics). */
   public wantsSample(tick: number): boolean {
     if (tick % this.interval !== 0) return false;
@@ -152,6 +168,8 @@ export class MetricsHistory {
       kinSharesTotal: metrics.kinSharesTotal,
       parentalSharesTotal: metrics.parentalSharesTotal,
       immigrantsTotal: metrics.immigrantsTotal,
+      signalsTotal: metrics.signalsTotal,
+      signalsOnFoodTotal: metrics.signalsOnFoodTotal,
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
@@ -185,6 +203,8 @@ export class MetricsHistory {
       'kin_shares_total',
       'parental_shares_total',
       'immigrants_total',
+      'signals_total',
+      'signals_on_food_total',
       'lean_season',
       'carry_capacity_mean',
       'carry_capacity_sd',
@@ -214,6 +234,8 @@ export class MetricsHistory {
         s.kinSharesTotal,
         s.parentalSharesTotal,
         s.immigrantsTotal,
+        s.signalsTotal,
+        s.signalsOnFoodTotal,
         s.lean ? 1 : 0,
         s.carryCapacity.mean.toFixed(4),
         s.carryCapacity.sd.toFixed(4),

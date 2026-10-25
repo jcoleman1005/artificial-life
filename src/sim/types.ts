@@ -46,6 +46,7 @@ export type ActionType =
   | 'GIVE_SOUTH'
   | 'GIVE_EAST'
   | 'GIVE_WEST'
+  | 'SIGNAL'
   | 'REST';
 
 export interface LegalAction {
@@ -107,6 +108,14 @@ export interface PolicyWeights {
   hungerUrgency: number;
   /** In childhood, pull toward one's parent while it carries food ([-2, 2]). */
   followFoodParent: number;
+  /** Urge to signal while standing on food ([-2, 2]). */
+  signalOnFood: number;
+  /** Urge to signal while hungry ([-2, 2]). */
+  signalWhenHungry: number;
+  /** Positive: move toward the nearest signal. Negative: away from it ([-2, 2]). */
+  followSignal: number;
+  /** Preference for resting (staying put at no extra cost) over other actions ([-2, 2]). */
+  restDrive: number;
   /** How strongly to avoid moving into cells held by non-family organisms ([-2, 2]). */
   avoidOccupied: number;
   /** Extra willingness to leap over a neighbour, for organisms able to ([-2, 2]). */
@@ -143,12 +152,19 @@ export interface SensedInputs {
   readonly kinPull: { readonly dx: number; readonly dy: number } | null;
   /** In childhood: one's parent, if in range and carrying food (value = units carried). */
   readonly parentWithFood: SensedEntity | null;
+  /**
+   * The nearest organism that signalled last tick, within signalRadius
+   * (value = how alike its tag looks, 0..1). Null when none.
+   */
+  readonly nearestSignal: SensedEntity | null;
   readonly canReproduce: boolean;
   /** Food available to eat here or in hand, and room for energy. */
   readonly canEat: boolean;
   readonly canPickUp: boolean;
   /** Carrying food and the GIVE experiment switch is on. */
   readonly canGive: boolean;
+  /** The SIGNAL experiment switch is on. */
+  readonly canSignal: boolean;
 }
 
 export interface ActionScore {
@@ -213,6 +229,8 @@ export interface Organism {
   /** Cumulative food units given to and received from other organisms. */
   foodGiven: number;
   foodReceived: number;
+  /** The last tick this organism signalled (-1 if never). Others see it the tick after. */
+  signalTick: number;
   recentHistory: DecisionRecord[];
 }
 
@@ -237,6 +255,17 @@ export interface FoodPatch {
   readonly y: number;
   stock: number;
   capacity: number;
+  /** Index of the food region it grew in (absent: no region, global seasons). */
+  readonly region?: number;
+}
+
+/** A fertile disc where food patches grow. Each may run its own season clock. */
+export interface FoodRegion {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  /** How far ahead (0..1 of a cycle) this region's seasons run when staggered. */
+  readonly seasonPhase: number;
 }
 
 export interface SimulationConfig {
@@ -252,6 +281,9 @@ export interface SimulationConfig {
   foodSpawnInterval: number; // Spawn new patches every N ticks
   foodSpawnCount: number;
   maxFoodPatches: number;
+  foodRegionCount: number; // Fertile regions where food grows (0 = food anywhere)
+  foodRegionRadius: number; // Radius of each region, in cells
+  staggeredSeasons: boolean; // Each region's lean season comes at a different time
   initialOrganisms: number;
   maxEnergy: number;
   initialEnergy: number;
@@ -283,7 +315,10 @@ export interface SimulationConfig {
   controller: 'dials' | 'brain'; // Which inherited controller chooses actions
   brainMutationRate: number; // Probability each brain weight mutates at birth
   brainMutationStdDev: number; // Size of a brain weight mutation
-  childhoodTicks: number; // For this long after birth, a parent carrying food senses as a food source
+  childhoodTicks: number;
+  signalsEnabled: boolean; // Experiment switch for the SIGNAL action
+  signalCost: number; // Energy spent on one signal
+  signalRadius: number; // How far (Manhattan) a signal can be sensed // For this long after birth, a parent carrying food senses as a food source
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
   seasonLength: number; // Ticks per plenty + lean cycle (0 = no seasons)
@@ -331,6 +366,9 @@ export interface WorldMetrics {
   kinSharesTotal: number;
   parentalSharesTotal: number;
   immigrantsTotal: number;
+  signalsTotal: number;
+  /** Signals sent while standing on food. */
+  signalsOnFoodTotal: number;
   /** Current season, or null when seasons are off. */
   season: 'plenty' | 'lean' | null;
 }
@@ -350,4 +388,6 @@ export interface WorldSnapshot {
   readonly foodGrid: Int32Array;
   /** Index into `organisms` of the organism in each cell, or -1. */
   readonly organismGrid: Int32Array;
+  /** Indices into `organisms` of those that signalled last tick. */
+  readonly signallers: readonly number[];
 }

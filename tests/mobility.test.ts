@@ -23,6 +23,10 @@ const NEUTRAL: PolicyWeights = {
   eatPriority: 0,
   hungerUrgency: 0,
   followFoodParent: 0,
+  signalOnFood: 0,
+  signalWhenHungry: 0,
+  followSignal: 0,
+  restDrive: 0,
   avoidOccupied: 0,
   leapEagerness: 0,
 };
@@ -45,6 +49,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     carriedFood: 0,
     foodGiven: 0,
     foodReceived: 0,
+    signalTick: -1,
     recentHistory: [],
     ...overrides,
   };
@@ -74,6 +79,8 @@ function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
     squeezeCostMultiplier: 2,
     leapEnabled: true,
     leapCostMultiplier: 2.5,
+    foodRegionCount: 0,
+    controller: 'dials', // these tests exercise the dial policy
     ...overrides,
   });
 }

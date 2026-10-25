@@ -1,11 +1,37 @@
-import type { FoodPatch, Organism } from '../sim/types';
-import type { World } from '../sim/world';
-import { seasonAt } from '../sim/seasons';
+import type { FoodPatch } from '../sim/types';
+import type { OrganismView, WorldView } from '../sim/protocol';
+import type { HeatmapKind } from '../sim/activity';
+import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
 
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
+
+/**
+ * One optional layer over the world (one at a time):
+ * - family: the selected organism's parent and children, its lineage lit and others dimmed;
+ * - senses: the selected organism's sight and signal ranges, and signal ripples;
+ * - trails: short fading paths behind organisms;
+ * - crowding / deaths / feeding: fading heatmaps of where those happen.
+ */
+export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | HeatmapKind;
+
+const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
+  crowding: '251, 146, 60',
+  deaths: '248, 113, 113',
+  feeding: '134, 239, 172',
+};
+/** Trail points kept per organism (one per frame). */
+const TRAIL_LENGTH = 12;
+
+/** Space at the canvas edges covered by overlays (sheet, playback pill). */
+export interface ViewInsets {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
 
 /** Unit vector for an action that ends in a direction (moves, leaps, gifts). */
 function directionOf(type: ActionType): [number, number] {
@@ -17,19 +43,58 @@ function directionOf(type: ActionType): [number, number] {
   return [0, 0];
 }
 
+const TAU = Math.PI * 2;
+const GLYPH = 'rgba(255, 255, 255, 0.88)';
+const BERRY = '#86efac';
+const GIFT = '#fcd877';
+const STARVING = 'rgba(248, 113, 113, 0.92)';
+const ZOOM_ANIMATION_MS = 320;
+
+/** Lineage colour: a hash of the founding ancestor's id, so a family shares a hue. */
+export function lineageHue(lineageId: string): number {
+  let hash = 0;
+  for (let i = 0; i < lineageId.length; i++) {
+    hash = (hash * 31 + lineageId.charCodeAt(i)) >>> 0;
+  }
+  return hash % 360;
+}
+
+const easeInOut = (p: number) => p * p * (3 - 2 * p);
+
+/**
+ * Draws the world in the "Pebbles" style: glowing orbs for organisms, berry
+ * clusters for food, rounded rocks, soft glows for fertile regions. The
+ * canvas fills its parent; at zoom 1 the whole world fits inside the part
+ * not covered by overlays (the insets), and zooming in lets it fill the screen.
+ */
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  private world: World;
-  private cellSize = 12;
-  private canvasSize = 360;
+  private world: WorldView;
+  private width = 360;
+  private height = 360;
+  private insets: ViewInsets = { top: 0, bottom: 0, left: 0, right: 0 };
+  /** Cell size at zoom 1 (the whole world fits the visible area). */
+  private baseCell = 6;
+  private cellSize = 6;
   private colorMode: ColorMode = 'tag';
   // Smooth movement: where each organism was before the latest tick, and how
   // far (0..1) the current frame is through that tick.
   private previousPositions = new Map<string, { x: number; y: number }>();
   private progress = 1;
+  // Zoom and pan: the world is drawn `zoom` times larger than the fitted size;
+  // world pixel (viewX, viewY) sits at the canvas's top-left corner.
+  private zoom = 1;
+  private viewX = 0;
+  private viewY = 0;
+  /** While zoomed, keep the selected organism centred (until the view is dragged). */
+  private following = true;
+  private zoomAnimation: { from: number; to: number; start: number } | null = null;
+  private overlay: OverlayMode = 'none';
+  private heatmap: Float32Array | null = null;
+  private trails = new Map<string, { x: number; y: number }[]>();
 
-  constructor(canvas: HTMLCanvasElement, world: World) {
+  constructor(canvas: HTMLCanvasElement, world: WorldView) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) {
@@ -40,12 +105,113 @@ export class CanvasRenderer {
     this.resize();
   }
 
-  public setWorld(world: World): void {
+  public setWorld(world: WorldView): void {
     this.world = world;
   }
 
   public setColorMode(mode: ColorMode): void {
     this.colorMode = mode;
+  }
+
+  public setOverlay(mode: OverlayMode): void {
+    this.overlay = mode;
+    this.trails.clear();
+    if (mode === 'none' || mode === 'family' || mode === 'senses' || mode === 'trails') this.heatmap = null;
+  }
+
+  /** The heatmap to draw (one value per cell), or null. */
+  public setHeatmap(cells: Float32Array | null): void {
+    this.heatmap = cells;
+  }
+
+  public hueOf(org: OrganismView): number {
+    return this.colorMode === 'tag' ? org.tag : lineageHue(org.lineage.id);
+  }
+
+  /** The zoom the view is heading to (the target while animating). */
+  public getZoom(): number {
+    return this.zoomAnimation ? this.zoomAnimation.to : this.zoom;
+  }
+
+  /** True while a zoom animation still needs frames drawn. */
+  public isAnimating(): boolean {
+    return this.zoomAnimation !== null;
+  }
+
+  public setInsets(insets: ViewInsets): void {
+    this.insets = insets;
+    this.resize();
+  }
+
+  /** Zooms about the centre of the visible area, or the followed organism. */
+  public setZoom(zoom: number, animate = true): void {
+    const target = Math.max(1, zoom);
+    this.following = true;
+    if (!animate) {
+      this.zoomAnimation = null;
+      this.applyZoom(target);
+      return;
+    }
+    this.zoomAnimation = { from: this.zoom, to: target, start: performance.now() };
+  }
+
+  private applyZoom(zoom: number): void {
+    const { cx, cy } = this.visibleCentre();
+    const worldX = (this.viewX + cx) / this.cellSize;
+    const worldY = (this.viewY + cy) / this.cellSize;
+    this.zoom = zoom;
+    this.cellSize = this.baseCell * zoom;
+    this.viewX = worldX * this.cellSize - cx;
+    this.viewY = worldY * this.cellSize - cy;
+    this.clampView();
+  }
+
+  /** Drags the view by a screen offset in CSS pixels; stops following. */
+  public panBy(dx: number, dy: number): void {
+    this.viewX -= dx;
+    this.viewY -= dy;
+    this.following = false;
+    this.clampView();
+  }
+
+  /** Whether the world is larger than the visible area (so a drag can pan). */
+  public canPan(): boolean {
+    const { gridWidth, gridHeight } = this.world.config;
+    const { vw, vh } = this.visibleSize();
+    return gridWidth * this.cellSize > vw + 1 || gridHeight * this.cellSize > vh + 1;
+  }
+
+  /** Follow the selected organism again (after a new selection). */
+  public follow(): void {
+    this.following = true;
+  }
+
+  private visibleSize(): { vw: number; vh: number } {
+    const { top, bottom, left, right } = this.insets;
+    return {
+      vw: Math.max(1, this.width - left - right),
+      vh: Math.max(1, this.height - top - bottom),
+    };
+  }
+
+  private visibleCentre(): { cx: number; cy: number } {
+    const { vw, vh } = this.visibleSize();
+    return { cx: this.insets.left + vw / 2, cy: this.insets.top + vh / 2 };
+  }
+
+  /**
+   * Keeps the world in view: centred in the visible area along an axis where
+   * it is smaller, otherwise able to pan from edge to edge of that area.
+   */
+  private clampView(): void {
+    const { gridWidth, gridHeight } = this.world.config;
+    const { vw, vh } = this.visibleSize();
+    const clampAxis = (view: number, worldPx: number, start: number, visible: number) =>
+      worldPx <= visible
+        ? -(start + (visible - worldPx) / 2)
+        : Math.max(-start, Math.min(worldPx - visible - start, view));
+    this.viewX = clampAxis(this.viewX, gridWidth * this.cellSize, this.insets.left, vw);
+    this.viewY = clampAxis(this.viewY, gridHeight * this.cellSize, this.insets.top, vh);
   }
 
   /** Call just before each world step, so moves can be drawn as glides. */
@@ -54,151 +220,328 @@ export class CanvasRenderer {
     for (const org of this.world.organisms.values()) {
       this.previousPositions.set(org.id, { x: org.x, y: org.y });
     }
+    if (this.overlay === 'trails') {
+      for (const [id, { x, y }] of this.previousPositions) {
+        const trail = this.trails.get(id) ?? [];
+        const last = trail[trail.length - 1];
+        if (!last || last.x !== x || last.y !== y) trail.push({ x, y });
+        if (trail.length > TRAIL_LENGTH) trail.shift();
+        this.trails.set(id, trail);
+      }
+      for (const id of this.trails.keys()) if (!this.previousPositions.has(id)) this.trails.delete(id);
+    }
   }
 
   /** Forget remembered positions (after a reset, ids restart from 1). */
   public clearMotion(): void {
     this.previousPositions.clear();
+    this.trails.clear();
+    this.heatmap = null;
     this.progress = 1;
   }
 
   /** Pixel centre of an organism, part-way along its latest move. */
-  private displayCentre(org: Organism): [number, number] {
+  private displayCentre(org: OrganismView): [number, number] {
     const { cellSize } = this;
     let gx = org.x;
     let gy = org.y;
     const prev = this.previousPositions.get(org.id);
     if (prev && this.progress < 1) {
-      const p = this.progress;
-      const t = p * p * (3 - 2 * p); // ease in and out
+      const t = easeInOut(this.progress);
       gx = prev.x + (org.x - prev.x) * t;
       gy = prev.y + (org.y - prev.y) * t;
     }
     return [(gx + 0.5) * cellSize, (gy + 0.5) * cellSize];
   }
 
-  public resize(): void {
-    // CSS owns the on-screen size (a square wrapper that fits the layout);
-    // here we only match the drawing buffer to it for crisp high-DPI output.
-    // Setting an inline px size would stop the layout column from shrinking.
-    const parent = this.canvas.parentElement;
-    const displaySize = Math.max(1, parent ? parent.clientWidth : this.canvas.clientWidth);
-    this.canvasSize = displaySize;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 3);
-    this.canvas.width = Math.floor(displaySize * dpr);
-    this.canvas.height = Math.floor(displaySize * dpr);
-
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.cellSize = displaySize / this.world.config.gridWidth;
+  /** Screen position (CSS px, relative to the canvas) of an organism. */
+  public screenPositionOf(org: OrganismView): { x: number; y: number } {
+    const [x, y] = this.displayCentre(org);
+    return { x: x - this.viewX, y: y - this.viewY };
   }
 
-  /**
-   * Converts client touch or pointer coordinates to grid cell coordinates.
-   */
+  public resize(): void {
+    // CSS owns the on-screen size (the canvas fills its parent); here we
+    // match the drawing buffer to it for crisp high-DPI output.
+    const parent = this.canvas.parentElement;
+    this.width = Math.max(1, parent ? parent.clientWidth : this.canvas.clientWidth);
+    this.height = Math.max(1, parent ? parent.clientHeight : this.canvas.clientHeight);
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.canvas.width = Math.floor(this.width * dpr);
+    this.canvas.height = Math.floor(this.height * dpr);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const { gridWidth, gridHeight } = this.world.config;
+    const { vw, vh } = this.visibleSize();
+    // A little breathing room around the world at zoom 1.
+    this.baseCell = Math.max(1, Math.min((vw - 8) / gridWidth, (vh - 8) / gridHeight));
+    this.cellSize = this.baseCell * this.zoom;
+    this.clampView();
+  }
+
+  /** Converts client touch or pointer coordinates to a grid cell, or null outside the world. */
   public clientToGrid(clientX: number, clientY: number): { x: number; y: number } | null {
     const rect = this.canvas.getBoundingClientRect();
     const px = clientX - rect.left;
     const py = clientY - rect.top;
-
-    if (px < 0 || px >= this.canvasSize || py < 0 || py >= this.canvasSize) {
-      return null;
-    }
-
-    const gridX = Math.floor(px / this.cellSize);
-    const gridY = Math.floor(py / this.cellSize);
-
-    if (
-      gridX >= 0 &&
-      gridX < this.world.config.gridWidth &&
-      gridY >= 0 &&
-      gridY < this.world.config.gridHeight
-    ) {
+    const gridX = Math.floor((px + this.viewX) / this.cellSize);
+    const gridY = Math.floor((py + this.viewY) / this.cellSize);
+    const { gridWidth, gridHeight } = this.world.config;
+    if (gridX >= 0 && gridX < gridWidth && gridY >= 0 && gridY < gridHeight) {
       return { x: gridX, y: gridY };
     }
     return null;
   }
 
-  /**
-   * Renders the complete simulation frame.
-   */
   /** Draws the world; `progress` (0..1) is how far through the latest tick to show movement. */
   public render(progress = 1): void {
     this.progress = Math.max(0, Math.min(1, progress));
-    const { ctx, cellSize, canvasSize } = this;
-    const { gridWidth, gridHeight } = this.world.config;
+    if (this.zoomAnimation) {
+      const { from, to, start } = this.zoomAnimation;
+      const p = Math.min(1, (performance.now() - start) / ZOOM_ANIMATION_MS);
+      this.applyZoom(from + (to - from) * easeInOut(p));
+      if (p >= 1) this.zoomAnimation = null;
+    }
+
+    const { ctx, cellSize, width, height } = this;
+    const { config } = this.world;
+    const { gridWidth, gridHeight } = config;
     const selectedOrg = this.world.getSelectedOrganism();
 
-    // 1. Background (warmer and darker in a lean season)
-    const lean = seasonAt(this.world.tick, this.world.config)?.season === 'lean';
-    ctx.fillStyle = lean ? '#17130c' : '#0f171e';
-    ctx.fillRect(0, 0, canvasSize, canvasSize);
+    // Background: a dark radial gradient, warmer while the world is lean.
+    // With staggered regions there is no world season: each region glows instead.
+    const regionSeasons = config.staggeredSeasons && this.world.foodRegions.length > 0;
+    const lean = !regionSeasons && seasonAt(this.world.tick, config)?.season === 'lean';
+    const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) * 0.75);
+    bg.addColorStop(0, lean ? '#2a2418' : '#1c2430');
+    bg.addColorStop(1, lean ? '#130f0a' : '#0b1017');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
 
-    // 2. Subtle grid lines
-    ctx.strokeStyle = '#1a2732';
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= gridWidth; x++) {
-      ctx.beginPath();
-      ctx.moveTo(x * cellSize, 0);
-      ctx.lineTo(x * cellSize, gridHeight * cellSize);
-      ctx.stroke();
+    // Zoomed: follow the selected organism, then shift the world into view.
+    if (this.zoom > 1 && this.following && selectedOrg) {
+      const [sx, sy] = this.displayCentre(selectedOrg);
+      const { cx, cy } = this.visibleCentre();
+      this.viewX = sx - cx;
+      this.viewY = sy - cy;
+      this.clampView();
     }
-    for (let y = 0; y <= gridHeight; y++) {
+    ctx.save();
+    ctx.translate(-this.viewX, -this.viewY);
+
+    // The world's floor, so its edges read against the full-bleed background.
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.025)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, gridWidth * cellSize, gridHeight * cellSize, Math.min(14, cellSize));
+    ctx.fill();
+    ctx.stroke();
+
+    // Visible cell range (plus a margin for rings), to skip off-screen drawing.
+    const minX = Math.floor(this.viewX / cellSize) - 2;
+    const minY = Math.floor(this.viewY / cellSize) - 2;
+    const maxX = Math.ceil((this.viewX + width) / cellSize) + 2;
+    const maxY = Math.ceil((this.viewY + height) / cellSize) + 2;
+    const inView = (x: number, y: number) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+
+    // How much detail to draw: plain dots when cells are tiny, glyphs fading
+    // in as cells grow (about 2× zoom on a phone).
+    const detail = Math.max(0, Math.min(1, (cellSize - 8) / 4));
+
+    // Fertile regions: soft glows, amber while that region is lean
+    for (const region of this.world.foodRegions) {
+      const regionLean = regionSeasonAt(this.world.tick, region, config)?.season === 'lean';
+      const rx = (region.x + 0.5) * cellSize;
+      const ry = (region.y + 0.5) * cellSize;
+      const r = (region.radius + 1) * cellSize;
+      const glow = ctx.createRadialGradient(rx, ry, 0, rx, ry, r);
+      glow.addColorStop(0, regionLean ? 'rgba(217, 160, 80, 0.22)' : 'rgba(110, 231, 183, 0.13)');
+      glow.addColorStop(0.6, regionLean ? 'rgba(217, 160, 80, 0.10)' : 'rgba(110, 231, 183, 0.06)');
+      glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.moveTo(0, y * cellSize);
-      ctx.lineTo(gridWidth * cellSize, y * cellSize);
-      ctx.stroke();
+      ctx.arc(rx, ry, r, 0, TAU);
+      ctx.fill();
     }
 
-    // 3. Render Obstacles
-    ctx.fillStyle = '#2d3d4a';
-    ctx.strokeStyle = '#3e5263';
-    ctx.lineWidth = 1;
+    // Rocks: rounded grey blocks, filled as one path
+    ctx.fillStyle = '#2b3542';
+    ctx.beginPath();
+    const inset = Math.max(0.5, cellSize * 0.07);
+    const corner = cellSize * 0.24;
     for (const obsKey of this.world.obstacles) {
-      const [ox, oy] = obsKey.split(',').map(Number);
-      const px = ox * cellSize;
-      const py = oy * cellSize;
-      ctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
-      ctx.strokeRect(px + 1.5, py + 1.5, cellSize - 3, cellSize - 3);
+      const comma = obsKey.indexOf(',');
+      const ox = Number(obsKey.slice(0, comma));
+      const oy = Number(obsKey.slice(comma + 1));
+      if (!inView(ox, oy)) continue;
+      ctx.roundRect(ox * cellSize + inset, oy * cellSize + inset, cellSize - inset * 2, cellSize - inset * 2, corner);
     }
+    ctx.fill();
 
-    // 4. Render Food Patches
+    // Food: berry clusters on a faint disc
     for (const patch of this.world.foodPatches.values()) {
-      if (patch.stock <= 0) continue;
-      this.drawFoodPatch(patch);
+      if (patch.stock <= 0 || !inView(patch.x, patch.y)) continue;
+      this.drawFoodPatch(patch, detail);
     }
 
-    // 5. Draw Sensing Radius overlay if an organism is selected
-    if (selectedOrg) {
-      const radius = this.world.config.sensingRadius;
-      const minX = Math.max(0, selectedOrg.x - radius) * cellSize;
-      const minY = Math.max(0, selectedOrg.y - radius) * cellSize;
-      const maxX = Math.min(gridWidth, selectedOrg.x + radius + 1) * cellSize;
-      const maxY = Math.min(gridHeight, selectedOrg.y + radius + 1) * cellSize;
+    // Overlays drawn under the organisms
+    if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
+      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView);
+    }
+    if (this.overlay === 'trails') this.drawTrails(selectedOrg);
+    if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
 
-      ctx.fillStyle = 'rgba(74, 222, 128, 0.08)';
-      ctx.fillRect(minX, minY, maxX - minX, maxY - minY);
-      ctx.strokeStyle = 'rgba(74, 222, 128, 0.4)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+    // Sensing range of the selected organism: a soft dashed square
+    if (selectedOrg) {
+      const radius = config.sensingRadius;
+      const x0 = Math.max(0, selectedOrg.x - radius) * cellSize;
+      const y0 = Math.max(0, selectedOrg.y - radius) * cellSize;
+      const x1 = Math.min(gridWidth, selectedOrg.x + radius + 1) * cellSize;
+      const y1 = Math.min(gridHeight, selectedOrg.y + radius + 1) * cellSize;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 5]);
+      ctx.beginPath();
+      ctx.roundRect(x0, y0, x1 - x0, y1 - y0, Math.min(12, cellSize * 0.6));
+      ctx.fill();
+      ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // 6. Render Organisms
+    // Organisms (with the family overlay, everyone outside the selected lineage is dimmed)
+    const family = this.overlay === 'family' && selectedOrg ? selectedOrg.lineage.id : null;
+    if (family && selectedOrg) this.drawFamilyLines(selectedOrg);
     for (const org of this.world.organisms.values()) {
-      const isSelected = selectedOrg ? org.id === selectedOrg.id : false;
-      this.drawOrganism(org, isSelected);
+      if (!inView(org.x, org.y)) continue;
+      if (family && org.lineage.id !== family) ctx.globalAlpha = 0.18;
+      this.drawOrganism(org, detail);
+      ctx.globalAlpha = 1;
     }
+    if (selectedOrg) this.drawSelection(selectedOrg);
 
-    // 7. Interactions that span two cells: food gifts and births
-    this.drawInteractions();
+    // Interactions that span two cells: food gifts and births
+    if (detail > 0) {
+      ctx.globalAlpha = detail;
+      this.drawInteractions();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+
+  /** Fading cells, scaled to the busiest cell. */
+  private drawHeatmap(cells: Float32Array, rgb: string, inView: (x: number, y: number) => boolean): void {
+    const { ctx, cellSize } = this;
+    const { gridWidth } = this.world.config;
+    let max = 0;
+    for (let i = 0; i < cells.length; i++) if (cells[i] > max) max = cells[i];
+    if (max < 0.05) return;
+    for (let i = 0; i < cells.length; i++) {
+      const v = cells[i] / max;
+      if (v < 0.03) continue;
+      const x = i % gridWidth;
+      const y = (i - x) / gridWidth;
+      if (!inView(x, y)) continue;
+      // Square root lifts quiet cells so the pattern reads, not only the hot spot.
+      ctx.fillStyle = `rgba(${rgb}, ${(0.12 + 0.6 * Math.sqrt(v)).toFixed(3)})`;
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+
+  /** Short fading paths behind organisms (brighter for the selected one). */
+  private drawTrails(selected: OrganismView | undefined): void {
+    const { ctx, cellSize } = this;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const org of this.world.organisms.values()) {
+      const trail = this.trails.get(org.id);
+      if (!trail || trail.length < 1) continue;
+      const isSelected = selected?.id === org.id;
+      const points = [...trail.map((p) => [(p.x + 0.5) * cellSize, (p.y + 0.5) * cellSize] as const), this.displayCentre(org)];
+      ctx.strokeStyle = `hsl(${this.hueOf(org)}, 80%, 65%)`;
+      ctx.lineWidth = Math.max(1, cellSize * (isSelected ? 0.14 : 0.07));
+      for (let i = 1; i < points.length; i++) {
+        ctx.globalAlpha = (isSelected ? 0.9 : 0.45) * (i / points.length);
+        ctx.beginPath();
+        ctx.moveTo(points[i - 1][0], points[i - 1][1]);
+        ctx.lineTo(points[i][0], points[i][1]);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+  }
+
+  /**
+   * Signals spreading to their real reach (a diamond: reach is counted in
+   * steps), and the selected organism's own signal reach.
+   */
+  private drawSignalRipples(selected: OrganismView | undefined): void {
+    const { ctx, cellSize } = this;
+    const reach = this.world.config.signalRadius;
+    const diamond = (cx: number, cy: number, r: number) => {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx, cy + r);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+    };
+    ctx.lineWidth = Math.max(1, cellSize * 0.06);
+    for (const org of this.world.organisms.values()) {
+      const last = org.recentHistory[0];
+      if (last?.chosenAction.type !== 'SIGNAL' || last.outcome !== 'success') continue;
+      const [cx, cy] = this.displayCentre(org);
+      const p = this.progress;
+      ctx.strokeStyle = `hsla(${this.hueOf(org)}, 85%, 70%, ${(0.55 * (1 - p) + 0.08).toFixed(3)})`;
+      diamond(cx, cy, Math.max(0.1, p) * (reach + 0.5) * cellSize);
+      ctx.stroke();
+    }
+    if (selected) {
+      const [cx, cy] = this.displayCentre(selected);
+      ctx.strokeStyle = 'rgba(103, 232, 249, 0.45)';
+      ctx.fillStyle = 'rgba(103, 232, 249, 0.04)';
+      ctx.setLineDash([3, 5]);
+      diamond(cx, cy, (reach + 0.5) * cellSize);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  /** Lines from the selected organism to its living parent (solid) and children (dashed). */
+  private drawFamilyLines(selected: OrganismView): void {
+    const { ctx, cellSize } = this;
+    const [sx, sy] = this.displayCentre(selected);
+    ctx.lineWidth = Math.max(1, cellSize * 0.07);
+    ctx.lineCap = 'round';
+    const link = (other: OrganismView, dashed: boolean) => {
+      const [ox, oy] = this.displayCentre(other);
+      ctx.setLineDash(dashed ? [3, 4] : []);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ox, oy);
+      ctx.stroke();
+    };
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+    const parent = selected.lineage.parentId ? this.world.organisms.get(selected.lineage.parentId) : undefined;
+    if (parent) link(parent, false);
+    ctx.strokeStyle = 'rgba(252, 216, 119, 0.8)';
+    for (const org of this.world.organisms.values()) {
+      if (org.lineage.parentId === selected.id) link(org, true);
+    }
+    ctx.setLineDash([]);
+    ctx.lineCap = 'butt';
   }
 
   /** Gold arrows from givers to receivers, and thin lines from parents to newborns. */
   private drawInteractions(): void {
     const { ctx, cellSize } = this;
     const centre = (o: { x: number; y: number }) => [(o.x + 0.5) * cellSize, (o.y + 0.5) * cellSize];
+    ctx.lineCap = 'round';
 
     for (const org of this.world.organisms.values()) {
       const last = org.recentHistory[0];
@@ -212,196 +555,230 @@ export class CanvasRenderer {
         const [x2, y2] = this.displayCentre(recipient);
         const len = Math.hypot(x2 - x1, y2 - y1) || 1;
         const [ux, uy] = [(x2 - x1) / len, (y2 - y1) / len];
-        const head = Math.max(3, cellSize * 0.28);
-        // Shaft and head, stopping at the receiver's edge
-        const ex = x2 - ux * cellSize * 0.3;
-        const ey = y2 - uy * cellSize * 0.3;
-        ctx.strokeStyle = '#fbbf24';
-        ctx.fillStyle = '#fbbf24';
-        ctx.lineWidth = Math.max(1.5, cellSize * 0.12);
+        const head = Math.max(3, cellSize * 0.22);
+        const ex = x2 - ux * cellSize * 0.32;
+        const ey = y2 - uy * cellSize * 0.32;
+        ctx.strokeStyle = GIFT;
+        ctx.fillStyle = GIFT;
+        ctx.lineWidth = Math.max(1.5, cellSize * 0.08);
         ctx.beginPath();
-        ctx.moveTo(x1 + ux * cellSize * 0.2, y1 + uy * cellSize * 0.2);
+        ctx.moveTo(x1 + ux * cellSize * 0.3, y1 + uy * cellSize * 0.3);
         ctx.lineTo(ex - ux * head * 0.6, ey - uy * head * 0.6);
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(ex, ey);
-        ctx.lineTo(ex - ux * head - uy * head * 0.6, ey - uy * head + ux * head * 0.6);
-        ctx.lineTo(ex - ux * head + uy * head * 0.6, ey - uy * head - ux * head * 0.6);
+        ctx.lineTo(ex - ux * head - uy * head * 0.7, ey - uy * head + ux * head * 0.7);
+        ctx.lineTo(ex - ux * head + uy * head * 0.7, ey - uy * head - ux * head * 0.7);
         ctx.closePath();
         ctx.fill();
-        // The receiver gets a gold ring
-        ctx.lineWidth = 1.5;
+        // The receiver gets a soft gold ring
+        ctx.globalAlpha *= 0.8;
+        ctx.lineWidth = Math.max(1, cellSize * 0.05);
         ctx.beginPath();
-        ctx.arc(x2, y2, cellSize * 0.47, 0, Math.PI * 2);
+        ctx.arc(x2, y2, cellSize * 0.46, 0, TAU);
         ctx.stroke();
+        ctx.globalAlpha /= 0.8;
       } else if (type.startsWith('REPRODUCE_') && last.chosenAction.target) {
         const [x1, y1] = this.displayCentre(org);
         const [x2, y2] = centre(last.chosenAction.target);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
         ctx.lineWidth = 1;
+        ctx.setLineDash([2, 3]);
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
+    ctx.lineCap = 'butt';
   }
 
-  private drawFoodPatch(patch: FoodPatch): void {
+  private drawFoodPatch(patch: FoodPatch, detail: number): void {
     const { ctx, cellSize } = this;
     const cx = (patch.x + 0.5) * cellSize;
     const cy = (patch.y + 0.5) * cellSize;
-    const ratio = Math.max(0.2, Math.min(1, patch.stock / patch.capacity));
-    const radius = (cellSize * 0.42) * (0.4 + ratio * 0.6);
+    const ratio = Math.max(0, Math.min(1, patch.stock / patch.capacity));
 
-    // Subtle glow
-    ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+    ctx.fillStyle = 'rgba(134, 239, 172, 0.16)';
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, cellSize * 0.45, 0, TAU);
     ctx.fill();
 
-    // Food core
-    ctx.fillStyle = ratio > 0.6 ? '#4ade80' : '#86efac';
+    ctx.fillStyle = BERRY;
+    if (detail < 0.5) {
+      // Tiny cells: one berry, sized by stock
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(0.8, cellSize * (0.12 + 0.14 * ratio)), 0, TAU);
+      ctx.fill();
+      return;
+    }
+    // A cluster of berries, one per fifth of capacity (at least one)
+    const berries = Math.max(1, Math.ceil(ratio * 5));
+    const spread = berries === 1 ? 0 : cellSize * 0.17;
+    const r = cellSize * 0.115;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Center seed point
-    ctx.fillStyle = '#14532d';
-    ctx.beginPath();
-    ctx.arc(cx, cy, Math.max(1.2, radius * 0.3), 0, Math.PI * 2);
+    for (let i = 0; i < berries; i++) {
+      const a = i * 1.7 + 0.4;
+      const bx = cx + Math.cos(a) * spread;
+      const by = cy + Math.sin(a) * spread;
+      ctx.moveTo(bx + r, by);
+      ctx.arc(bx, by, r, 0, TAU);
+    }
     ctx.fill();
   }
 
-  private drawOrganism(org: Organism, isSelected: boolean): void {
+  private drawSelection(org: OrganismView): void {
+    const { ctx, cellSize } = this;
+    const [cx, cy] = this.displayCentre(org);
+    const r = Math.max(5, cellSize * 0.62);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.stroke();
+    ctx.strokeStyle = `hsla(${this.hueOf(org)}, 90%, 72%, 0.45)`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 4, 0, TAU);
+    ctx.stroke();
+  }
+
+  private drawOrganism(org: OrganismView, detail: number): void {
     const { ctx, cellSize } = this;
     const [cx, cy] = this.displayCentre(org);
     const maxEnergy = this.world.config.maxEnergy;
-    const energyRatio = Math.max(0.1, Math.min(1, org.energy / maxEnergy));
-    const baseRadius = cellSize * 0.42;
+    const energyRatio = Math.max(0, Math.min(1, org.energy / maxEnergy));
+    const hue = this.hueOf(org);
+    // Size by energy, from 60% to 100% of the largest orb, so glyphs stay readable.
+    const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio));
 
-    // Tag mode shows the hue other organisms see; lineage mode hashes the
-    // founding ancestor so every descendant shares a family colour.
-    const hue = this.colorMode === 'tag' ? org.tag : this.getLineageHue(org.lineage.id);
-    const lightness = 45 + energyRatio * 20;
-
-    // Selection ring
-    if (isSelected) {
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2.5;
+    if (detail <= 0) {
+      // Tiny cells: a plain dot with a faint halo
+      ctx.fillStyle = `hsla(${hue}, 90%, 65%, 0.22)`;
       ctx.beginPath();
-      ctx.arc(cx, cy, baseRadius * 1.45, 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.strokeStyle = `hsl(${hue}, 90%, 65%)`;
-      ctx.lineWidth = 1.5;
+      ctx.arc(cx, cy, r * 1.9, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = `hsl(${hue}, 85%, ${50 + 18 * energyRatio}%)`;
       ctx.beginPath();
-      ctx.arc(cx, cy, baseRadius * 1.7, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.fill();
+      return;
     }
 
-    // Organism body (radius proportional to energy). Its shape and the dark
-    // glyph cut into it show what the organism did last tick.
-    // Kept from 60% to 100% of full size so action glyphs stay readable.
-    const bodyRadius = Math.max(2.8, baseRadius * (0.6 + energyRatio * 0.4));
-    const body = `hsl(${hue}, 85%, ${lightness}%)`;
-    const glyph = '#0b1016';
     const last = org.recentHistory[0];
     const type = last?.chosenAction.type ?? 'REST';
     const succeeded = last?.outcome === 'success';
 
-    ctx.fillStyle = body;
+    // Signalling: two soft rings in its own hue
+    if (type === 'SIGNAL' && succeeded) {
+      ctx.lineWidth = Math.max(1, cellSize * 0.06);
+      for (const [scale, alpha] of [[1.45, 0.55], [2.0, 0.28]] as const) {
+        ctx.strokeStyle = `hsla(${hue}, 90%, 75%, ${alpha * detail})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * scale, 0, TAU);
+        ctx.stroke();
+      }
+    }
+
+    // The orb: a radial gradient lit from the top-left. Eating takes a bite out.
+    const gradient = ctx.createRadialGradient(cx - r * 0.4, cy - r * 0.4, r * 0.1, cx, cy, r);
+    gradient.addColorStop(0, `hsl(${hue}, 90%, 74%)`);
+    gradient.addColorStop(1, `hsl(${hue}, 70%, ${38 + 17 * energyRatio}%)`);
+    ctx.fillStyle = gradient;
     ctx.beginPath();
     if (type === 'EAT' && succeeded) {
-      // Eating: a Pac-Man mouth
       ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, bodyRadius, Math.PI * 0.22, Math.PI * 1.78);
+      ctx.arc(cx, cy, r, Math.PI * 0.2, Math.PI * 1.8);
       ctx.closePath();
     } else {
-      ctx.arc(cx, cy, bodyRadius, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r, 0, TAU);
     }
     ctx.fill();
 
+    ctx.globalAlpha = detail;
+    ctx.strokeStyle = GLYPH;
+    ctx.fillStyle = GLYPH;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const stroke = Math.max(1.2, r * 0.17);
+    ctx.lineWidth = stroke;
+
     const moving = isMoveAction(type) || isLeapAction(type);
     if (moving && succeeded) {
-      // Moving: an arrowhead pointing the way it went
+      // Moving (or leaping): a white arrow along the way it went
       const [hx, hy] = directionOf(type);
-      const tip = bodyRadius * 0.75;
-      const back = bodyRadius * 0.35;
-      const wing = bodyRadius * 0.5;
-      ctx.fillStyle = glyph;
+      const tip = r * 0.5;
+      const wing = r * 0.28;
       ctx.beginPath();
-      ctx.moveTo(cx + hx * tip, cy + hy * tip);
-      ctx.lineTo(cx - hx * back - hy * wing, cy - hy * back + hx * wing);
-      ctx.lineTo(cx - hx * back + hy * wing, cy - hy * back - hx * wing);
-      ctx.closePath();
-      ctx.fill();
-    } else if (type === 'PICK_UP' && succeeded) {
-      // Harvesting: a pouch
-      const half = bodyRadius * 0.38;
-      ctx.fillStyle = glyph;
-      ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
+      ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
+      ctx.lineTo(cx + hx * tip, cy + hy * tip);
+      ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
+      ctx.lineTo(cx + hx * tip, cy + hy * tip);
+      ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
+      ctx.stroke();
     } else if (moving) {
-      // Blocked: a dark bar on the side it tried to move toward
+      // Blocked: a white bar on the side it pushed toward
       const [hx, hy] = directionOf(type);
-      const off = bodyRadius * 0.45;
-      const half = bodyRadius * 0.6;
-      ctx.strokeStyle = glyph;
-      ctx.lineWidth = Math.max(1.5, bodyRadius * 0.35);
-      ctx.lineCap = 'round';
+      const off = r * 0.5;
+      const half = r * 0.45;
+      ctx.lineWidth = stroke * 1.2;
       ctx.beginPath();
       ctx.moveTo(cx + hx * off - hy * half, cy + hy * off + hx * half);
       ctx.lineTo(cx + hx * off + hy * half, cy + hy * off - hx * half);
       ctx.stroke();
-      ctx.lineCap = 'butt';
-    } else if (type !== 'EAT' || !succeeded) {
-      // Resting or anything else: a small dark core
-      ctx.fillStyle = glyph;
+    } else if (type === 'PICK_UP' && succeeded) {
+      // Harvesting: a small pouch outline
+      const half = r * 0.32;
       ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(1, bodyRadius * 0.3), 0, Math.PI * 2);
+      ctx.roundRect(cx - half, cy - half * 0.8, half * 2, half * 1.8, half * 0.5);
+      ctx.stroke();
+    } else if (type !== 'EAT' || !succeeded) {
+      // Resting or anything else: a soft white core
+      ctx.globalAlpha = detail * 0.7;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(1, r * 0.2), 0, TAU);
       ctx.fill();
+      ctx.globalAlpha = detail;
     }
 
     // Newborn: a thin white ring for its first few ticks
     if (org.age < 4) {
-      ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(cx, cy, bodyRadius + 1.5, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r + 2, 0, TAU);
       ctx.stroke();
     }
 
-    // Starving (below a quarter of max energy): a red dashed ring hugging the body
+    // Starving (below a quarter of max energy): a red dashed ring
     if (org.energy < maxEnergy * 0.25) {
-      ctx.strokeStyle = '#f87171';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([1.5, 1.5]);
+      ctx.strokeStyle = STARVING;
+      ctx.lineWidth = Math.max(1, cellSize * 0.05);
+      const dash = Math.max(1.5, cellSize * 0.09);
+      ctx.setLineDash([dash, dash]);
       ctx.beginPath();
-      ctx.arc(cx, cy, bodyRadius + 1.2, 0, Math.PI * 2);
+      ctx.arc(cx, cy, r + Math.max(2, cellSize * 0.1), 0, TAU);
       ctx.stroke();
       ctx.setLineDash([]);
     }
 
-    // Carried food: one small green pip per unit, centred along the top edge
-    const pipSpacing = cellSize * (org.carriedFood > 2 ? 0.2 : 0.36);
-    for (let i = 0; i < org.carriedFood; i++) {
-      const px = cx + (i - (org.carriedFood - 1) / 2) * pipSpacing;
-      ctx.fillStyle = '#0f171e';
+    // Carried food: one berry per unit, along the top
+    if (org.carriedFood > 0) {
+      const pip = Math.max(1, cellSize * 0.075);
+      const spacing = pip * 2.6;
+      ctx.fillStyle = BERRY;
       ctx.beginPath();
-      ctx.arc(px, cy - cellSize * 0.36, Math.max(1.6, cellSize * 0.1), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#4ade80';
-      ctx.beginPath();
-      ctx.arc(px, cy - cellSize * 0.36, Math.max(1, cellSize * 0.07), 0, Math.PI * 2);
+      for (let i = 0; i < org.carriedFood; i++) {
+        const px = cx + (i - (org.carriedFood - 1) / 2) * spacing;
+        const py = cy - r - pip * 1.2;
+        ctx.moveTo(px + pip, py);
+        ctx.arc(px, py, pip, 0, TAU);
+      }
       ctx.fill();
     }
-  }
 
-  private getLineageHue(lineageId: string): number {
-    let hash = 0;
-    for (let i = 0; i < lineageId.length; i++) {
-      hash = (hash * 31 + lineageId.charCodeAt(i)) >>> 0;
-    }
-    return hash % 360;
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
   }
 }

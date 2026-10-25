@@ -25,9 +25,16 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   eatPriority: 'Eat priority',
   hungerUrgency: 'Hunger urgency',
   followFoodParent: 'Follow food parent',
+  signalOnFood: 'Signal on food',
+  signalWhenHungry: 'Signal when hungry',
+  followSignal: 'Follow signals',
+  restDrive: 'Rest drive',
   avoidOccupied: 'Avoid occupied cells',
   leapEagerness: 'Leap eagerness',
 };
+
+/** Trend section for the dial weights, collapsed while the brain is in charge. */
+const DIAL_SECTION = 'Inherited weights (dials)';
 
 const REFERENCE = '#64748b';
 const LEAN_WASH = 'rgba(251, 191, 36, 0.09)';
@@ -59,6 +66,14 @@ function ratePer100(total: (s: HistorySample) => number) {
 // Ordinary gifts exclude parent-to-child care, which has its own chart.
 const sharesPer100Ticks = ratePer100((s) => s.sharesTotal - s.parentalSharesTotal);
 const parentalSharesPer100Ticks = ratePer100((s) => s.parentalSharesTotal);
+const signalsPer100Ticks = ratePer100((s) => s.signalsTotal);
+
+/** Share of signals sent while standing on food, between two samples. */
+function signalsOnFoodShare(s: HistorySample, prev?: HistorySample): number {
+  if (!prev) return 0;
+  const sent = s.signalsTotal - prev.signalsTotal;
+  return sent > 0 ? (s.signalsOnFoodTotal - prev.signalsOnFoodTotal) / sent : 0;
+}
 
 function inGroupBias(s: HistorySample): number {
   return s.weights.shareWithKin.mean - s.weights.shareWithStrangers.mean;
@@ -82,10 +97,12 @@ function niceMax(v: number): number {
 export class HistoryView {
   private readonly panels: Panel[];
   private readonly readout: HTMLElement;
+  private readonly container: HTMLElement;
   private samples: readonly HistorySample[] = [];
   private hoverIndex: number | null = null;
 
   constructor(container: HTMLElement, onDownloadCSV: () => void) {
+    this.container = container;
     this.panels = [
       {
         section: 'Population & food',
@@ -102,14 +119,14 @@ export class HistoryView {
         format: (s) => String(s.foodStock),
       },
       {
-        section: 'Tribes & sharing',
+        section: 'Look-alike groups & sharing',
         label: 'Look-alike groups (5+)',
         fixedRange: null,
         value: (s) => s.tribeCount,
         format: (s) => `${s.tribeCount} · largest ${s.largestTribe}`,
       },
       {
-        section: 'Tribes & sharing',
+        section: 'Look-alike groups & sharing',
         label: 'Neighbours who look alike',
         fixedRange: [0, 1],
         value: (s) => s.localKinFraction,
@@ -118,32 +135,47 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Tribes & sharing',
+        section: 'Look-alike groups & sharing',
         label: 'Gifts to others',
         fixedRange: null,
         value: sharesPer100Ticks,
         format: (s, prev) => `${sharesPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
       },
       {
-        section: 'Tribes & sharing',
+        section: 'Look-alike groups & sharing',
         label: 'Gifts to own children',
         fixedRange: null,
         value: parentalSharesPer100Ticks,
         format: (s, prev) => `${parentalSharesPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
       },
       {
-        section: 'Tribes & sharing',
+        section: 'Look-alike groups & sharing',
         label: 'Immigrants (total)',
         fixedRange: null,
         value: (s) => s.immigrantsTotal,
         format: (s) => String(s.immigrantsTotal),
       },
       {
-        section: 'Tribes & sharing',
+        section: 'Look-alike groups & sharing',
         label: 'In-group bias',
         fixedRange: [WEIGHT_MIN, WEIGHT_MAX],
         value: inGroupBias,
         format: (s) => `${inGroupBias(s) >= 0 ? '+' : ''}${inGroupBias(s).toFixed(2)}`,
+      },
+      {
+        section: 'Signals',
+        label: 'Signals sent',
+        fixedRange: null,
+        value: signalsPer100Ticks,
+        format: (s, prev) => `${signalsPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      {
+        section: 'Signals',
+        label: 'Signals sent on food',
+        fixedRange: [0, 1],
+        value: signalsOnFoodShare,
+        format: (s, prev) => pct(signalsOnFoodShare(s, prev)),
+        axisLabel: pct,
       },
       {
         section: 'Body traits',
@@ -203,7 +235,7 @@ export class HistoryView {
       },
       ...POLICY_WEIGHT_KEYS.map(
         (key): Panel => ({
-          section: 'Inherited weights (dials)',
+          section: DIAL_SECTION,
           label: WEIGHT_LABELS[key],
           fixedRange: [WEIGHT_MIN, WEIGHT_MAX],
           value: (s) => s.weights[key].mean,
@@ -226,20 +258,13 @@ export class HistoryView {
           </div>
           ${[...new Set(this.panels.map((p) => p.section))]
             .map(
-              (section) => `
+              (section) => section === DIAL_SECTION ? `
+          <details class="trends-dials" open>
+          <summary class="trends-section">${section}<span class="trends-dials-note"> · inactive under the Brain controller</span></summary>
+          <div class="trends-grid">${this.panelFigures(section)}</div>
+          </details>` : `
           <h4 class="trends-section">${section}</h4>
-          <div class="trends-grid">
-            ${this.panels
-              .filter((p) => p.section === section)
-              .map(
-                (p) => `
-              <figure class="trend-panel">
-                <figcaption><span class="trend-label">${p.label}</span><span class="trend-value"></span></figcaption>
-                <canvas></canvas>
-              </figure>`
-              )
-              .join('')}
-          </div>`
+          <div class="trends-grid">${this.panelFigures(section)}</div>`
             )
             .join('')}
         </div>
@@ -254,6 +279,8 @@ export class HistoryView {
     });
 
     container.querySelector('.btn-csv')!.addEventListener('click', onDownloadCSV);
+    // Collapsed charts are skipped when drawing; draw them once opened.
+    container.querySelector('.trends-dials')!.addEventListener('toggle', () => this.draw());
 
     // Press-and-drag scrubbing. Horizontal drags scrub; vertical swipes
     // still scroll the page (touch-action: pan-y in CSS).
@@ -281,6 +308,30 @@ export class HistoryView {
     });
 
     new ResizeObserver(() => this.draw()).observe(grid);
+  }
+
+  private panelFigures(section: string): string {
+    return this.panels
+      .filter((p) => p.section === section)
+      .map(
+        (p) => `
+              <figure class="trend-panel">
+                <figcaption><span class="trend-label">${p.label}</span><span class="trend-value"></span></figcaption>
+                <canvas></canvas>
+              </figure>`
+      )
+      .join('');
+  }
+
+  /**
+   * Dial weights steer nothing under the brain (they only drift), so their
+   * charts start collapsed then, with a note; open under the dials.
+   */
+  public setController(controller: 'dials' | 'brain'): void {
+    const dials = this.container.querySelector<HTMLDetailsElement>('.trends-dials');
+    if (!dials) return;
+    dials.open = controller === 'dials';
+    dials.querySelector<HTMLElement>('.trends-dials-note')!.hidden = controller === 'dials';
   }
 
   public render(samples: readonly HistorySample[]): void {

@@ -159,6 +159,28 @@ export function senseEnvironment(
     }
   }
 
+  // Signals carry farther than sight: the nearest organism that signalled
+  // last tick within signalRadius (ties go to the earlier in the snapshot).
+  let nearestSignal: SensedEntity | null = null;
+  for (const index of snapshot.signallers) {
+    const other = snapshot.organisms[index];
+    if (other.id === organism.id) continue;
+    const dx = other.x - x;
+    const dy = other.y - y;
+    const distance = Math.abs(dx) + Math.abs(dy);
+    if (distance > config.signalRadius) continue;
+    if (!nearestSignal || distance < nearestSignal.distance) {
+      nearestSignal = {
+        x: other.x,
+        y: other.y,
+        distance,
+        dx,
+        dy,
+        value: Number(tagSimilarity(organism.tag, other.tag).toFixed(3)),
+      };
+    }
+  }
+
   // Check action preconditions
   const { carriedFood } = organism;
   // Eating needs food here or in hand, and room for a full meal, so a
@@ -211,9 +233,11 @@ export function senseEnvironment(
         ? { dx: Number(kinPullX.toFixed(3)), dy: Number(kinPullY.toFixed(3)) }
         : null,
     parentWithFood,
+    nearestSignal,
     canEat,
     canPickUp,
     canReproduce,
     canGive,
+    canSignal: config.signalsEnabled,
   };
 }

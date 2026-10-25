@@ -28,6 +28,10 @@ const ZERO_POLICY: PolicyWeights = {
   eatPriority: 0,
   hungerUrgency: 0,
   followFoodParent: 0,
+  signalOnFood: 0,
+  signalWhenHungry: 0,
+  followSignal: 0,
+  restDrive: 0,
   avoidOccupied: 0,
   leapEagerness: 0,
 };
@@ -69,6 +73,7 @@ function organism(id: string, x: number, y: number, overrides: Partial<Organism>
     carriedFood: 0,
     foodGiven: 0,
     foodReceived: 0,
+    signalTick: -1,
     recentHistory: [],
     ...overrides,
   };

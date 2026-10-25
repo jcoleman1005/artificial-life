@@ -59,11 +59,31 @@ function runJob(job: Job): RunResult {
   let cycleLow = Infinity;
   const leanLows: number[] = [];
   const actions: Record<string, number> = {};
+  // Migration: the last food region each organism was inside, and how often
+  // organisms turn up in a different region from their last one.
+  const lastRegion = new Map<string, number>();
+  let regionChanges = 0;
+  let inRegionSum = 0;
+  // Signals, over the last 20%: how often organisms on food signal compared
+  // with how often anyone signals (does a signal say "food here"?), and
+  // whether moves made with a signal in range head toward it.
+  const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, movesWithSignal: 0, movesToward: 0 };
 
   for (let t = 1; t <= job.ticks; t++) {
     world.step();
     const n = world.organisms.size;
     popSum += n;
+    if (world.foodRegions.length > 0) {
+      for (const o of world.organisms.values()) {
+        const region = world.foodRegions.findIndex((r) => Math.hypot(o.x - r.x, o.y - r.y) <= r.radius);
+        if (region < 0) continue;
+        inRegionSum++;
+        const previous = lastRegion.get(o.id);
+        if (previous !== undefined && previous !== region) regionChanges++;
+        lastRegion.set(o.id, region);
+      }
+      for (const id of lastRegion.keys()) if (!world.organisms.has(id)) lastRegion.delete(id);
+    }
     cycleLow = Math.min(cycleLow, n);
     const season = seasonAt(world.tick, world.config);
     if (season && season.season === 'plenty' && season.ticksLeft === Math.round(world.config.seasonLength * (1 - world.config.leanFraction))) {
@@ -79,6 +99,19 @@ function runJob(job: Job): RunResult {
         const ok = d.outcome === 'success' || d.outcome === 'rested';
         const key = ok ? base : `${base}Failed`;
         actions[key] = (actions[key] ?? 0) + 1;
+        sig.decisions++;
+        const onFood = d.sensed.currentCellFood > 0;
+        const signalled = d.chosenAction.type === 'SIGNAL';
+        if (signalled) sig.sent++;
+        if (onFood) sig.onFood++;
+        if (onFood && signalled) sig.onFoodSent++;
+        const s = d.sensed.nearestSignal;
+        if (s && d.chosenAction.type.startsWith('MOVE_') && d.outcome === 'success') {
+          sig.movesWithSignal++;
+          const t = d.chosenAction.type;
+          const [mx, my] = t.endsWith('NORTH') ? [0, -1] : t.endsWith('SOUTH') ? [0, 1] : t.endsWith('EAST') ? [1, 0] : [-1, 0];
+          if (mx * s.dx + my * s.dy > 0) sig.movesToward++;
+        }
       }
     }
   }
@@ -93,6 +126,12 @@ function runJob(job: Job): RunResult {
     avgPop: popSum / job.ticks,
     finalPop: organisms.length,
     ...(leanLows.length ? { leanLow: leanLows.reduce((a, v) => a + v, 0) / leanLows.length } : {}),
+    ...(world.foodRegions.length
+      ? { 'inRegion%': (100 * inRegionSum) / Math.max(1, popSum), regionMovesPer1k: (1000 * regionChanges) / job.ticks }
+      : {}),
+    'signal%': (100 * sig.sent) / Math.max(1, sig.decisions),
+    'signalOnFood%': (100 * sig.onFoodSent) / Math.max(1, sig.onFood),
+    'movesTowardSignal%': (100 * sig.movesToward) / Math.max(1, sig.movesWithSignal),
     births: m.birthsTotal,
     deaths: m.deathsTotal,
     giftsToOthers: m.sharesTotal - m.parentalSharesTotal,
