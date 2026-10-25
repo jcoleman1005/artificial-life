@@ -1,4 +1,5 @@
-import type { FoodPatch } from '../sim/types';
+import type { FoodPatch, Plant } from '../sim/types';
+import { plantHue } from '../sim/plants';
 import type { OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
@@ -91,6 +92,8 @@ export class CanvasRenderer {
   private following = true;
   private zoomAnimation: { from: number; to: number; start: number } | null = null;
   private overlay: OverlayMode = 'none';
+  /** The plant shown in the inspector, ringed in the world. */
+  private selectedPlantId: string | null = null;
   private heatmap: Float32Array | null = null;
   private trails = new Map<string, { x: number; y: number }[]>();
 
@@ -111,6 +114,10 @@ export class CanvasRenderer {
 
   public setColorMode(mode: ColorMode): void {
     this.colorMode = mode;
+  }
+
+  public setSelectedPlant(id: string | null): void {
+    this.selectedPlantId = id;
   }
 
   public setOverlay(mode: OverlayMode): void {
@@ -380,10 +387,12 @@ export class CanvasRenderer {
     }
     ctx.fill();
 
-    // Food: berry clusters on a faint disc
+    // Food: plants (leaves in their strategy's colour, berries for edible
+    // units), or berry clusters on a faint disc
     for (const patch of this.world.foodPatches.values()) {
-      if (patch.stock <= 0 || !inView(patch.x, patch.y)) continue;
-      this.drawFoodPatch(patch, detail);
+      if (!inView(patch.x, patch.y)) continue;
+      if (patch.plant) this.drawPlant(patch, patch.plant, detail);
+      else if (patch.stock > 0) this.drawFoodPatch(patch, detail);
     }
 
     // Overlays drawn under the organisms
@@ -592,6 +601,64 @@ export class CanvasRenderer {
       }
     }
     ctx.lineCap = 'butt';
+  }
+
+  /**
+   * A plant: a rosette of leaves sized by its whole mass (edible plus roots),
+   * coloured by strategy (greyed while dormant), with a berry per fifth of
+   * its edible capacity on top. Seedlings are small dots.
+   */
+  private drawPlant(patch: FoodPatch, plant: Plant, detail: number): void {
+    const { ctx, cellSize } = this;
+    const cx = (patch.x + 0.5) * cellSize;
+    const cy = (patch.y + 0.5) * cellSize;
+    const hue = plantHue(plant.genome);
+    const size = plant.biomass + plant.roots;
+    const r = cellSize * (0.12 + 0.34 * Math.min(1, Math.sqrt(size / 10)));
+    const sat = plant.dormant ? 12 : 55;
+    ctx.fillStyle = `hsla(${hue}, ${sat}%, ${plant.dormant ? 45 : 38}%, 0.85)`;
+    ctx.beginPath();
+    if (detail < 0.5 || size < 1) {
+      ctx.arc(cx, cy, Math.max(0.7, r), 0, TAU);
+    } else {
+      // Five leaves around the centre
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * TAU + 0.3;
+        const lx = cx + Math.cos(a) * r * 0.5;
+        const ly = cy + Math.sin(a) * r * 0.5;
+        ctx.moveTo(lx + r * 0.55, ly);
+        ctx.ellipse(lx, ly, r * 0.55, r * 0.38, a, 0, TAU);
+      }
+    }
+    ctx.fill();
+    if (patch.stock > 0 && detail >= 0.5) {
+      const ratio = Math.max(0, Math.min(1, patch.stock / patch.capacity));
+      const berries = Math.max(1, Math.ceil(ratio * 5));
+      const spread = berries === 1 ? 0 : cellSize * 0.14;
+      const br = cellSize * 0.09;
+      ctx.fillStyle = BERRY;
+      ctx.beginPath();
+      for (let i = 0; i < berries; i++) {
+        const a = i * 1.7 + 0.4;
+        const bx = cx + Math.cos(a) * spread;
+        const by = cy + Math.sin(a) * spread;
+        ctx.moveTo(bx + br, by);
+        ctx.arc(bx, by, br, 0, TAU);
+      }
+      ctx.fill();
+    } else if (patch.stock > 0) {
+      ctx.fillStyle = BERRY;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(0.6, cellSize * 0.1), 0, TAU);
+      ctx.fill();
+    }
+    if (plant.id === this.selectedPlantId) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(5, cellSize * 0.62), 0, TAU);
+      ctx.stroke();
+    }
   }
 
   private drawFoodPatch(patch: FoodPatch, detail: number): void {

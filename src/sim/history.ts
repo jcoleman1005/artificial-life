@@ -1,4 +1,5 @@
-import type { AbilityName, Organism, PolicyWeights, WorldMetrics } from './types';
+import type { AbilityName, Organism, PlantTrait, PolicyWeights, WorldMetrics } from './types';
+import { PLANT_TRAIT_KEYS } from './plants';
 import { brainDrift, hiddenStrength } from './brain';
 
 export const POLICY_WEIGHT_KEYS = [
@@ -66,6 +67,21 @@ export interface HistorySample {
   /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
   readonly brainDrift: WeightStat;
   readonly hiddenStrength: WeightStat;
+  /** Plants (absent when plants are off, and in samples from before plants). */
+  readonly plants?: PlantSample;
+}
+
+export interface PlantSample {
+  readonly count: number;
+  readonly edibleBiomass: number;
+  readonly roots: number;
+  readonly dormant: number;
+  /** Cumulative plant deaths by cause. */
+  readonly deathsGrazed: number;
+  readonly deathsShaded: number;
+  readonly deathsLean: number;
+  readonly deathsStarved: number;
+  readonly traits: Readonly<Record<PlantTrait, WeightStat>>;
 }
 
 /** Share of organisms holding each movement ability, and holding none. */
@@ -182,6 +198,21 @@ export class MetricsHistory {
       abilities: abilityShares(organisms),
       brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
       hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
+      ...(metrics.plants
+        ? {
+            plants: {
+              count: metrics.plants.count,
+              edibleBiomass: metrics.plants.edibleBiomass,
+              roots: metrics.plants.roots,
+              dormant: metrics.plants.dormant,
+              deathsGrazed: metrics.plants.deaths.grazed,
+              deathsShaded: metrics.plants.deaths.shaded,
+              deathsLean: metrics.plants.deaths.lean,
+              deathsStarved: metrics.plants.deaths.starved,
+              traits: { ...metrics.plants.traits },
+            },
+          }
+        : {}),
     });
 
     if (this.samples.length > this.capacity) {
@@ -225,6 +256,15 @@ export class MetricsHistory {
       'brain_drift_mean',
       'brain_hidden_strength_mean',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
+      'plants',
+      'plant_edible_biomass',
+      'plant_roots',
+      'plants_dormant',
+      'plant_deaths_grazed_total',
+      'plant_deaths_shaded_total',
+      'plant_deaths_lean_total',
+      'plant_deaths_starved_total',
+      ...PLANT_TRAIT_KEYS.flatMap((k) => [`plant_${k}_mean`, `plant_${k}_sd`]),
     ];
     const rows = this.samples.map((s) =>
       [
@@ -263,6 +303,20 @@ export class MetricsHistory {
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),
         ]),
+        // Blank plant columns when plants are off.
+        ...(s.plants
+          ? [
+              s.plants.count,
+              s.plants.edibleBiomass.toFixed(2),
+              s.plants.roots.toFixed(2),
+              s.plants.dormant,
+              s.plants.deathsGrazed,
+              s.plants.deathsShaded,
+              s.plants.deathsLean,
+              s.plants.deathsStarved,
+              ...PLANT_TRAIT_KEYS.flatMap((k) => [s.plants!.traits[k].mean.toFixed(4), s.plants!.traits[k].sd.toFixed(4)]),
+            ]
+          : new Array<string>(8 + PLANT_TRAIT_KEYS.length * 2).fill('')),
       ].join(',')
     );
     return [header.join(','), ...rows].join('\n') + '\n';

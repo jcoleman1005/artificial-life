@@ -1,4 +1,5 @@
-import type { Organism, PolicyWeights, SimulationConfig } from '../sim/types';
+import type { FoodPatch, Organism, PolicyWeights, SimulationConfig } from '../sim/types';
+import { PLANT_TRAITS, PLANT_TRAIT_KEYS, plantHue } from '../sim/plants';
 import { setHTMLPreservingDetails } from './dom';
 import { givenName, organismName } from './names';
 import { describeDoing } from './organism-card';
@@ -58,7 +59,7 @@ export class InspectorView {
       this.container.innerHTML = `
         <div class="inspector-empty">
           <h3>No organism selected</h3>
-          <p>Tap an organism in the world to follow it. Its senses, inherited weights, scored choices and recent decisions show up here.</p>
+          <p>Tap an organism in the world to follow it (or tap a plant to see its genome). Its senses, inherited weights, scored choices and recent decisions show up here.</p>
         </div>
       `;
       return;
@@ -312,6 +313,65 @@ export class InspectorView {
                 ${historyRows || '<tr><td colspan="5">No history yet</td></tr>'}
               </tbody>
             </table>
+          </div>
+        </details>
+      </div>
+    `
+    );
+  }
+
+  /** A plant: its genome against each trait's range, its mass, and its line. `tick` is the world's tick (for age). */
+  public renderPlant(patch: FoodPatch, tick: number, alive: boolean): void {
+    const plant = patch.plant;
+    if (!plant) return;
+    const g = plant.genome;
+    const traitLabels: Record<string, string> = {
+      growthRate: 'Growth rate',
+      maxBiomass: 'Maximum size',
+      seedSize: 'Seed size',
+      seedThreshold: 'Seeds from (of max size)',
+      dispersal: 'Seed dispersal (cells)',
+      rootShare: 'Root share',
+      leanDormancy: 'Lean dormancy',
+    };
+    const rows = PLANT_TRAIT_KEYS.map((key) => {
+      const r = PLANT_TRAITS[key];
+      const pct = ((g[key] - r.min) / (r.max - r.min)) * 100;
+      return `
+            <div class="weight-row">
+              <span class="weight-name">${traitLabels[key]}</span>
+              <span class="weight-num">${g[key].toFixed(2)}</span>
+              <div class="weight-track">
+                <div class="weight-fill" style="left: 0; width: ${pct.toFixed(1)}%; background-color: #4ade80;"></div>
+              </div>
+            </div>`;
+    }).join('');
+    const status = !alive ? 'Died' : plant.dormant ? 'Dormant (lean season)' : plant.biomass < 1 ? 'Seedling' : 'Growing';
+    setHTMLPreservingDetails(
+      this.container,
+      `
+      <div class="inspector-card">
+        <header class="inspector-header">
+          <div>
+            <h2><span class="tag-swatch" style="background: hsl(${plantHue(g)}, 55%, 45%)" aria-hidden="true"></span>Plant ${plant.id.replace('plant-', '#')}</h2>
+            <div class="header-pre">
+              ${status} · at ${patch.x},${patch.y} · ${plant.lineageId}${plant.parentId ? ` · seed of ${plant.parentId}` : ' · founder or seed rain'}
+            </div>
+          </div>
+          <button type="button" class="btn-close-inspector" aria-label="Deselect">✕</button>
+        </header>
+        <div class="stat-summary-row">
+          <div class="summary-pill"><span class="pill-title">Generation</span><span class="pill-value">Gen ${plant.generation}</span></div>
+          <div class="summary-pill"><span class="pill-title">Age</span><span class="pill-value">${tick - plant.birthTick} ticks</span></div>
+          <div class="summary-pill"><span class="pill-title">Edible</span><span class="pill-value">${plant.biomass.toFixed(2)} (${patch.stock} ${patch.stock === 1 ? 'unit' : 'units'})</span></div>
+          <div class="summary-pill"><span class="pill-title">Roots</span><span class="pill-value">${plant.roots.toFixed(2)}</span></div>
+          <div class="summary-pill"><span class="pill-title">Seeds released</span><span class="pill-value">${plant.seedsReleased}</span></div>
+          <div class="summary-pill"><span class="pill-title">Last grazed</span><span class="pill-value">${plant.lastGrazedTick < 0 ? 'Never' : `tick ${plant.lastGrazedTick}`}</span></div>
+        </div>
+        <details open class="inspector-section">
+          <summary><strong>Genome</strong> <span class="muted">(bar = place in the trait's range)</span></summary>
+          <div class="weights-list">
+            ${rows}
           </div>
         </details>
       </div>
