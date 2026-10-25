@@ -23,9 +23,9 @@ import { MetricsHistory } from './history';
 import { inheritTag } from './tags';
 import { seasonAt } from './seasons';
 import {
-  founderCanLeap,
+  founderAbilities,
   founderCarryCapacity,
-  inheritCanLeap,
+  inheritAbilities,
   inheritCarryCapacity,
   metabolismCost,
 } from './traits';
@@ -157,7 +157,7 @@ export class World {
     const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
     const carryCapacity = founderCarryCapacity(this.config, this.prng);
     const brain = createHeadStartBrain(this.prng);
-    const canLeap = founderCanLeap(this.config, this.prng);
+    const abilities = founderAbilities(this.config, this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -166,7 +166,7 @@ export class World {
       policy,
       tag,
       carryCapacity,
-      canLeap,
+      abilities,
       brain,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
@@ -565,7 +565,7 @@ export class World {
                 this.prng
               );
               const childBrain = mutateBrain(organism.brain, this.config, this.prng);
-              const childCanLeap = inheritCanLeap(organism.canLeap, this.config, this.prng);
+              const childAbilities = inheritAbilities(organism.abilities, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
@@ -575,7 +575,7 @@ export class World {
                 policy: childPolicy,
                 tag: childTag,
                 carryCapacity: childCapacity,
-                canLeap: childCanLeap,
+                abilities: childAbilities,
                 brain: childBrain,
                 lineage: {
                   id: organism.lineage.id,

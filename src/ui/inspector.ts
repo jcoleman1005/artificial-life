@@ -1,6 +1,13 @@
 import type { Organism, PolicyWeights, SimulationConfig } from '../sim/types';
 import { setHTMLPreservingDetails } from './dom';
 
+/** The organism's movement abilities, e.g. "Diagonal, Leap", or "None". */
+function abilityList(organism: Readonly<Organism>): string {
+  const { diagonal, squeeze, leap } = organism.abilities;
+  const names = [diagonal && 'Diagonal', squeeze && 'Squeeze', leap && 'Leap'].filter(Boolean);
+  return names.length ? names.join(', ') : 'None';
+}
+
 const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['foodAttraction', 'Food Attraction'],
   ['obstacleAvoidance', 'Obstacle Avoidance'],
@@ -213,8 +220,8 @@ export class InspectorView {
             <span class="pill-value">${organism.carriedFood} / ${organism.carryCapacity}</span>
           </div>
           <div class="summary-pill">
-            <span class="pill-title">Can Leap</span>
-            <span class="pill-value">${organism.canLeap === 1 ? 'Yes' : 'No'}</span>
+            <span class="pill-title">Abilities</span>
+            <span class="pill-value">${abilityList(organism)}</span>
           </div>
           <div class="summary-pill">
             <span class="pill-title">Given / Got</span>

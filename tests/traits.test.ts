@@ -30,13 +30,13 @@ describe('Carry capacity trait', () => {
 
   it('costs upkeep every tick in proportion to capacity', () => {
     const config = { ...DEFAULT_CONFIG, tickMetabolismCost: 0.25, carryUpkeep: 0.05 };
-    expect(metabolismCost({ carryCapacity: 0, canLeap: 0 } as Organism, config)).toBeCloseTo(0.25);
-    expect(metabolismCost({ carryCapacity: 4, canLeap: 0 } as Organism, config)).toBeCloseTo(0.45);
-    // Leap ability adds its own upkeep
-    expect(metabolismCost({ carryCapacity: 0, canLeap: 1 } as Organism, { ...config, leapUpkeep: 0.03 })).toBeCloseTo(0.28);
-    expect(
-      metabolismCost({ carryCapacity: 0, canLeap: 1 } as Organism, { ...config, leapUpkeep: 0.03, leapEnabled: false })
-    ).toBeCloseTo(0.25);
+    const none = { diagonal: 0, squeeze: 0, leap: 0 };
+    expect(metabolismCost({ carryCapacity: 0, abilities: none } as Organism, config)).toBeCloseTo(0.25);
+    expect(metabolismCost({ carryCapacity: 4, abilities: none } as Organism, config)).toBeCloseTo(0.45);
+    // Each movement ability adds its own upkeep, but only where it is enabled
+    const two = { carryCapacity: 0, abilities: { diagonal: 1, squeeze: 0, leap: 1 } } as Organism;
+    expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03 })).toBeCloseTo(0.31);
+    expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03, leapEnabled: false })).toBeCloseTo(0.28);
 
     const world = new World({
       seed: 1,
@@ -46,7 +46,7 @@ describe('Carry capacity trait', () => {
       immigrationInterval: 0,
       tickMetabolismCost: 0.25,
       carryUpkeep: 0.05,
-      leapUpkeep: 0,
+      abilityUpkeep: 0,
       moveCost: 0,
     });
     const org = Array.from(world.organisms.values())[0];
@@ -85,7 +85,7 @@ describe('Carry capacity trait', () => {
         },
         tag: 0,
         carryCapacity: capacity,
-        canLeap: 0,
+        abilities: { diagonal: 0, squeeze: 0, leap: 0 },
         brain: createHeadStartBrain(new PRNG(0)),
         lineage: { id: 'l', parentId: null, generation: 1, birthTick: 0 },
         age: 0,

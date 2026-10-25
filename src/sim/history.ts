@@ -1,4 +1,4 @@
-import type { Organism, PolicyWeights, WorldMetrics } from './types';
+import type { AbilityName, Organism, PolicyWeights, WorldMetrics } from './types';
 import { brainDrift, hiddenStrength } from './brain';
 
 export const POLICY_WEIGHT_KEYS = [
@@ -51,11 +51,25 @@ export interface HistorySample {
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
   /** Population mean and standard deviation of the carry-capacity body trait. */
   readonly carryCapacity: WeightStat;
-  /** Share of the population with the leap ability (0..1). */
-  readonly leapers: number;
+  /** Share of the population with each movement ability, and with none (0..1). */
+  readonly abilities: Readonly<Record<AbilityName | 'none', number>>;
   /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
   readonly brainDrift: WeightStat;
   readonly hiddenStrength: WeightStat;
+}
+
+/** Share of organisms holding each movement ability, and holding none. */
+export function abilityShares(organisms: readonly Organism[]): Record<AbilityName | 'none', number> {
+  const counts = { diagonal: 0, squeeze: 0, leap: 0, none: 0 };
+  for (const o of organisms) {
+    const { diagonal, squeeze, leap } = o.abilities;
+    counts.diagonal += diagonal;
+    counts.squeeze += squeeze;
+    counts.leap += leap;
+    if (diagonal + squeeze + leap === 0) counts.none++;
+  }
+  const n = organisms.length || 1;
+  return { diagonal: counts.diagonal / n, squeeze: counts.squeeze / n, leap: counts.leap / n, none: counts.none / n };
 }
 
 function meanAndSd(values: readonly number[]): WeightStat {
@@ -141,7 +155,7 @@ export class MetricsHistory {
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
-      leapers: organisms.length ? organisms.filter((o) => o.canLeap === 1).length / organisms.length : 0,
+      abilities: abilityShares(organisms),
       brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
       hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
     });
@@ -174,7 +188,10 @@ export class MetricsHistory {
       'lean_season',
       'carry_capacity_mean',
       'carry_capacity_sd',
-      'leapers_fraction',
+      'diagonal_fraction',
+      'squeeze_fraction',
+      'leap_fraction',
+      'no_ability_fraction',
       'brain_drift_mean',
       'brain_hidden_strength_mean',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
@@ -200,7 +217,10 @@ export class MetricsHistory {
         s.lean ? 1 : 0,
         s.carryCapacity.mean.toFixed(4),
         s.carryCapacity.sd.toFixed(4),
-        s.leapers.toFixed(4),
+        s.abilities.diagonal.toFixed(4),
+        s.abilities.squeeze.toFixed(4),
+        s.abilities.leap.toFixed(4),
+        s.abilities.none.toFixed(4),
         s.brainDrift.mean.toFixed(4),
         s.hiddenStrength.mean.toFixed(4),
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
