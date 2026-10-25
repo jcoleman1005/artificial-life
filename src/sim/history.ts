@@ -57,6 +57,8 @@ export interface HistorySample {
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
   /** Population mean and standard deviation of the carry-capacity body trait. */
   readonly carryCapacity: WeightStat;
+  /** Population mean and standard deviation of the dispersal distance trait. */
+  readonly dispersal: WeightStat;
   /** Share of the population with each movement ability, and with none (0..1). */
   readonly abilities: Readonly<Record<AbilityName | 'none', number>>;
   /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
@@ -173,6 +175,7 @@ export class MetricsHistory {
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
+      dispersal: meanAndSd(organisms.map((o) => o.dispersal)),
       abilities: abilityShares(organisms),
       brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
       hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
@@ -208,6 +211,8 @@ export class MetricsHistory {
       'lean_season',
       'carry_capacity_mean',
       'carry_capacity_sd',
+      'dispersal_mean',
+      'dispersal_sd',
       'diagonal_fraction',
       'squeeze_fraction',
       'leap_fraction',
@@ -239,6 +244,8 @@ export class MetricsHistory {
         s.lean ? 1 : 0,
         s.carryCapacity.mean.toFixed(4),
         s.carryCapacity.sd.toFixed(4),
+        s.dispersal.mean.toFixed(4),
+        s.dispersal.sd.toFixed(4),
         s.abilities.diagonal.toFixed(4),
         s.abilities.squeeze.toFixed(4),
         s.abilities.leap.toFixed(4),

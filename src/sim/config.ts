@@ -38,6 +38,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   sharingEnabled: true,
   carryUpkeep: 0.03,
   maxCarryCapacity: 6,
+  dispersalEnabled: true,
+  maxDispersal: 8,
+  dispersalCost: 1.0, // the same as one move
   traitMutationRate: 0.1,
   diagonalMoves: true,
   diagonalMoveCost: 1.4,

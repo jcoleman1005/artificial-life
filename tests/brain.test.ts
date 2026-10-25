@@ -64,6 +64,7 @@ function organism(id: string, x: number, y: number, overrides: Partial<Organism>
     policy: ZERO_POLICY,
     tag: 0,
     carryCapacity: 2,
+    dispersal: 1,
     abilities: { diagonal: 0, squeeze: 0, leap: 0 },
     brain: createHeadStartBrain(new PRNG(1)),
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },

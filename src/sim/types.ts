@@ -220,6 +220,12 @@ export interface Organism {
    * Each unit of capacity adds carryUpkeep to its metabolism every tick.
    */
   readonly carryCapacity: number;
+  /**
+   * Inherited body trait: how far away (in steps) a child of this organism
+   * can be born. 1 means next to the parent; each step beyond the first costs
+   * the parent dispersalCost energy at the birth.
+   */
+  readonly dispersal: number;
   /** Inherited movement abilities (body traits); see Abilities. */
   readonly abilities: Abilities;
   /** Inherited neural controller, used when config.controller is 'brain'. */
@@ -302,6 +308,9 @@ export interface SimulationConfig {
   sharingEnabled: boolean; // Experiment switch for giving carried food to neighbours
   carryUpkeep: number; // Extra energy per tick for each unit of carry capacity
   maxCarryCapacity: number; // Upper bound on the inherited carry capacity
+  dispersalEnabled: boolean; // Experiment switch: children can be born up to their parent's dispersal distance away
+  maxDispersal: number; // Upper bound on the inherited dispersal distance
+  dispersalCost: number; // Energy the parent pays per step beyond the first
   traitMutationRate: number; // Probability a child's body trait shifts by ±1 at birth
   diagonalMoves: boolean; // Allow diagonal moves (for organisms with the ability)
   diagonalMoveCost: number; // Diagonal move cost, as a multiple of moveCost

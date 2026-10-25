@@ -301,6 +301,7 @@ const settingsView = new SettingsView(
   {
     sharingEnabled: sim.config.sharingEnabled,
     signalsEnabled: sim.config.signalsEnabled,
+    dispersalEnabled: sim.config.dispersalEnabled,
     seasonsEnabled: sim.config.seasonLength > 0,
     controller: sim.config.controller,
     worldSize: 'large',
@@ -319,6 +320,7 @@ const settingsView = new SettingsView(
     // Live switches take effect from the next tick; use Reset to rerun a seed from the start.
     onSharingChange: (enabled) => sim.setConfig({ sharingEnabled: enabled }),
     onSignalsChange: (enabled) => sim.setConfig({ signalsEnabled: enabled }),
+    onDispersalChange: (enabled) => sim.setConfig({ dispersalEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
       sim.setConfig({ controller });
@@ -606,6 +608,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
   return {
     sharingEnabled: config.sharingEnabled,
     signalsEnabled: config.signalsEnabled,
+    dispersalEnabled: config.dispersalEnabled,
     seasonsEnabled: config.seasonLength > 0,
     controller: config.controller,
     worldSize: config.gridWidth <= WORLD_SIZES.small.gridWidth ? 'small' : 'large',

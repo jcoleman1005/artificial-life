@@ -87,6 +87,7 @@ describe('Carry capacity trait', () => {
         },
         tag: 0,
         carryCapacity: capacity,
+        dispersal: 1,
         abilities: { diagonal: 0, squeeze: 0, leap: 0 },
         brain: createHeadStartBrain(new PRNG(0)),
         lineage: { id: 'l', parentId: null, generation: 1, birthTick: 0 },
@@ -106,7 +107,7 @@ describe('Carry capacity trait', () => {
   });
 
   it('is passed from parent to child in a running world', () => {
-    const world = new World({ seed: 'traits', traitMutationRate: 0 });
+    const world = new World({ seed: 'traits', traitMutationRate: 0, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 });
     const founders = new Map(Array.from(world.organisms.values(), (o) => [o.lineage.id, o.carryCapacity]));
     for (let t = 0; t < 300; t++) world.step();
     for (const o of world.organisms.values()) {

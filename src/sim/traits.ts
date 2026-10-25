@@ -17,6 +17,18 @@ export function inheritCarryCapacity(
   return Math.max(0, Math.min(config.maxCarryCapacity, parentCapacity + step));
 }
 
+/** Dispersal distance for a founder: 1–3 steps. */
+export function founderDispersal(config: Readonly<SimulationConfig>, prng: PRNG): number {
+  return Math.min(config.maxDispersal, prng.nextInt(1, 3));
+}
+
+/** A child's dispersal distance: usually the parent's, occasionally one more or one less (at least 1). */
+export function inheritDispersal(parentDispersal: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
+  if (prng.next() >= config.traitMutationRate) return parentDispersal;
+  const step = prng.next() < 0.5 ? -1 : 1;
+  return Math.max(1, Math.min(config.maxDispersal, parentDispersal + step));
+}
+
 /** Movement abilities switched on in this world, in a fixed order. */
 export function enabledAbilities(config: Readonly<SimulationConfig>): AbilityName[] {
   const names: AbilityName[] = [];

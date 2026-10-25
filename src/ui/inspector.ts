@@ -237,6 +237,10 @@ export class InspectorView {
             <span class="pill-value">${organism.carriedFood} / ${organism.carryCapacity}</span>
           </div>
           <div class="summary-pill">
+            <span class="pill-title">Births up to</span>
+            <span class="pill-value">${organism.dispersal} ${organism.dispersal === 1 ? 'step' : 'steps'} away</span>
+          </div>
+          <div class="summary-pill">
             <span class="pill-title">Abilities</span>
             <span class="pill-value">${abilityList(organism)}</span>
           </div>

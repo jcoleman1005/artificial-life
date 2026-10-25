@@ -26,8 +26,10 @@ import { regionSeasonAt, seasonAt } from './seasons';
 import {
   founderAbilities,
   founderCarryCapacity,
+  founderDispersal,
   inheritAbilities,
   inheritCarryCapacity,
+  inheritDispersal,
   metabolismCost,
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
@@ -64,6 +66,7 @@ const WORLD_COUNTERS = [
   'signalsOnFoodTotal',
   'deceasedCount',
   'deceasedLifespanSum',
+  'birthDistanceSum',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
@@ -92,6 +95,8 @@ export class World {
   /** Running totals of lifespans at death (a total, not a list, so memory stays flat). */
   public deceasedCount = 0;
   public deceasedLifespanSum = 0;
+  /** Sum of birth distances (steps from parent to child), for the mean. */
+  public birthDistanceSum = 0;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -119,6 +124,7 @@ export class World {
     this.signalsOnFoodTotal = 0;
     this.deceasedCount = 0;
     this.deceasedLifespanSum = 0;
+    this.birthDistanceSum = 0;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -255,6 +261,7 @@ export class World {
     const carryCapacity = founderCarryCapacity(this.config, this.prng);
     const brain = createHeadStartBrain(this.prng);
     const abilities = founderAbilities(this.config, this.prng);
+    const dispersal = founderDispersal(this.config, this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -264,6 +271,7 @@ export class World {
       tag,
       carryCapacity,
       abilities,
+      dispersal,
       brain,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
@@ -311,7 +319,8 @@ export class World {
     world.prng.setState(state.prng.state);
     world.tick = state.tick;
     world.nextOrganismSeq = state.nextOrganismSeq;
-    for (const k of WORLD_COUNTERS) world[k] = state.counters[k];
+    // Saves from before a field existed load with its neutral default.
+    for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
     world.obstacles.clear();
     for (const key of state.obstacles) world.obstacles.add(key);
     world.foodRegions.length = 0;
@@ -319,7 +328,7 @@ export class World {
     world.foodPatches.clear();
     for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, { ...p });
     world.organisms.clear();
-    for (const o of state.organisms) world.organisms.set(o.id, clone(o));
+    for (const o of state.organisms) world.organisms.set(o.id, { ...clone(o), dispersal: o.dispersal ?? 1 });
     world.history.importState(state.history);
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
@@ -599,6 +608,14 @@ export class World {
       }
     }
 
+    // Cells a dispersing child cannot land in: taken after this tick's moves,
+    // or the approved birth cell of another parent. Children placed earlier
+    // this tick are added as they are born.
+    const birthBlocked = new Set(finalOccupiedCells);
+    for (const item of intentions.values()) {
+      if (item.reproTargetKey && item.approved) birthBlocked.add(item.reproTargetKey);
+    }
+
     // Phase 4: Action Execution & Energy Accounting
     const newBorns: Organism[] = [];
     // Food gifts leave the donor during its action and are eaten by the
@@ -692,9 +709,16 @@ export class World {
             const totalReproCost = childEnergy + this.config.reproductionMetabolismTax;
 
             if (organism.energy > totalReproCost && childEnergy > 0) {
-              organism.energy -= totalReproCost;
+              // Where the child lands: next to the parent, or (with
+              // dispersal) any free cell up to the parent's dispersal
+              // distance it can afford, picked at random.
+              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost, birthBlocked);
+              const birthCost = totalReproCost + birth.extraCost;
+              organism.energy -= birthCost;
               organism.offspringCount++;
-              energyDelta -= totalReproCost;
+              energyDelta -= birthCost;
+              birthBlocked.add(`${birth.x},${birth.y}`);
+              this.birthDistanceSum += birth.distance;
 
               this.nextOrganismSeq++;
               const childId = `org-${this.nextOrganismSeq}`;
@@ -711,16 +735,18 @@ export class World {
               );
               const childBrain = mutateBrain(organism.brain, this.config, this.prng);
               const childAbilities = inheritAbilities(organism.abilities, this.config, this.prng);
+              const childDispersal = inheritDispersal(organism.dispersal, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
-                x: chosenAction.target.x,
-                y: chosenAction.target.y,
+                x: birth.x,
+                y: birth.y,
                 energy: childEnergy,
                 policy: childPolicy,
                 tag: childTag,
                 carryCapacity: childCapacity,
                 abilities: childAbilities,
+                dispersal: childDispersal,
                 brain: childBrain,
                 lineage: {
                   id: organism.lineage.id,
@@ -866,6 +892,46 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+  }
+
+  /**
+   * Where a child is born. Without dispersal (or with distance 1) it is the
+   * chosen adjacent cell. Otherwise a random free cell within the parent's
+   * dispersal distance (in steps), limited to what the parent can afford at
+   * dispersalCost per step beyond the first; the adjacent target is always a
+   * candidate, so a birth never fails for lack of room further away.
+   */
+  private birthCell(
+    parent: Readonly<Organism>,
+    target: { x: number; y: number },
+    spare: number,
+    blocked: ReadonlySet<string>
+  ): { x: number; y: number; distance: number; extraCost: number } {
+    const { dispersalEnabled, dispersalCost, gridWidth, gridHeight } = this.config;
+    const adjacent = { x: target.x, y: target.y, distance: 1, extraCost: 0 };
+    if (!dispersalEnabled || parent.dispersal <= 1) return adjacent;
+    const affordable = dispersalCost > 0 ? 1 + Math.floor(spare / dispersalCost) : parent.dispersal;
+    const reach = Math.min(parent.dispersal, affordable);
+    if (reach <= 1) return adjacent;
+    const candidates: { x: number; y: number; distance: number }[] = [];
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) {
+        const distance = Math.abs(dx) + Math.abs(dy);
+        if (distance === 0 || distance > reach) continue;
+        const x = parent.x + dx;
+        const y = parent.y + dy;
+        if (x === target.x && y === target.y) {
+          candidates.push({ x, y, distance });
+          continue;
+        }
+        if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) continue;
+        const key = `${x},${y}`;
+        if (this.obstacles.has(key) || blocked.has(key)) continue;
+        candidates.push({ x, y, distance });
+      }
+    }
+    const pick = this.prng.choice(candidates);
+    return { ...pick, extraCost: (pick.distance - 1) * dispersalCost };
   }
 
   /**

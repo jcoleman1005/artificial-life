@@ -187,6 +187,14 @@ export class HistoryView {
       },
       {
         section: 'Body traits',
+        label: 'Dispersal distance',
+        fixedRange: [0, 8],
+        value: (s) => s.dispersal.mean,
+        spread: (s) => s.dispersal.sd,
+        format: (s) => `${s.dispersal.mean.toFixed(2)} ± ${s.dispersal.sd.toFixed(2)} steps`,
+      },
+      {
+        section: 'Body traits',
         label: 'Diagonal movers',
         fixedRange: [0, 1],
         value: (s) => s.abilities.diagonal,

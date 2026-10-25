@@ -42,6 +42,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     policy: { ...NEUTRAL },
     tag: 0,
     carryCapacity: 2,
+    dispersal: 1,
     abilities: { diagonal: 0, squeeze: 0, leap: 0 },
     brain: TEST_BRAIN,
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },

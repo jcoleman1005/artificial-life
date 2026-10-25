@@ -14,6 +14,7 @@ export interface SettingsCallbacks {
   onColorModeChange: (mode: ColorMode) => void;
   onSharingChange: (enabled: boolean) => void;
   onSignalsChange: (enabled: boolean) => void;
+  onDispersalChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -30,6 +31,7 @@ export interface SettingsCallbacks {
 export interface ExperimentToggles {
   sharingEnabled: boolean;
   signalsEnabled: boolean;
+  dispersalEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
   worldSize: WorldSize;
@@ -126,6 +128,7 @@ export class SettingsView {
         <h3>Behaviour <small>takes effect next tick</small></h3>
         ${segmented('Sharing', 'sharing', onOff, toggles.sharingEnabled ? 'on' : 'off')}
         ${segmented('Signals', 'signals', onOff, toggles.signalsEnabled ? 'on' : 'off')}
+        ${segmented('Dispersal', 'dispersal', onOff, toggles.dispersalEnabled ? 'on' : 'off')}
         ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
       </section>
       <section class="settings-group">
@@ -177,6 +180,7 @@ export class SettingsView {
     set('seasons', t.seasonsEnabled ? 'on' : 'off');
     set('sharing', t.sharingEnabled ? 'on' : 'off');
     set('signals', t.signalsEnabled ? 'on' : 'off');
+    set('dispersal', t.dispersalEnabled ? 'on' : 'off');
     set('controller', t.controller);
   }
 
@@ -227,6 +231,7 @@ export class SettingsView {
     this.bindSegment('seasons', (v) => cb.onSeasonsChange(v === 'on'));
     this.bindSegment('sharing', (v) => cb.onSharingChange(v === 'on'));
     this.bindSegment('signals', (v) => cb.onSignalsChange(v === 'on'));
+    this.bindSegment('dispersal', (v) => cb.onDispersalChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
 

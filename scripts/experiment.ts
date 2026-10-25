@@ -140,6 +140,8 @@ function runJob(job: Job): RunResult {
     lookAlikeNeighbours: m.tribes.localKinFraction,
     lookAlikeByChance: m.tribes.globalKinFraction,
     carryCapacity: mean((o) => o.carryCapacity),
+    dispersal: mean((o) => o.dispersal),
+    birthDistance: world.birthDistanceSum / Math.max(1, m.birthsTotal - world.config.initialOrganisms - m.immigrantsTotal),
     ...Object.fromEntries(
       Object.entries(abilityShares([...world.organisms.values()])).map(([k, v]) => [`ability.${k}`, v])
     ),
