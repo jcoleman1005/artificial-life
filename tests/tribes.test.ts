@@ -4,6 +4,9 @@ import { PRNG } from '../src/sim/prng';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { computeTribeMetrics } from '../src/sim/metrics';
 import { senseEnvironment } from '../src/sim/sensors';
+import { createHeadStartBrain } from '../src/sim/brain';
+
+const TEST_BRAIN = createHeadStartBrain(new PRNG(0));
 import { inheritTag, isKin, shareWeightFor, tagDistance, tagSimilarity } from '../src/sim/tags';
 import type { Organism, PolicyWeights, SimulationConfig } from '../src/sim/types';
 
@@ -33,6 +36,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     policy: { ...NEUTRAL },
     tag: 0,
     carryCapacity: 2,
+    brain: TEST_BRAIN,
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },
     age: 0,
     offspringCount: 0,

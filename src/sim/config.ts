@@ -36,6 +36,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   carryUpkeep: 0.03,
   maxCarryCapacity: 6,
   traitMutationRate: 0.1,
+  controller: 'dials',
+  brainMutationRate: 0.05,
+  brainMutationStdDev: 0.3,
   childhoodTicks: 800, // One full plenty-to-lean season cycle
   immigrationInterval: 25,
   immigrationCount: 1,

@@ -1,4 +1,5 @@
 import type { Organism, PolicyWeights, WorldMetrics } from './types';
+import { brainDrift, hiddenStrength } from './brain';
 
 export const POLICY_WEIGHT_KEYS = [
   'foodAttraction',
@@ -48,6 +49,9 @@ export interface HistorySample {
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
   /** Population mean and standard deviation of the carry-capacity body trait. */
   readonly carryCapacity: WeightStat;
+  /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
+  readonly brainDrift: WeightStat;
+  readonly hiddenStrength: WeightStat;
 }
 
 function meanAndSd(values: readonly number[]): WeightStat {
@@ -128,6 +132,8 @@ export class MetricsHistory {
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
+      brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
+      hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
     });
 
     if (this.samples.length > this.capacity) {
@@ -158,6 +164,8 @@ export class MetricsHistory {
       'lean_season',
       'carry_capacity_mean',
       'carry_capacity_sd',
+      'brain_drift_mean',
+      'brain_hidden_strength_mean',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
     ];
     const rows = this.samples.map((s) =>
@@ -181,6 +189,8 @@ export class MetricsHistory {
         s.lean ? 1 : 0,
         s.carryCapacity.mean.toFixed(4),
         s.carryCapacity.sd.toFixed(4),
+        s.brainDrift.mean.toFixed(4),
+        s.hiddenStrength.mean.toFixed(4),
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

@@ -31,7 +31,9 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
   - Eating is possible when food is underfoot or carried and there is room for a full meal (energy <= max − `foodEnergyYield`). This is a physical rule.
   - `eatPriority` (head start 1.5–2): when eating is possible, every other action except feeding one's own hungry child is pushed down by `eatPriority × EAT_PRIORITY_SCALE`. The scale must exceed the largest movement score, or hungry organisms walk off food they could eat.
   - `hungerUrgency` (head start 1.5–2): when hungry (below half energy), moving toward known food adds `hungerUrgency × HUNGER_URGENCY_SCALE × alignment`, enough at the head start to outweigh other pulls and even an evolved aversion to food.
-- Start with a few evolvable weights. Consider a tiny neural network only after baseline experiments.
+- Two inherited controllers; `controller` picks which one chooses actions ('dials' or 'brain'). Every organism carries and inherits both, so the switch works mid-run and runs can be compared on the same seed.
+  - Dials: the interpretable weighted policy (one evolvable weight per tendency).
+  - Brain: a tiny neural network (25 action features → 6 tanh hidden units → score, plus direct "skip" connections). Founders' skip connections start as a dial-like head start, and the hidden layer starts small and random. Each weight mutates at birth with probability `brainMutationRate`. Legal-action rules, the full-meal rule and family pass-through still apply. The inspector lists each input's direct contribution plus the hidden layer's total.
 - Organisms have no memory in Phase 1.
 - Discrete ticks: every living organism decides once per tick.
 - Simultaneous decisions: all organisms choose actions from the same pre-tick snapshot. Resolve conflicts with a seeded random tie-breaker.

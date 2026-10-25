@@ -227,7 +227,9 @@ export class InspectorView {
         </div>
 
         <details open class="inspector-section">
-          <summary><strong>Inherited Policy Weights</strong></summary>
+          <summary><strong>Inherited Policy Weights</strong>${
+            config.controller === 'brain' ? ' <span class="muted">(inactive: Brain controller)</span>' : ''
+          }</summary>
           <div class="weights-list">
             ${weightRows}
           </div>

@@ -23,6 +23,7 @@ import { MetricsHistory } from './history';
 import { inheritTag } from './tags';
 import { seasonAt } from './seasons';
 import { founderCarryCapacity, inheritCarryCapacity, metabolismCost } from './traits';
+import { createHeadStartBrain, evaluateBrain, mutateBrain } from './brain';
 
 export class World {
   public readonly config: SimulationConfig;
@@ -145,6 +146,7 @@ export class World {
     const policy = createRandomPolicy(this.prng);
     const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
     const carryCapacity = founderCarryCapacity(this.config, this.prng);
+    const brain = createHeadStartBrain(this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -153,6 +155,7 @@ export class World {
       policy,
       tag,
       carryCapacity,
+      brain,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
         parentId: null,
@@ -253,13 +256,8 @@ export class World {
     for (const org of sortedLiving) {
       const sensed = senseEnvironment(org, snapshot, this.config);
       const legalActions = getLegalActions(org, snapshot, this.config, sensed);
-      const { chosenAction, scores } = evaluatePolicy(
-        org,
-        legalActions,
-        sensed,
-        this.config,
-        this.prng
-      );
+      const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
+      const { chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng);
 
       let moveTargetKey: string | undefined;
       let swapWithId: string | undefined;
@@ -518,6 +516,7 @@ export class World {
                 this.config,
                 this.prng
               );
+              const childBrain = mutateBrain(organism.brain, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
@@ -527,6 +526,7 @@ export class World {
                 policy: childPolicy,
                 tag: childTag,
                 carryCapacity: childCapacity,
+                brain: childBrain,
                 lineage: {
                   id: organism.lineage.id,
                   parentId: organism.id,

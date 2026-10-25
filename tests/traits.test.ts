@@ -4,6 +4,7 @@ import { PRNG } from '../src/sim/prng';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { founderCarryCapacity, inheritCarryCapacity, metabolismCost } from '../src/sim/traits';
 import type { Organism } from '../src/sim/types';
+import { createHeadStartBrain } from '../src/sim/brain';
 
 describe('Carry capacity trait', () => {
   it('gives founders 1-3 units', () => {
@@ -78,6 +79,7 @@ describe('Carry capacity trait', () => {
         },
         tag: 0,
         carryCapacity: capacity,
+        brain: createHeadStartBrain(new PRNG(0)),
         lineage: { id: 'l', parentId: null, generation: 1, birthTick: 0 },
         age: 0,
         offspringCount: 0,

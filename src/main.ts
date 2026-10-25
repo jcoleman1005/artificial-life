@@ -172,7 +172,11 @@ function stepSimulation(): void {
 const controlsView = new ControlsView(
   controlsContainer,
   initialSeed,
-  { sharingEnabled: world.config.sharingEnabled, seasonsEnabled: world.config.seasonLength > 0 },
+  {
+    sharingEnabled: world.config.sharingEnabled,
+    seasonsEnabled: world.config.seasonLength > 0,
+    controller: world.config.controller,
+  },
   {
   onPlayPause: () => {
     isRunning = !isRunning;
@@ -213,6 +217,11 @@ const controlsView = new ControlsView(
   onSharingChange: (enabled) => {
     // Takes effect from the next tick; use Reset to rerun a seed from the start.
     world.config.sharingEnabled = enabled;
+  },
+  onControllerChange: (controller) => {
+    // Every organism carries both genomes, so this can switch mid-run.
+    world.config.controller = controller;
+    refreshPanels();
   },
   onSeasonsChange: (enabled) => {
     world.config.seasonLength = enabled ? DEFAULT_CONFIG.seasonLength : 0;

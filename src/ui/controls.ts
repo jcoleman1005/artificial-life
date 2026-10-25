@@ -9,11 +9,13 @@ export interface ControlCallbacks {
   onColorModeChange: (mode: ColorMode) => void;
   onSharingChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
+  onControllerChange: (controller: 'dials' | 'brain') => void;
 }
 
 export interface ExperimentToggles {
   sharingEnabled: boolean;
   seasonsEnabled: boolean;
+  controller: 'dials' | 'brain';
 }
 
 export class ControlsView {
@@ -129,6 +131,13 @@ export class ControlsView {
             </div>
           </div>
           <div class="toggle-field">
+            <span class="toggle-label">Controller</span>
+            <div class="speed-selector" role="group" aria-label="Controller">
+              <button type="button" class="btn-speed ${this.toggles.controller === 'dials' ? 'active' : ''}" data-controller="dials">Dials</button>
+              <button type="button" class="btn-speed ${this.toggles.controller === 'brain' ? 'active' : ''}" data-controller="brain">Brain</button>
+            </div>
+          </div>
+          <div class="toggle-field">
             <span class="toggle-label">Seasons</span>
             <div class="speed-selector" role="group" aria-label="Lean seasons">
               <button type="button" class="btn-speed ${this.toggles.seasonsEnabled ? 'active' : ''}" data-seasons="on">On</button>
@@ -183,6 +192,14 @@ export class ControlsView {
       btn.addEventListener('click', () => {
         sharingButtons.forEach((b) => b.classList.toggle('active', b === btn));
         this.callbacks.onSharingChange(btn.dataset.sharing === 'on');
+      });
+    });
+
+    const controllerButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-controller]');
+    controllerButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        controllerButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onControllerChange(btn.dataset.controller === 'brain' ? 'brain' : 'dials');
       });
     });
 

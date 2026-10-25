@@ -1,6 +1,7 @@
 /**
  * Core types and data structures for the Artificial Life simulation.
  */
+import type { Brain } from './brain';
 
 export interface Point {
   readonly x: number;
@@ -188,6 +189,8 @@ export interface Organism {
    * Each unit of capacity adds carryUpkeep to its metabolism every tick.
    */
   readonly carryCapacity: number;
+  /** Inherited neural controller, used when config.controller is 'brain'. */
+  readonly brain: Brain;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
   carriedFood: number;
   /** Cumulative food units given to and received from other organisms. */
@@ -235,6 +238,9 @@ export interface SimulationConfig {
   carryUpkeep: number; // Extra energy per tick for each unit of carry capacity
   maxCarryCapacity: number; // Upper bound on the inherited carry capacity
   traitMutationRate: number; // Probability a child's body trait shifts by ±1 at birth
+  controller: 'dials' | 'brain'; // Which inherited controller chooses actions
+  brainMutationRate: number; // Probability each brain weight mutates at birth
+  brainMutationStdDev: number; // Size of a brain weight mutation
   childhoodTicks: number; // For this long after birth, a parent carrying food senses as a food source
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival

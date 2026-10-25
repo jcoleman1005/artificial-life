@@ -5,6 +5,9 @@ import { mutatePolicy } from '../src/sim/policy';
 import { senseEnvironment } from '../src/sim/sensors';
 import type { Organism, SimulationConfig } from '../src/sim/types';
 import { DEFAULT_CONFIG } from '../src/sim/config';
+import { createHeadStartBrain } from '../src/sim/brain';
+
+const TEST_BRAIN = createHeadStartBrain(new PRNG(0));
 
 describe('Artificial Life Core Mechanics', () => {
   it('1. World initialization with a fixed seed is completely deterministic', () => {
@@ -111,6 +114,7 @@ describe('Artificial Life Core Mechanics', () => {
       foodEatenCount: 0,
       tag: 0,
       carryCapacity: 0,
+      brain: TEST_BRAIN,
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
@@ -185,6 +189,7 @@ describe('Artificial Life Core Mechanics', () => {
       foodEatenCount: 0,
       tag: 0,
       carryCapacity: 0,
+      brain: TEST_BRAIN,
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
@@ -253,6 +258,7 @@ describe('Artificial Life Core Mechanics', () => {
       foodEatenCount: 0,
       tag: 0,
       carryCapacity: 0,
+      brain: TEST_BRAIN,
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
@@ -286,6 +292,7 @@ describe('Artificial Life Core Mechanics', () => {
       foodEatenCount: 0,
       tag: 0,
       carryCapacity: 0,
+      brain: TEST_BRAIN,
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
@@ -364,6 +371,7 @@ describe('Artificial Life Core Mechanics', () => {
       foodEatenCount: 0,
       tag: 0,
       carryCapacity: 0,
+      brain: TEST_BRAIN,
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,

@@ -151,9 +151,25 @@ export class HistoryView {
         spread: (s) => s.carryCapacity.sd,
         format: (s) => `${s.carryCapacity.mean.toFixed(2)} ± ${s.carryCapacity.sd.toFixed(2)} units`,
       },
+      {
+        section: 'Brains (used when Controller = Brain)',
+        label: 'Drift from head start',
+        fixedRange: null,
+        value: (s) => s.brainDrift.mean,
+        spread: (s) => s.brainDrift.sd,
+        format: (s) => `${s.brainDrift.mean.toFixed(2)} ± ${s.brainDrift.sd.toFixed(2)}`,
+      },
+      {
+        section: 'Brains (used when Controller = Brain)',
+        label: 'Hidden layer strength',
+        fixedRange: null,
+        value: (s) => s.hiddenStrength.mean,
+        spread: (s) => s.hiddenStrength.sd,
+        format: (s) => `${s.hiddenStrength.mean.toFixed(2)} ± ${s.hiddenStrength.sd.toFixed(2)}`,
+      },
       ...POLICY_WEIGHT_KEYS.map(
         (key): Panel => ({
-          section: 'Inherited weights',
+          section: 'Inherited weights (dials)',
           label: WEIGHT_LABELS[key],
           fixedRange: [WEIGHT_MIN, WEIGHT_MAX],
           value: (s) => s.weights[key].mean,
