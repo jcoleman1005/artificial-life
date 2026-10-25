@@ -7,9 +7,8 @@ _Last updated: 2026-10-25._
 
 ## Branches
 
-- `main`: everything to date (layout fix, trend charts, tribes, sharing, seasons, traits, brains, engine speed-up). Start new work from here.
-- `fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`, `feature/slower-speeds`, `tools/proxmox-scout`: older branches, fully merged into `main`; safe to delete.
-- `claude/agents-status-docs-idfhjh`: larger world, food regions, staggered seasons, signals, zoom, and the redesigned UI (this session). Merge once checked on the phone.
+- `main`: everything to date, including the larger world, food regions, signals, the redesigned UI, mobility (diagonals, squeezing, leaping) and the brain as default. Start new work from here.
+- All other branches (`fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`, `feature/slower-speeds`, `feature/mobility`, `tools/proxmox-scout`, `claude/agents-status-docs-idfhjh`, `claude/signal-experiments`) are fully merged into `main`; safe to delete.
 - Each session works on its own branch off `main`; merge it once checked on the phone.
 
 ## Running it
@@ -29,10 +28,11 @@ _Last updated: 2026-10-25._
 
 - 60×60 grid world (the old 30×30 world is a preset) with obstacles, food patches, lean/plenty seasons (800-tick cycle, last 40% lean), and immigration (1 founder every 25 ticks).
 - Food grows only in 4 fertile regions (radius 8). By default their seasons are staggered by a quarter cycle each, so a lean season sweeps from region to region.
+- Movement (merged from `feature/mobility`): one orthogonal or diagonal step (diagonals cost 1.4×), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour for organisms with the inherited `canLeap` trait (2.5× cost, small upkeep). Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
 - Organisms: energy, inherited tag (tribe colour), inherited carry capacity (with upkeep), food carrying and giving (need-aware, graded by tag similarity), parental care, childhood parent-following, family pass-through, and signals (a SIGNAL action others within 8 cells sense the next tick; meaning left to evolution).
-- Two inherited controllers, switchable live in the app:
-  - **Dials**: 17 interpretable weights. Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule.
-  - **Brain**: a tiny neural network (30 action features → 6 hidden → score, plus direct connections starting as a dial-like head start).
+- Two inherited controllers, switchable live in the app. **The brain is the default**; the dials are the readable reference.
+  - **Dials**: 20 interpretable weights, including `restDrive` (resting used to be fixed at 0). Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule. Under the brain, the inspector's dial weights and the dial trend charts start collapsed and are labelled inactive.
+  - **Brain**: a tiny neural network (33 action features → 6 hidden → score, plus direct connections starting as a dial-like head start).
 - UI (redesigned 2026-10-25, "Pebbles" art, always dark):
   - World full-bleed. Organisms are glowing orbs in their tag hue (size = energy), food is berry clusters (count = stock), rocks are rounded blocks, fertile regions are soft glows (amber while lean). At full view organisms are plain dots; action glyphs fade in from about 2× zoom (white strokes; signals are rings in the organism's own hue). Zoom 1–6× (+/− buttons, mouse wheel), drag to pan when zoomed, organisms glide between cells.
   - Floating playback pill: play/pause, step, speed (tap cycles ¼× ½× 1× 2× 5× 10×), tick.
@@ -41,7 +41,7 @@ _Last updated: 2026-10-25._
   - Generated names (`src/ui/names.ts`): a given name from the organism id plus a family name shared by its lineage. Display only; simulation ids are unchanged.
   - Colour groups (`src/ui/groups.ts`): organisms bucketed into twelve 30° tag-hue groups ("groups", not species). Display only.
   - Settings sheet (gear in the peek strip): World (size, food layout, seasons), Behaviour (sharing, signals, controller), Display (colour by tag/family), Run (seed, Reset, New seed, status).
-- 88 deterministic tests.
+- 103 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -54,11 +54,13 @@ _Last updated: 2026-10-25._
 | Does storing food pay? (evolvable carry capacity) | **No.** Lean seasons push capacity *down* (2.0 → 1.5). Upkeep outweighs storage while forage drive stays low. |
 | Parents trapping children | Well-fed parents sat on food while starving children pushed against them. Two-way family pass-through fixed it, but produced sharper boom-bust cycles (peaks ~350, lean lows ~20–50). |
 | **Dials vs brain** | **Brain populations survive lean seasons ~2× better** (lean low 79 vs 40, higher in 8/8 seeds). All 8 brain runs independently evolved "rest more, move less" (rest connection +0.5, move −0.4). Dials cannot express this: resting is fixed at 0. The hidden layer has not been recruited yet. |
+| **Dials (with `restDrive`) vs brain**, 60×60 regions, before mobility | **The gap mostly closes.** Dials evolve resting too (`restDrive` +0.54; rest 10.5% of actions vs ~0.3% before), and the brain's lean-season edge falls from ~2× to ~4% (lean low 362 vs 348, still higher in 8/8; births +7%, 8/8). Most of the brain's earlier advantage was being able to rest. The hidden layer is still unused (strength ~0.3 for both, i.e. drift). |
 | Crowding | 55–71% of all actions are moves blocked by other organisms; the 30×30 world is badly overcrowded. |
 | Does a 60×60 world relieve crowding? | **No.** With twice the food, population averages ~400 and 65–70% of actions are still blocked moves. Organisms pile up at food regardless of world size; crowding is set by food per patch, not space. |
 | Food in regions (seasons in step) vs food anywhere | **Lean lows double** (126 vs 62, higher in 8/8 seeds); average population unchanged. Organisms spend 86% of their time inside regions; the largest look-alike group roughly doubles (219 vs 113). |
 | **Staggered region seasons** | **Lean lows rise ~2.5×** (333 vs 135, 8/8), and the population barely swings. More moves between regions (259 vs 203 per 1,000 ticks, 6/8): a modest sign of migration, not yet a clear one. |
 | **Signals (dials and brain)** | **No meaning has evolved in 10,000 ticks.** About 4% (dials) / 2.5% (brain) of actions are signals, but organisms on food signal *less* than average (0.9% vs 3.9%), and moves with a signal in range head toward it 46–48% of the time (chance). The signal weights stay near zero. Signals cost a little: brain lean lows 369 vs 380 (lower in 8/8). Under the brain, signalling mostly replaces resting. Treat signals as an open experiment, not a result. |
+| **Signals over 50,000 ticks** (`docs/experiments/signals-50k.md`) | **Still no communication.** Signallers now lean toward signalling on food (about 1.4× their usual rate, in 5/8 dials and 6/8 brain seeds, very variable), but receivers move toward signals at chance (49%) in every seed. Dial signal weights stay within neutral drift. Signals slightly lower the population (brain: 7/8 seeds). |
 
 ## Engine
 
@@ -94,15 +96,17 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 ## Next steps (suggested order)
 
 1. Move the simulation into a Web Worker so the UI stays smooth at 10× (the redesigned UI still runs the loop on the main thread). Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate at 10× with ~400 orbs).
-2. Signals: longer runs (50k+ ticks) and/or a reason to signal (e.g. kin nearby on food) before concluding they can't evolve meaning. Compare against `signalsEnabled=false` every time.
-3. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
-4. Snapshots and resume, then the always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above.
-5. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
-6. More openings for emergence: sexual breeding (planned; the UI should name colour groups in a way that scales to it), conflict between groups (deferred in `AGENTS.md`).
+2. Signals: give listeners a reason to respond (e.g. `sensingRadius` 2 so a signal reveals unseen food, or sparser, richer patches) and track the brain's own signal connections. Compare against `signalsEnabled=false` every time.
+3. Measure what mobility changed (merged untested together with regions and signals): compare `diagonalMoves`, `squeezeEnabled`, `leapEnabled` on/off on the 60×60 region world, especially blocked-move share and lean lows.
+4. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
+5. Snapshots and resume, then the always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above.
+6. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
+7. More openings for emergence: sexual breeding (planned; the UI should name colour groups in a way that scales to it), conflict between groups (deferred in `AGENTS.md`).
 
 ## Known issues
 
 - UI: no pinch-to-zoom yet (use the +/− buttons or the mouse wheel). Colour groups are fixed 30° hue buckets, so one family drifting across a bucket edge shows as two groups. Several lean regions are shown as compass codes (e.g. "Lean: NW, SW") to fit the peek strip. In landscape on a phone the world at 1× is small (the side panel takes ~40% of the width).
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
-- The inspector's dial weights are shown but inactive under the brain controller (it's labelled).
+- Fingerprints changed with the mobility merge and the new dial weight; record new ones (`npm run fingerprint`) before the next engine optimisation.
+- Mobility has its own branch's experiments; none were rerun after merging with regions, signals and the brain default.
