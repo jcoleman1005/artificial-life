@@ -1,0 +1,1 @@
+16 runs (8 seeds × 2 variants of plantsEnabled), 10000 ticks each, 3 workers
