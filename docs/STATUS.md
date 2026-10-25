@@ -104,6 +104,18 @@ S21 setup (the commands are in `docs/server.md`):
 
 If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 1 core, `cpuunits` 50 (yields under load), 512 MB RAM / 256 MB swap, 4 GB disk, `vmbr0`, Tailscale inside, a 30×30 world at about 5 ticks/s. Note the default world is now 60×60 (~2× the work of the old default); the 30×30 preset still exists for a slow host.
 
+## Goals (things we'd love to see emerge)
+
+Not targets to hardcode: conditions to build so they *can* happen, then watch.
+
+- **Colour groups becoming separate species** (2026-10-25). Today reproduction is asexual, so a colour group is just a big family and "species" has no meaning yet. Likely recipe, none of it built:
+  1. Different ways to make a living: two food types with a digestion trade-off, so groups in different regions are pushed apart (overlaps roadmap item 8).
+  2. Sexual reproduction: two adjacent organisms mate and the child mixes both parents' genes, colour included (roadmap item 14).
+  3. Who mates with whom: an evolved preference for partners of similar colour, and/or weaker or infertile offspring from parents too far apart genetically. Mixed offspring that are bad at both foods would make choosy mating pay.
+  4. Recognising species: group organisms by who can still interbreed (instead of fixed hue buckets), name them, colour by species, and log "a new species split off" events; later a family tree.
+
+  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Keep asexual reproduction as a setting. The build order is not yet agreed; the roadmap below is unchanged.
+
 ## Roadmap (agreed 2026-10-25; build in this order)
 
 There is no target outcome: new features go in on by default and the world is left to see what happens over time. Measuring a feature against a control is optional. Give each feature a performance budget checked with `npm run perf` (target ~500 organisms on the S21).

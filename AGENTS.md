@@ -1,7 +1,7 @@
 # Artificial Life Lab — Agent Instructions
 
 ## Goal
-Build a persistent artificial-life simulation, developed on Fedora and primarily viewed on a Samsung Galaxy S21 browser. The first milestone (a playable, mobile-friendly 2D grid simulation) is done, and the always-on server exists (`docs/server.md`); see `docs/STATUS.md` for what's next.
+Build a persistent artificial-life simulation, developed on Fedora and primarily viewed on a Samsung Galaxy S21 browser. The first milestone (a playable, mobile-friendly 2D grid simulation) is done, and the always-on server exists (`docs/server.md`); see `docs/STATUS.md` for what's next. A standing goal is to see colour groups split into separate species (`docs/STATUS.md`, Goals); build conditions for it, never the outcome.
 
 ## Scope
 Nothing is deferred. Any feature is fair game to suggest or build: predation, conflict between groups, sexual breeding and species, age, memory, lifetime learning, richer bodies, the always-on server, persistence, world branching, naturalistic rendering, and anything else. Suggest freely; agree larger changes with the user before building them, and record each decision under "Decisions already made". The agreed build order is the Roadmap in `docs/STATUS.md`.
