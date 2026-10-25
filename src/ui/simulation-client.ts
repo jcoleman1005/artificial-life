@@ -6,6 +6,7 @@ import type {
   FromWorker,
   OrganismView,
   PanelData,
+  SavedWorld,
   ToWorker,
   WorldView,
 } from '../sim/protocol';
@@ -20,6 +21,8 @@ export interface ClientEvents {
   reset(): void;
   /** New world events arrived (oldest first). */
   events(events: readonly WorldEvent[]): void;
+  /** Something the user asked for failed (e.g. loading a bad file). */
+  error(message: string): void;
 }
 
 /**
@@ -48,6 +51,7 @@ export class SimulationClient implements WorldView {
   public worldEvents: WorldEvent[] = [];
   private nextRequestId = 1;
   private readonly pendingCsv = new Map<number, (csv: string) => void>();
+  private readonly pendingSaves = new Map<number, (saved: SavedWorld) => void>();
   private readonly worker: Worker;
   private readonly events: ClientEvents;
 
@@ -89,6 +93,13 @@ export class SimulationClient implements WorldView {
       case 'csv':
         this.pendingCsv.get(message.requestId)?.(message.csv);
         this.pendingCsv.delete(message.requestId);
+        break;
+      case 'saved':
+        this.pendingSaves.get(message.requestId)?.(message.saved);
+        this.pendingSaves.delete(message.requestId);
+        break;
+      case 'error':
+        this.events.error(message.message);
         break;
     }
   }
@@ -150,6 +161,21 @@ export class SimulationClient implements WorldView {
       this.pendingCsv.set(requestId, resolve);
       this.send({ kind: 'csv', requestId });
     });
+  }
+
+  /** The whole world, ready to keep in the browser or write to a file. */
+  public save(): Promise<SavedWorld> {
+    const requestId = this.nextRequestId++;
+    return new Promise((resolve) => {
+      this.pendingSaves.set(requestId, resolve);
+      this.send({ kind: 'save', requestId });
+    });
+  }
+  /** Replace the world with a saved one; it arrives paused. */
+  public load(saved: SavedWorld): void {
+    this.selectedId = null;
+    this.selectedDetail = null;
+    this.send({ kind: 'load', saved });
   }
 
   // Reads

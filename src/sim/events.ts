@@ -51,8 +51,19 @@ export class WorldEventDetector {
   private crashed = false;
   private extinct = false;
 
+  /**
+   * Starts watching a world mid-run (e.g. a resumed save) without
+   * reporting what is already true, and keeps its earlier events.
+   */
+  public resume(world: World, earlier: readonly WorldEvent[]): void {
+    this.observe(world, true);
+    this.log.length = 0;
+    this.log.push(...earlier.slice(-EVENT_LOG_SIZE));
+    this.nextSeq = (earlier[earlier.length - 1]?.seq ?? 0) + 1;
+  }
+
   /** Call after every step (and once at start). Returns the events found this tick. */
-  public observe(world: World): WorldEvent[] {
+  public observe(world: World, silent = false): WorldEvent[] {
     const found: WorldEventBody[] = [];
     const { tick } = world;
 
@@ -128,6 +139,7 @@ export class WorldEventDetector {
       found.push({ kind: 'generation', generation: milestone });
     }
 
+    if (silent) return [];
     const events = found.map((body): WorldEvent => ({ ...body, seq: this.nextSeq++, tick }));
     this.log.push(...events);
     if (this.log.length > EVENT_LOG_SIZE) this.log.splice(0, this.log.length - EVENT_LOG_SIZE);

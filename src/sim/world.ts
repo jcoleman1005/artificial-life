@@ -20,7 +20,7 @@ import {
   mutatePolicy,
 } from './policy';
 import { computeWorldMetrics } from './metrics';
-import { MetricsHistory } from './history';
+import { MetricsHistory, type HistorySample } from './history';
 import { inheritTag } from './tags';
 import { regionSeasonAt, seasonAt } from './seasons';
 import {
@@ -32,6 +32,42 @@ import {
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain } from './brain';
+
+/**
+ * Everything needed to continue a world exactly where it was: settings,
+ * random number generator, counters, terrain, food and organisms (in their
+ * original order, which sensing tie-breaks depend on), plus the trend
+ * history. Plain data, safe to clone, store or turn into JSON.
+ */
+export interface WorldState {
+  readonly version: 1;
+  readonly config: SimulationConfig;
+  readonly prng: { readonly seed: number; readonly state: number };
+  readonly tick: number;
+  readonly nextOrganismSeq: number;
+  readonly counters: Readonly<Record<WorldCounter, number>>;
+  readonly obstacles: readonly string[];
+  readonly foodRegions: readonly FoodRegion[];
+  readonly foodPatches: readonly FoodPatch[];
+  readonly organisms: readonly Organism[];
+  readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
+}
+
+const WORLD_COUNTERS = [
+  'birthsTotal',
+  'deathsTotal',
+  'sharesTotal',
+  'kinSharesTotal',
+  'parentalSharesTotal',
+  'immigrantsTotal',
+  'signalsTotal',
+  'signalsOnFoodTotal',
+  'deceasedCount',
+  'deceasedLifespanSum',
+] as const;
+type WorldCounter = (typeof WORLD_COUNTERS)[number];
+
+const clone = <T>(value: T): T => structuredClone(value);
 
 export class World {
   public readonly config: SimulationConfig;
@@ -244,6 +280,50 @@ export class World {
       signalTick: -1,
       recentHistory: [],
     };
+  }
+
+  /**
+   * A copy of the full state (organisms keep only their latest decision,
+   * which is all the simulation and the page use).
+   */
+  public exportState(): WorldState {
+    return {
+      version: 1,
+      config: { ...this.config },
+      prng: { seed: this.prng.getSeed(), state: this.prng.getState() >>> 0 },
+      tick: this.tick,
+      nextOrganismSeq: this.nextOrganismSeq,
+      counters: Object.fromEntries(WORLD_COUNTERS.map((k) => [k, this[k]])) as Record<WorldCounter, number>,
+      obstacles: Array.from(this.obstacles),
+      foodRegions: this.foodRegions.map((r) => ({ ...r })),
+      foodPatches: Array.from(this.foodPatches.values(), (p) => ({ ...p })),
+      organisms: Array.from(this.organisms.values(), (o) => clone({ ...o, recentHistory: o.recentHistory.slice(0, 1) })),
+      history: this.history.exportState(),
+    };
+  }
+
+  /** A world that continues exactly from a saved state. */
+  public static fromState(state: WorldState): World {
+    if (state.version !== 1) throw new Error(`Unknown world state version ${String(state.version)}`);
+    const world = new World({ ...state.config, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0, foodRegionCount: 0 });
+    Object.assign(world.config, state.config);
+    world.prng.setSeed(state.prng.seed);
+    world.prng.setState(state.prng.state);
+    world.tick = state.tick;
+    world.nextOrganismSeq = state.nextOrganismSeq;
+    for (const k of WORLD_COUNTERS) world[k] = state.counters[k];
+    world.obstacles.clear();
+    for (const key of state.obstacles) world.obstacles.add(key);
+    world.foodRegions.length = 0;
+    world.foodRegions.push(...state.foodRegions.map((r) => ({ ...r })));
+    world.foodPatches.clear();
+    for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, { ...p });
+    world.organisms.clear();
+    for (const o of state.organisms) world.organisms.set(o.id, clone(o));
+    world.history.importState(state.history);
+    world.selectedOrganismId = null;
+    world.cachedMetrics = null;
+    return world;
   }
 
   /**

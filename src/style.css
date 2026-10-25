@@ -262,6 +262,67 @@ button {
 }
 
 /* Floating card for the selected organism */
+/* Short messages over the top of the world (resumed, saved, load errors) */
+.notice {
+  position: absolute;
+  top: calc(var(--safe-top) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(380px, calc(100% - 24px));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-glass);
+  border: 1px solid rgba(103, 232, 249, 0.35);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  font-size: 0.85rem;
+  z-index: 25;
+}
+
+.notice[hidden] {
+  display: none;
+}
+
+/* Below the organism card when both are showing */
+.org-card:not([hidden]) ~ .notice {
+  top: calc(var(--safe-top) + 88px);
+}
+
+.notice-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.notice-action {
+  min-height: 40px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: #67e8f9;
+  color: #0b1017;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notice-action[hidden] {
+  display: none;
+}
+
+.notice-close {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
 .org-card {
   position: absolute;
   top: calc(var(--safe-top) + 10px);
@@ -774,6 +835,52 @@ button {
 .setting-actions {
   display: flex;
   gap: 8px;
+}
+
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.setting-hint {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.branch-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.branch-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.branch-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.branch-text small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.btn-small-round {
+  width: 40px;
+  height: 40px;
+  font-size: 0.95rem;
 }
 
 .setting-actions .btn {

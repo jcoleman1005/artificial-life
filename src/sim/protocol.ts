@@ -19,6 +19,7 @@ import type {
   SimulationConfig,
   WorldMetrics,
 } from './types';
+import type { WorldState } from './world';
 
 /** What an organism did on its latest tick, as much as drawing needs. */
 export interface ActionView {
@@ -92,7 +93,28 @@ export type ToWorker =
   | { readonly kind: 'select'; readonly id: string | null }
   /** Which slow data the page is showing, so the worker only sends that. */
   | { readonly kind: 'panels'; readonly history: boolean; readonly heatmap: HeatmapKind | null }
-  | { readonly kind: 'csv'; readonly requestId: number };
+  | { readonly kind: 'csv'; readonly requestId: number }
+  /** Ask for the whole world as a SavedWorld. */
+  | { readonly kind: 'save'; readonly requestId: number }
+  /** Replace the world with a saved one (paused). */
+  | { readonly kind: 'load'; readonly saved: SavedWorld };
+
+/** A saved world, as kept in the browser or written to a file. */
+export interface SavedWorld {
+  readonly format: 'alife-world';
+  readonly version: 1;
+  /** When it was saved (ISO 8601). */
+  readonly savedAt: string;
+  readonly world: WorldState;
+  /** The event feed at the time, so it carries on after resuming. */
+  readonly events: readonly WorldEvent[];
+}
+
+/** Checks the outer shape of a loaded file before handing it to the worker. */
+export function isSavedWorld(value: unknown): value is SavedWorld {
+  const v = value as Partial<SavedWorld> | null;
+  return !!v && v.format === 'alife-world' && v.version === 1 && !!v.world && Array.isArray(v.events);
+}
 
 /** Terrain and settings: sent at start and after every reset. */
 export interface WorldStatic {
@@ -120,7 +142,10 @@ export type FromWorker =
       /** Present when panels are due (a few times a second, and after a step or selection). */
       readonly panels?: PanelData;
     }
-  | { readonly kind: 'csv'; readonly requestId: number; readonly csv: string };
+  | { readonly kind: 'csv'; readonly requestId: number; readonly csv: string }
+  | { readonly kind: 'saved'; readonly requestId: number; readonly saved: SavedWorld }
+  /** A load failed (bad or incompatible file); the current world is kept. */
+  | { readonly kind: 'error'; readonly message: string };
 
 export interface PanelData {
   readonly metrics: WorldMetrics;

@@ -1,5 +1,6 @@
 import type { ColorMode } from '../render/renderer';
 import type { FoodLayout, WorldSize } from '../sim/config';
+import type { SavedWorldInfo } from './saved-worlds';
 
 export interface PlaybackCallbacks {
   onPlayPause: () => void;
@@ -18,6 +19,12 @@ export interface SettingsCallbacks {
   /** World size and food layout restart the run with the current seed. */
   onWorldSizeChange: (size: WorldSize) => void;
   onFoodLayoutChange: (layout: FoodLayout) => void;
+  /** Saved worlds: branch points in this browser, and files. */
+  onBranch: () => void;
+  onGoToBranch: (key: string) => void;
+  onDeleteBranch: (key: string) => void;
+  onSaveFile: () => void;
+  onLoadFile: (file: File) => void;
 }
 
 export interface ExperimentToggles {
@@ -137,6 +144,16 @@ export class SettingsView {
         </div>
         <p id="sim-status" class="sim-status">Tick 0 · Paused</p>
       </section>
+      <section class="settings-group">
+        <h3>Saved worlds <small>this browser keeps your world and resumes it</small></h3>
+        <div class="setting-actions">
+          <button type="button" id="btn-branch" class="btn btn-secondary">Branch here</button>
+          <button type="button" id="btn-save-file" class="btn btn-secondary">Save to file</button>
+          <label class="btn btn-secondary file-btn">Load file<input type="file" id="input-load-file" accept=".json,application/json" hidden /></label>
+        </div>
+        <p class="setting-hint">A branch point saves this moment so you can come back and try something different.</p>
+        <ul id="branch-list" class="branch-list"></ul>
+      </section>
     `;
     this.attachEvents();
   }
@@ -144,6 +161,44 @@ export class SettingsView {
   public setSeed(seed: string | number): void {
     const input = this.container.querySelector<HTMLInputElement>('#input-seed');
     if (input) input.value = String(seed);
+  }
+
+  /** Shows the settings of a world that was loaded or reset. */
+  public setToggles(t: ExperimentToggles): void {
+    const set = (attr: string, value: string) => {
+      this.container.querySelectorAll<HTMLButtonElement>(`[data-${attr}]`).forEach((b) => {
+        const on = b.getAttribute(`data-${attr}`) === value;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', String(on));
+      });
+    };
+    set('world', t.worldSize);
+    set('food', t.foodLayout);
+    set('seasons', t.seasonsEnabled ? 'on' : 'off');
+    set('sharing', t.sharingEnabled ? 'on' : 'off');
+    set('signals', t.signalsEnabled ? 'on' : 'off');
+    set('controller', t.controller);
+  }
+
+  /** The list of branch points, newest first. */
+  public setBranches(branches: readonly SavedWorldInfo[]): void {
+    const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+    const list = this.container.querySelector<HTMLElement>('#branch-list')!;
+    const when = (iso: string) =>
+      new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    list.innerHTML =
+      branches.length === 0
+        ? '<li class="muted">No branch points yet.</li>'
+        : branches
+            .map(
+              (b) => `
+          <li>
+            <span class="branch-text"><strong>${esc(b.label)}</strong><small>${when(b.savedAt)} · ${b.population} alive</small></span>
+            <button type="button" class="btn btn-secondary btn-small" data-go-branch="${esc(b.key)}">Go</button>
+            <button type="button" class="round-btn btn-small-round" data-delete-branch="${esc(b.key)}" aria-label="Delete ${esc(b.label)}">✕</button>
+          </li>`
+            )
+            .join('');
   }
 
   /** Tick, run state, measured speed. */
@@ -182,5 +237,21 @@ export class SettingsView {
       if (e.key === 'Enter') reset();
     });
     this.container.querySelector('#btn-new-seed')!.addEventListener('click', () => cb.onNewSeed());
+
+    this.container.querySelector('#btn-branch')!.addEventListener('click', () => cb.onBranch());
+    this.container.querySelector('#btn-save-file')!.addEventListener('click', () => cb.onSaveFile());
+    const fileInput = this.container.querySelector<HTMLInputElement>('#input-load-file')!;
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (file) cb.onLoadFile(file);
+      fileInput.value = ''; // the same file can be picked again
+    });
+    this.container.querySelector('#branch-list')!.addEventListener('click', (e) => {
+      const target = e.target as Element;
+      const go = target.closest<HTMLElement>('[data-go-branch]');
+      if (go) cb.onGoToBranch(go.dataset.goBranch!);
+      const del = target.closest<HTMLElement>('[data-delete-branch]');
+      if (del) cb.onDeleteBranch(del.dataset.deleteBranch!);
+    });
   }
 }

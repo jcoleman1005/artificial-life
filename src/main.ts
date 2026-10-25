@@ -16,6 +16,10 @@ import { LEGEND_HTML } from './ui/legend';
 import { eventListHTML, latestEventHTML } from './ui/events-view';
 import type { OverlayMode } from './render/renderer';
 import { HEATMAP_KINDS, type HeatmapKind } from './sim/activity';
+import { isSavedWorld, type SavedWorld } from './sim/protocol';
+import type { SimulationConfig } from './sim/types';
+import type { ExperimentToggles } from './ui/controls';
+import { AUTOSAVE_KEY, deleteWorld, getWorld, infoFor, listBranches, putWorld } from './ui/saved-worlds';
 import { DEFAULT_CONFIG, FOOD_LAYOUTS, WORLD_SIZES } from './sim/config';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -55,6 +59,11 @@ app.innerHTML = `
         <button type="button" class="round-btn" data-zoom="out" aria-label="Zoom out">−</button>
       </div>
       <div id="playback" class="playback-pill" role="group" aria-label="Playback"></div>
+      <div class="notice" role="status" hidden>
+        <span class="notice-text"></span>
+        <button type="button" class="notice-action" hidden></button>
+        <button type="button" class="notice-close" aria-label="Dismiss">✕</button>
+      </div>
     </section>
 
     <aside class="sheet" data-tab="stats" aria-label="Details">
@@ -115,14 +124,22 @@ const sim = new SimulationClient({
   beforeFrame: () => renderer.rememberPositions(),
   frame: (fromStep) => onFrame(fromStep),
   reset: () => {
+    // A fresh or loaded world: its settings may differ from the controls.
+    isRunning = false;
+    pill.setRunning(false);
+    settingsView.setToggles(togglesFor(sim.config));
+    settingsView.setSeed(sim.config.seed);
+    historyView.setController(sim.config.controller);
     renderer.resize();
     renderer.clearMotion();
     layout();
     refreshPanels();
+    scheduleAutosave();
   },
   events: () => {
     // Shown by the next panel refresh (straight away while paused).
   },
+  error: (message) => showNotice(message),
 });
 const renderer = new CanvasRenderer(canvas, sim);
 
@@ -264,7 +281,10 @@ const pill = new PlaybackPill($('#playback'), {
     isRunning = !isRunning;
     pill.setRunning(isRunning);
     if (isRunning) sim.play();
-    else sim.pause(); // the worker answers with a frame that settles mid-glide positions
+    else {
+      sim.pause(); // the worker answers with a frame that settles mid-glide positions
+      void autosave();
+    }
     refreshPanels();
   },
   onStep: () => sim.step(), // the frame it sends back glides over STEP_ANIMATION_MS
@@ -310,6 +330,11 @@ const settingsView = new SettingsView(
       settingsView.setSeed(newSeed);
       restart(newSeed);
     },
+    onBranch: () => void branchHere(),
+    onGoToBranch: (key) => void goToBranch(key),
+    onDeleteBranch: (key) => void removeBranch(key),
+    onSaveFile: () => void saveToFile(),
+    onLoadFile: (file) => void loadFromFile(file),
   }
 );
 
@@ -492,7 +517,10 @@ function setSettingsOpen(open: boolean): void {
   if (open) $('.settings-close').focus();
   else settingsButton.focus();
 }
-settingsButton.addEventListener('click', () => setSettingsOpen(true));
+settingsButton.addEventListener('click', () => {
+  setSettingsOpen(true);
+  void refreshBranches();
+});
 $('.settings-close').addEventListener('click', () => setSettingsOpen(false));
 $('.settings-backdrop').addEventListener('click', () => setSettingsOpen(false));
 
@@ -544,7 +572,152 @@ layoutObserver.observe(stage);
 layoutObserver.observe($('.sheet-peek'));
 window.addEventListener('orientationchange', () => layout());
 
+// 8. Notices: short messages over the top of the world, with an optional action.
+const notice = $('.notice');
+const noticeText = $('.notice-text');
+const noticeAction = $<HTMLButtonElement>('.notice-action');
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+let noticeRun: (() => void) | null = null;
+function showNotice(text: string, action?: { label: string; run: () => void }, ms = 8000): void {
+  noticeText.textContent = text;
+  noticeRun = action?.run ?? null;
+  noticeAction.hidden = !action;
+  noticeAction.textContent = action?.label ?? '';
+  notice.hidden = false;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => (notice.hidden = true), ms);
+}
+noticeAction.addEventListener('click', () => {
+  notice.hidden = true;
+  noticeRun?.();
+});
+$('.notice-close').addEventListener('click', () => (notice.hidden = true));
+
+// 9. Saved worlds. The browser keeps one auto-save, resumed when the app
+// opens, plus branch points to jump back to; files move worlds between
+// devices. Auto-saves run every few minutes while playing, on pause, and
+// when the page is hidden. Nothing is auto-saved until the resume check is
+// done, so the starting world never overwrites the save it would resume.
+const AUTOSAVE_EVERY_MS = 2 * 60 * 1000;
+let autosaveReady = false;
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+function togglesFor(config: SimulationConfig): ExperimentToggles {
+  return {
+    sharingEnabled: config.sharingEnabled,
+    signalsEnabled: config.signalsEnabled,
+    seasonsEnabled: config.seasonLength > 0,
+    controller: config.controller,
+    worldSize: config.gridWidth <= WORLD_SIZES.small.gridWidth ? 'small' : 'large',
+    foodLayout: config.foodRegionCount === 0 ? 'anywhere' : config.staggeredSeasons ? 'shifting' : 'regions',
+  };
+}
+
+async function autosave(): Promise<void> {
+  if (!autosaveReady) return;
+  const saved = await sim.save();
+  await putWorld(infoFor(AUTOSAVE_KEY, 'auto', 'Auto-save', saved), saved);
+}
+
+/** Saves soon (after a reset or load settles). */
+function scheduleAutosave(): void {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => void autosave(), 1000);
+}
+
+setInterval(() => {
+  if (isRunning) void autosave();
+}, AUTOSAVE_EVERY_MS);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') void autosave();
+});
+
+/** Replaces the world with a saved one (paused). */
+function loadSaved(saved: SavedWorld): void {
+  isRunning = false;
+  pill.setRunning(false);
+  lastSelectedId = null;
+  lastSelectedSnapshot = null;
+  lastSelectedDetail = null;
+  sim.load(saved);
+}
+
+async function refreshBranches(): Promise<void> {
+  settingsView.setBranches(await listBranches());
+}
+
+async function branchHere(): Promise<void> {
+  const saved = await sim.save();
+  const key = `branch-${Date.now()}`;
+  const label = `Tick ${saved.world.tick} · seed ${String(saved.world.config.seed)}`;
+  const ok = await putWorld(infoFor(key, 'branch', label, saved), saved);
+  showNotice(ok ? `Branch point saved: ${label}` : 'Could not save in this browser (storage unavailable or full).');
+  await refreshBranches();
+}
+
+async function goToBranch(key: string): Promise<void> {
+  const saved = await getWorld(key);
+  if (!saved) {
+    showNotice('That branch point could not be read.');
+    return;
+  }
+  const ok = window.confirm(
+    `Go back to tick ${saved.world.tick}? The current world (tick ${sim.tick}) will be replaced. Branch it first if you want to come back to it.`
+  );
+  if (!ok) return;
+  loadSaved(saved);
+  setSettingsOpen(false);
+  showNotice(`Back at the branch point: tick ${saved.world.tick}`);
+}
+
+async function removeBranch(key: string): Promise<void> {
+  if (!window.confirm('Delete this branch point? This cannot be undone.')) return;
+  await deleteWorld(key);
+  await refreshBranches();
+}
+
+async function saveToFile(): Promise<void> {
+  const saved = await sim.save();
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(saved)], { type: 'application/json' }));
+  link.download = `alife-world-seed-${String(saved.world.config.seed)}-tick-${saved.world.tick}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+async function loadFromFile(file: File): Promise<void> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await file.text());
+  } catch {
+    showNotice('That file is not a saved world (it could not be read as JSON).');
+    return;
+  }
+  if (!isSavedWorld(parsed)) {
+    showNotice('That file is not a saved world from this app.');
+    return;
+  }
+  loadSaved(parsed);
+  setSettingsOpen(false);
+  showNotice(`Loaded tick ${parsed.world.tick} from ${file.name}`);
+}
+
+/** On open: resume the auto-saved world, if there is one. */
+async function resumeOnOpen(): Promise<void> {
+  const saved = await getWorld(AUTOSAVE_KEY);
+  if (saved && isSavedWorld(saved) && saved.world.tick > 0) {
+    loadSaved(saved);
+    const when = new Date(saved.savedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    showNotice(`Resumed at tick ${saved.world.tick} (saved ${when})`, {
+      label: 'Start fresh',
+      run: () => restart(saved.world.config.seed),
+    });
+  }
+  autosaveReady = true;
+}
+
 layout();
 refreshPanels();
 renderer.render();
 requestAnimationFrame(loop);
+void resumeOnOpen();

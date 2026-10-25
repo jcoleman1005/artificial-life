@@ -131,6 +131,16 @@ export class MetricsHistory {
     this.interval = 1;
   }
 
+  /** Plain data for a snapshot. */
+  public exportState(): { samples: HistorySample[]; interval: number } {
+    return { samples: [...this.samples], interval: this.interval };
+  }
+
+  public importState(state: { samples: readonly HistorySample[]; interval: number }): void {
+    this.samples = [...state.samples];
+    this.interval = state.interval;
+  }
+
   /** Whether a sample is due at this tick (so callers can skip computing metrics). */
   public wantsSample(tick: number): boolean {
     if (tick % this.interval !== 0) return false;

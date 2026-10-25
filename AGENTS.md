@@ -46,7 +46,10 @@ Nothing is deferred. Any feature is fair game to suggest or build: predation, co
 - Use a dedicated seeded PRNG in simulation code; do not use Math.random() for simulation outcomes.
 - Metrics remain separate: survival, reproductive success, and behavioral diversity.
 - Keep simulation logic independent from Canvas rendering and UI. The simulation runs in a Web Worker (`SimulationHost`); the page talks to it only through the messages in `src/sim/protocol.ts`, and reads the world through `WorldView`/`OrganismView`.
-- Planned: snapshots, resume, branching experiments, and server-side persistence.
+- Observers watch the world after each tick and never change it (no randomness, no writes): `WorldEventDetector` (world events: region seasons turning, colour groups rising to 10+, dying out or taking the lead, population records in steps of 100, crashes below half the recent peak, extinction, generation milestones every 25) and `ActivityMaps` (fading heatmaps of blocked moves, deaths and meals). The feed shows world events only: one line under the peek strip and a list in the Stats tab.
+- Overlays over the world, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
+- Snapshots: `World.exportState()` / `World.fromState()` save and restore a world exactly (settings, PRNG seed and state, counters, terrain, food, organisms in their original order, trend history); a restored world continues bit-identically. A `SavedWorld` (format `alife-world`, version 1) wraps it with the event feed. The browser keeps one auto-save (every 2 minutes while running, on pause, when hidden) and resumes it automatically on open, with a "Start fresh" option; branch points are saved worlds you can jump back to; files move worlds between devices. Bump the version when the state's shape changes.
+- Planned: server-side persistence.
 
 ## Working notes
 - Read `docs/STATUS.md` at the start of a session and update it at the end: current state, findings, next steps.

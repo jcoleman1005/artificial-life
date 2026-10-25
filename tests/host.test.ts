@@ -120,4 +120,30 @@ describe('Simulation host (the Web Worker side)', () => {
     expect(csv.requestId).toBe(3);
     expect(csv.csv.split('\n')[0]).toContain('tick');
   });
+
+  it('saves and loads a world: a loaded save carries on exactly like the original', () => {
+    const { env, posted, frames } = fakeEnv();
+    const host = new SimulationHost(env, SMALL);
+    for (let i = 0; i < 40; i++) host.handle({ kind: 'step' });
+    host.handle({ kind: 'save', requestId: 9 });
+    const saved = (posted.at(-1) as Extract<FromWorker, { kind: 'saved' }>).saved;
+    expect(saved).toMatchObject({ format: 'alife-world', version: 1, world: { tick: 40 } });
+    for (let i = 0; i < 25; i++) host.handle({ kind: 'step' });
+    const after65 = frames().at(-1)!;
+
+    host.handle({ kind: 'load', saved: JSON.parse(JSON.stringify(saved)) });
+    expect(host.world.tick).toBe(40);
+    expect(posted.at(-2)).toMatchObject({ kind: 'static' });
+    for (let i = 0; i < 25; i++) host.handle({ kind: 'step' });
+    expect(frames().at(-1)!.organisms).toEqual(after65.organisms);
+  });
+
+  it('keeps the current world when a save cannot be loaded', () => {
+    const { env, posted } = fakeEnv();
+    const host = new SimulationHost(env, SMALL);
+    host.handle({ kind: 'step' });
+    host.handle({ kind: 'load', saved: { format: 'alife-world', version: 1, savedAt: '', world: { version: 7 } as never, events: [] } });
+    expect(posted.at(-1)).toMatchObject({ kind: 'error' });
+    expect(host.world.tick).toBe(1);
+  });
 });

@@ -41,7 +41,10 @@ _Last updated: 2026-10-25._
   - Generated names (`src/ui/names.ts`): a given name from the organism id plus a family name shared by its lineage. Display only; simulation ids are unchanged.
   - Colour groups (`src/ui/groups.ts`): organisms bucketed into twelve 30° tag-hue groups ("groups", not species). Display only.
   - Settings sheet (gear in the peek strip): World (size, food layout, seasons), Behaviour (sharing, signals, controller), Display (colour by tag/family), Run (seed, Reset, New seed, status).
-- 111 deterministic tests.
+- World events feed (seasons per region, colour groups rising / dying out / taking the lead, population records and crashes, extinction, generation milestones): latest event under the peek strip, recent events in the Stats tab.
+- Layers button over the world (one at a time): Family (lineage lit, others dimmed, lines to parent and children), Senses & signals (sight square, signal reach, signal ripples), Trails, and Crowding / Deaths / Feeding heatmaps (counted in the worker every tick, fading with a ~140-tick half-life).
+- Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
+- 124 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -101,8 +104,8 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 **Phase 0: finish what's in flight, then foundations**
 1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
 2. Mobility check: add the mobility session's results to the findings table, then check the abilities on the merged 60×60 region world with the brain default (which abilities spread, blocked-move share, lean lows).
-3. Event log (a fixed-size buffer in the simulation, sent to the page in batches) and overlay layers. The tap-to-follow card already exists.
-4. Snapshots and resume, including the PRNG state, then fork (a null fork must reproduce exactly). Split-screen comes later, if at all; `npm run experiment` already does paired A/B runs.
+3. ~~Event log and overlay layers.~~ Done 2026-10-25 (world events only; overlays one at a time).
+4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files. Not yet: `npm run experiment -- --from saved.json` (every variant run from the same evolved state); split-screen, if at all.
 
 **Phase 1: cheap, high payoff**
 5. Dispersal gene (changes the "born adjacent" rule; record it in `AGENTS.md`). Measure blocked-move share and kin clustering against dispersal off.

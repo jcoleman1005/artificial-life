@@ -1,4 +1,5 @@
 import { World } from './world';
+import type { SavedWorld } from './protocol';
 import { WorldEventDetector, type WorldEvent } from './events';
 import { ActivityMaps, type HeatmapKind } from './activity';
 import { toOrganismView, type FromWorker, type PanelData, type ToWorker } from './protocol';
@@ -24,7 +25,7 @@ export interface HostEnvironment {
  * exactly those of stepping a World by hand with the same seed.
  */
 export class SimulationHost {
-  public readonly world: World;
+  public world: World;
   private readonly env: HostEnvironment;
   private running = false;
   private ticksPerSecond = 6;
@@ -105,6 +106,12 @@ export class SimulationHost {
       case 'csv':
         this.env.post({ kind: 'csv', requestId: message.requestId, csv: this.world.history.toCSV() });
         break;
+      case 'save':
+        this.env.post({ kind: 'saved', requestId: message.requestId, saved: this.save() });
+        break;
+      case 'load':
+        this.load(message.saved);
+        break;
     }
   }
 
@@ -125,6 +132,37 @@ export class SimulationHost {
     }
     if (stepped > 0) this.postFrame(false, now - this.lastPanels >= PANEL_INTERVAL_MS);
     this.scheduleNext();
+  }
+
+  private save(): SavedWorld {
+    return {
+      format: 'alife-world',
+      version: 1,
+      savedAt: new Date().toISOString(),
+      world: this.world.exportState(),
+      events: [...this.events.recentEvents()],
+    };
+  }
+
+  /** Replaces the world with a saved one, paused. A bad save leaves the current world running. */
+  private load(saved: SavedWorld): void {
+    let world: World;
+    try {
+      world = World.fromState(saved.world);
+    } catch (error) {
+      this.env.post({ kind: 'error', message: `Could not load that world: ${(error as Error).message}` });
+      return;
+    }
+    this.running = false;
+    this.stopTimer();
+    this.world = world;
+    this.events = new WorldEventDetector();
+    this.events.resume(world, saved.events);
+    this.activity = new ActivityMaps(world.config.gridWidth, world.config.gridHeight);
+    this.pendingEvents = [];
+    this.tickTimes.length = 0;
+    this.postStatic();
+    this.postFrame(false, true);
   }
 
   /** One world tick, then the observers look at the result. */
