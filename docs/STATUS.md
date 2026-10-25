@@ -127,6 +127,16 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 16. "While you were away" digest (in the app; no push notifications).
 17. Ethogram, live phylogeny tree, replay scrubber.
 
+## Future ideas (not scheduled)
+
+**Use the domain `jcoleman.us`.** Nothing on the roadmap needs it yet.
+- **Static hosting now:** since the Web Worker change the whole app runs in the browser, so `npm run build` output can be served from a subdomain (e.g. `alife.jcoleman.us`) on Cloudflare Pages, GitHub Pages or Netlify, redeployed on every push to `main`. No Fedora dev server needed to use it on the S21.
+- **Installable app:** with HTTPS it can be added to the home screen as a PWA (full screen, no browser bar); a small service worker could make it work offline.
+- **Always-on server later:** point the subdomain at the server through Cloudflare Tunnel (outbound only, no router ports; Cloudflare Access can add a login if DNS is on Cloudflare) or Tailscale Funnel.
+- **Sharing:** a public link should be watch-only, with controls (reset, settings) behind a login.
+- **Cautions:** never expose `npm run dev` publicly; keep tunnel tokens, API keys and DNS credentials out of the repo.
+- **To decide first:** where the domain's DNS is managed (Cloudflare, the registrar, elsewhere).
+
 ## Known issues
 
 - UI: no pinch-to-zoom yet (use the +/− buttons or the mouse wheel). Colour groups are fixed 30° hue buckets, so one family drifting across a bucket edge shows as two groups. Several lean regions are shown as compass codes (e.g. "Lean: NW, SW") to fit the peek strip. In landscape on a phone the world at 1× is small (the side panel takes ~40% of the width).
