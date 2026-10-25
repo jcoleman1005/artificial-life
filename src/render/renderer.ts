@@ -1,5 +1,5 @@
-import type { FoodPatch, Organism } from '../sim/types';
-import type { World } from '../sim/world';
+import type { FoodPatch } from '../sim/types';
+import type { OrganismView, WorldView } from '../sim/protocol';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
@@ -52,7 +52,7 @@ const easeInOut = (p: number) => p * p * (3 - 2 * p);
 export class CanvasRenderer {
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
-  private world: World;
+  private world: WorldView;
   private width = 360;
   private height = 360;
   private insets: ViewInsets = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -73,7 +73,7 @@ export class CanvasRenderer {
   private following = true;
   private zoomAnimation: { from: number; to: number; start: number } | null = null;
 
-  constructor(canvas: HTMLCanvasElement, world: World) {
+  constructor(canvas: HTMLCanvasElement, world: WorldView) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) {
@@ -84,7 +84,7 @@ export class CanvasRenderer {
     this.resize();
   }
 
-  public setWorld(world: World): void {
+  public setWorld(world: WorldView): void {
     this.world = world;
   }
 
@@ -92,7 +92,7 @@ export class CanvasRenderer {
     this.colorMode = mode;
   }
 
-  public hueOf(org: Organism): number {
+  public hueOf(org: OrganismView): number {
     return this.colorMode === 'tag' ? org.tag : lineageHue(org.lineage.id);
   }
 
@@ -197,7 +197,7 @@ export class CanvasRenderer {
   }
 
   /** Pixel centre of an organism, part-way along its latest move. */
-  private displayCentre(org: Organism): [number, number] {
+  private displayCentre(org: OrganismView): [number, number] {
     const { cellSize } = this;
     let gx = org.x;
     let gy = org.y;
@@ -211,7 +211,7 @@ export class CanvasRenderer {
   }
 
   /** Screen position (CSS px, relative to the canvas) of an organism. */
-  public screenPositionOf(org: Organism): { x: number; y: number } {
+  public screenPositionOf(org: OrganismView): { x: number; y: number } {
     const [x, y] = this.displayCentre(org);
     return { x: x - this.viewX, y: y - this.viewY };
   }
@@ -467,7 +467,7 @@ export class CanvasRenderer {
     ctx.fill();
   }
 
-  private drawSelection(org: Organism): void {
+  private drawSelection(org: OrganismView): void {
     const { ctx, cellSize } = this;
     const [cx, cy] = this.displayCentre(org);
     const r = Math.max(5, cellSize * 0.62);
@@ -483,7 +483,7 @@ export class CanvasRenderer {
     ctx.stroke();
   }
 
-  private drawOrganism(org: Organism, detail: number): void {
+  private drawOrganism(org: OrganismView, detail: number): void {
     const { ctx, cellSize } = this;
     const [cx, cy] = this.displayCentre(org);
     const maxEnergy = this.world.config.maxEnergy;

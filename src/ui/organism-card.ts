@@ -1,10 +1,11 @@
-import type { Organism, SimulationConfig } from '../sim/types';
+import type { SimulationConfig } from '../sim/types';
+import type { OrganismView } from '../sim/protocol';
 import { organismName } from './names';
 
 const DIRECTION: Record<string, string> = { NORTH: 'north', SOUTH: 'south', EAST: 'east', WEST: 'west' };
 
 /** Plain-language summary of what an organism did on its latest tick. */
-export function describeDoing(org: Organism, nameOf: (id: string) => string | null, alive = true): string {
+export function describeDoing(org: OrganismView, nameOf: (id: string) => string | null, alive = true): string {
   if (!alive) return 'Died';
   const last = org.recentHistory[0];
   if (!last) return org.age === 0 ? 'Just born' : 'Waiting';
@@ -83,7 +84,7 @@ export class OrganismCard {
   }
 
   public render(
-    org: Organism,
+    org: OrganismView,
     hue: number,
     config: SimulationConfig,
     nameOf: (id: string) => string | null,

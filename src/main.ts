@@ -1,6 +1,7 @@
 import './style.css';
-import { World } from './sim/world';
 import type { Organism } from './sim/types';
+import type { OrganismView } from './sim/protocol';
+import { SimulationClient } from './ui/simulation-client';
 import { CanvasRenderer } from './render/renderer';
 import { MetricsView } from './ui/metrics-view';
 import { PlaybackPill, SettingsView } from './ui/controls';
@@ -83,10 +84,20 @@ const canvas = $<HTMLCanvasElement>('#sim-canvas');
 const stage = $('.stage');
 const sheetEl = $('.sheet');
 
-// 1. World and renderer
+// 1. The simulation runs in a Web Worker (src/sim/worker.ts); `sim` mirrors
+// what the page draws and sends it commands.
 const initialSeed = 42;
-const world = new World({ seed: initialSeed });
-const renderer = new CanvasRenderer(canvas, world);
+const sim = new SimulationClient({
+  beforeFrame: () => renderer.rememberPositions(),
+  frame: (fromStep) => onFrame(fromStep),
+  reset: () => {
+    renderer.resize();
+    renderer.clearMotion();
+    layout();
+    refreshPanels();
+  },
+});
+const renderer = new CanvasRenderer(canvas, sim);
 
 // 2. Views
 const metricsView = new MetricsView($('#metrics-container'));
@@ -94,20 +105,24 @@ const groupsContainer = $('#groups-container');
 const statsStatus = $('#stats-status');
 const peekView = new PeekView($('.sheet-peek'));
 let lastSelectedId: string | null = null;
-let lastSelectedSnapshot: Organism | null = null;
+// Last known state of the selected organism, kept to show it after it dies.
+let lastSelectedSnapshot: OrganismView | null = null;
+let lastSelectedDetail: Organism | null = null;
 
-const nameOf = (id: string): string | null => (world.getOrganism(id) ? givenName(id) : null);
+const nameOf = (id: string): string | null => (sim.organisms.has(id) ? givenName(id) : null);
 
 const inspectorView = new InspectorView($('#inspector-container'), () => deselect());
 const historyView = new HistoryView($('#history-container'), () => {
-  const csv = world.history.toCSV();
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-  link.download = `alife-seed-${world.config.seed}-tick-${world.tick}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  const name = `alife-seed-${sim.config.seed}-tick-${sim.tick}.csv`;
+  void sim.requestCSV().then((csv) => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
 });
-historyView.setController(world.config.controller);
+historyView.setController(sim.config.controller);
 
 const card = new OrganismCard(
   $('#org-card'),
@@ -117,19 +132,30 @@ const card = new OrganismCard(
 
 const sheet = new BottomSheet(sheetEl, () => {
   layout();
+  updateHistoryWanted();
   refreshPanels();
 });
 
-// 3. Playback loop state
+/** History samples are only sent while the Trends tab is showing. */
+let historyWanted = false;
+function updateHistoryWanted(): void {
+  const wanted = sheet.isContentVisible() && sheet.getTab() === 'trends';
+  if (wanted !== historyWanted) {
+    historyWanted = wanted;
+    sim.setWantsHistory(wanted);
+  }
+}
+
+// 3. Playback state. The worker keeps time and runs the ticks; the page only
+// draws each frame it sends, gliding organisms over the time until the next.
 let isRunning = false;
 let speedMultiplier = 1;
 const BASE_TICKS_PER_SECOND = 6;
-let lastTimestamp = performance.now();
-let tickAccumulator = 0;
 
-// Smooth movement for single steps while paused.
+// Glide from the previous frame's positions over this long.
 const STEP_ANIMATION_MS = 250;
-let stepAnimationStart: number | null = null;
+let frameAt = 0;
+let glideMs = 0;
 
 // The text panels are rebuilt from HTML, so while running they refresh at a
 // modest rate; the canvas still redraws every frame.
@@ -137,45 +163,46 @@ const PANEL_REFRESH_MS = 200;
 let lastPanelRefresh = 0;
 let needsRender = true;
 
-// Rolling window of recent tick timestamps, for the measured ticks/s readout.
-const recentTickTimes: number[] = [];
+function onFrame(fromStep: boolean): void {
+  frameAt = performance.now();
+  glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? Math.max(1000 / (BASE_TICKS_PER_SECOND * speedMultiplier), 16) : 0;
+  needsRender = true;
+  if (!isRunning) refreshPanels();
+}
 
 function statusText(): string {
-  const now = performance.now();
-  while (recentTickTimes.length > 0 && now - recentTickTimes[0] > 1000) {
-    recentTickTimes.shift();
-  }
   let state: string;
   if (isRunning) {
     const target = BASE_TICKS_PER_SECOND * speedMultiplier;
-    state = `Running ${speedMultiplier}× · ${recentTickTimes.length}/${target} ticks/s`;
+    state = `Running ${speedMultiplier}× · ${sim.ticksPerSecond}/${target} ticks/s`;
   } else {
-    state = world.tick === 0 ? 'Paused · press play or step' : 'Paused';
+    state = sim.tick === 0 ? 'Paused · press play or step' : 'Paused';
   }
-  return `Tick ${world.tick} · ${state} · seed ${world.config.seed}`;
+  return `Tick ${sim.tick} · ${state} · seed ${sim.config.seed}`;
 }
 
-/** Selected organism, or its last snapshot if it has just died. */
-function selectedForDisplay(): { org: Organism; alive: boolean } | null {
-  const selected = world.getSelectedOrganism();
+/** Selected organism (light record for the card, full record for the inspector), or its last state if it just died. */
+function selectedForDisplay(): { org: OrganismView; detail: Organism | null; alive: boolean } | null {
+  const selected = sim.getSelectedOrganism();
   if (selected) {
     lastSelectedSnapshot = selected;
-    return { org: selected, alive: true };
+    lastSelectedDetail = sim.getSelectedDetail() ?? lastSelectedDetail;
+    return { org: selected, detail: lastSelectedDetail, alive: true };
   }
-  if (lastSelectedId && lastSelectedSnapshot) return { org: lastSelectedSnapshot, alive: false };
+  if (lastSelectedId && lastSelectedSnapshot) return { org: lastSelectedSnapshot, detail: lastSelectedDetail, alive: false };
   return null;
 }
 
 function refreshPanels(): void {
-  const groups = colourGroups(world.organisms.values());
-  const population = world.organisms.size;
-  peekView.render(population, seasonSummary(world.tick, world.foodRegions, world.config), groups);
-  pill.setTick(world.tick);
+  const groups = colourGroups(sim.organisms.values());
+  const population = sim.organisms.size;
+  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config), groups);
+  pill.setTick(sim.tick);
   const status = statusText();
   settingsView.setStatus(status);
 
   const shown = selectedForDisplay();
-  if (shown) card.render(shown.org, renderer.hueOf(shown.org), world.config, nameOf, shown.alive);
+  if (shown) card.render(shown.org, renderer.hueOf(shown.org), sim.config, nameOf, shown.alive);
   else card.hide();
 
   // Only the visible tab is rebuilt.
@@ -183,45 +210,31 @@ function refreshPanels(): void {
     const tab = sheet.getTab();
     if (tab === 'stats') {
       if (statsStatus.textContent !== status) statsStatus.textContent = status;
-      metricsView.render(world.getMetrics());
+      const metrics = sim.getMetrics();
+      if (metrics) metricsView.render(metrics);
       groupsContainer.innerHTML = groupsTableHTML(groups, population);
     } else if (tab === 'trends') {
-      historyView.render(world.history.getSamples());
+      historyView.render(sim.getHistorySamples());
     } else {
-      inspectorView.render(
-        shown ? (shown.alive ? shown.org : { ...shown.org, energy: 0 }) : undefined,
-        world.config,
-        nameOf
-      );
+      const detail = shown?.detail;
+      inspectorView.render(detail ? (shown.alive ? detail : { ...detail, energy: 0 }) : undefined, sim.config, nameOf);
     }
   }
   lastPanelRefresh = performance.now();
-}
-
-function stepSimulation(): void {
-  renderer.rememberPositions();
-  world.step();
-  recentTickTimes.push(performance.now());
 }
 
 const pill = new PlaybackPill($('#playback'), {
   onPlayPause: () => {
     isRunning = !isRunning;
     pill.setRunning(isRunning);
-    lastTimestamp = performance.now();
-    tickAccumulator = 0;
-    recentTickTimes.length = 0;
+    if (isRunning) sim.play();
+    else sim.pause(); // the worker answers with a frame that settles mid-glide positions
     refreshPanels();
-    needsRender = true; // settle mid-glide positions when pausing
   },
-  onStep: () => {
-    stepSimulation();
-    refreshPanels();
-    stepAnimationStart = performance.now(); // the loop draws the glide
-  },
+  onStep: () => sim.step(), // the frame it sends back glides over STEP_ANIMATION_MS
   onSpeedChange: (speed) => {
     speedMultiplier = speed;
-    recentTickTimes.length = 0;
+    sim.setSpeed(BASE_TICKS_PER_SECOND * speed);
     refreshPanels();
   },
 });
@@ -230,47 +243,32 @@ const settingsView = new SettingsView(
   $('#settings-container'),
   initialSeed,
   {
-    sharingEnabled: world.config.sharingEnabled,
-    signalsEnabled: world.config.signalsEnabled,
-    seasonsEnabled: world.config.seasonLength > 0,
-    controller: world.config.controller,
+    sharingEnabled: sim.config.sharingEnabled,
+    signalsEnabled: sim.config.signalsEnabled,
+    seasonsEnabled: sim.config.seasonLength > 0,
+    controller: sim.config.controller,
     worldSize: 'large',
     foodLayout: 'shifting',
   },
   {
     onReset: (seed) => restart(seed),
-    onWorldSizeChange: (size) => {
-      Object.assign(world.config, WORLD_SIZES[size]);
-      renderer.resize();
-      restart(world.config.seed);
-    },
-    onFoodLayoutChange: (layout) => {
-      Object.assign(world.config, FOOD_LAYOUTS[layout]);
-      restart(world.config.seed);
-    },
+    // These need a fresh world; the renderer resizes when the new terrain arrives.
+    onWorldSizeChange: (size) => restart(sim.config.seed, WORLD_SIZES[size]),
+    onFoodLayoutChange: (layout) => restart(sim.config.seed, FOOD_LAYOUTS[layout]),
     onColorModeChange: (mode) => {
       renderer.setColorMode(mode);
       refreshPanels();
       needsRender = true;
     },
-    onSharingChange: (enabled) => {
-      // Takes effect from the next tick; use Reset to rerun a seed from the start.
-      world.config.sharingEnabled = enabled;
-    },
-    onSignalsChange: (enabled) => {
-      world.config.signalsEnabled = enabled;
-    },
+    // Live switches take effect from the next tick; use Reset to rerun a seed from the start.
+    onSharingChange: (enabled) => sim.setConfig({ sharingEnabled: enabled }),
+    onSignalsChange: (enabled) => sim.setConfig({ signalsEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
-      world.config.controller = controller;
+      sim.setConfig({ controller });
       historyView.setController(controller);
-      refreshPanels();
     },
-    onSeasonsChange: (enabled) => {
-      world.config.seasonLength = enabled ? DEFAULT_CONFIG.seasonLength : 0;
-      refreshPanels();
-      needsRender = true;
-    },
+    onSeasonsChange: (enabled) => sim.setConfig({ seasonLength: enabled ? DEFAULT_CONFIG.seasonLength : 0 }),
     onNewSeed: () => {
       const newSeed = Math.floor(Math.random() * 900000 + 100000);
       settingsView.setSeed(newSeed);
@@ -279,24 +277,21 @@ const settingsView = new SettingsView(
   }
 );
 
-/** Stops and restarts the world from tick 0 with the given seed. */
-function restart(seed: string | number): void {
+/** Stops and restarts the world from tick 0 with the given seed (and settings needing a fresh world). */
+function restart(seed: string | number, config?: Partial<typeof sim.config>): void {
   isRunning = false;
   pill.setRunning(false);
-  world.reset(seed);
-  renderer.clearMotion();
-  world.selectOrganism(null);
+  sim.reset(seed, config);
   lastSelectedId = null;
   lastSelectedSnapshot = null;
-  recentTickTimes.length = 0;
-  refreshPanels();
-  needsRender = true;
+  lastSelectedDetail = null;
 }
 
-function select(org: Organism): void {
-  world.selectOrganism(org.id);
+function select(org: OrganismView): void {
+  sim.select(org.id);
   lastSelectedId = org.id;
   lastSelectedSnapshot = org;
+  lastSelectedDetail = null;
   if (renderer.getZoom() < 3) setZoom(3);
   renderer.follow();
   refreshPanels();
@@ -304,43 +299,22 @@ function select(org: Organism): void {
 }
 
 function deselect(): void {
-  world.selectOrganism(null);
+  sim.select(null);
   lastSelectedId = null;
   lastSelectedSnapshot = null;
+  lastSelectedDetail = null;
   refreshPanels();
   needsRender = true;
 }
 
-// 4. Main animation & tick loop
+// 4. Drawing loop: one canvas frame per display frame while anything moves.
 function loop(timestamp: number): void {
-  const elapsedMs = timestamp - lastTimestamp;
-  lastTimestamp = timestamp;
-
-  if (isRunning) {
-    const targetTps = BASE_TICKS_PER_SECOND * speedMultiplier;
-    const intervalMs = 1000 / targetTps;
-
-    tickAccumulator += Math.min(elapsedMs, 250); // cap to avoid spiral on tab switch
-    while (tickAccumulator >= intervalMs) {
-      stepSimulation();
-      tickAccumulator -= intervalMs;
-    }
-
-    // Draw every frame, part-way through the current tick, so moves glide.
-    renderer.render(tickAccumulator / intervalMs);
-    if (timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) {
-      refreshPanels();
-    }
-  } else if (stepAnimationStart !== null) {
-    // A single Step glides over STEP_ANIMATION_MS.
-    const progress = (timestamp - stepAnimationStart) / STEP_ANIMATION_MS;
-    renderer.render(progress);
-    if (progress >= 1) stepAnimationStart = null;
-  } else if (needsRender || renderer.isAnimating()) {
-    renderer.render();
+  const glide = glideMs > 0 ? Math.min(1, (timestamp - frameAt) / glideMs) : 1;
+  if (isRunning || glide < 1 || needsRender || renderer.isAnimating()) {
+    renderer.render(glide);
   }
+  if (isRunning && timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) refreshPanels();
   needsRender = false;
-
   requestAnimationFrame(loop);
 }
 
@@ -352,9 +326,9 @@ function loop(timestamp: number): void {
 const TAP_REACH_PX = 22;
 function handleTap(clientX: number, clientY: number): void {
   const rect = canvas.getBoundingClientRect();
-  let best: Organism | null = null;
+  let best: OrganismView | null = null;
   let bestDist = TAP_REACH_PX;
-  for (const org of world.organisms.values()) {
+  for (const org of sim.organisms.values()) {
     const p = renderer.screenPositionOf(org);
     const d = Math.hypot(p.x - (clientX - rect.left), p.y - (clientY - rect.top));
     if (d < bestDist) {

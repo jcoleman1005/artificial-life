@@ -45,7 +45,7 @@ Nothing is deferred. Any feature is fair game to suggest or build: predation, co
 - Simultaneous decisions: all organisms choose actions from the same pre-tick snapshot. Resolve conflicts with a seeded random tie-breaker.
 - Use a dedicated seeded PRNG in simulation code; do not use Math.random() for simulation outcomes.
 - Metrics remain separate: survival, reproductive success, and behavioral diversity.
-- Keep simulation logic independent from Canvas rendering and UI.
+- Keep simulation logic independent from Canvas rendering and UI. The simulation runs in a Web Worker (`SimulationHost`); the page talks to it only through the messages in `src/sim/protocol.ts`, and reads the world through `WorldView`/`OrganismView`.
 - Planned: snapshots, resume, branching experiments, and server-side persistence.
 
 ## Working notes

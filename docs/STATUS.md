@@ -41,7 +41,7 @@ _Last updated: 2026-10-25._
   - Generated names (`src/ui/names.ts`): a given name from the organism id plus a family name shared by its lineage. Display only; simulation ids are unchanged.
   - Colour groups (`src/ui/groups.ts`): organisms bucketed into twelve 30° tag-hue groups ("groups", not species). Display only.
   - Settings sheet (gear in the peek strip): World (size, food layout, seasons), Behaviour (sharing, signals, controller), Display (colour by tag/family), Run (seed, Reset, New seed, status).
-- 103 deterministic tests.
+- 111 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -66,7 +66,8 @@ _Last updated: 2026-10-25._
 
 - About 16–18 µs per organism per tick. Default 60×60 world: dials 6.5 ms/tick, brain 7.5 ms/tick (peak ~490 organisms, ~10 ms). The 30×30 preset is about half that.
 - Memory: about 5 MB for the world at 30×30, about 14 MB at 60×60. A persistent server needs about 512 MB RAM and 1 core.
-- The simulation still runs on the page's main thread, and the canvas now redraws every frame while running (for smooth movement); 10× can fall behind during booms.
+- The simulation runs in a **Web Worker** (`src/sim/worker.ts` → `SimulationHost` in `src/sim/host.ts`), which owns the World and the tick timing. The page (`src/ui/simulation-client.ts`) only draws and handles input: each frame carries light organism records and food; metrics, history (only while Trends is open) and the selected organism's full record come at most 5× a second. Messages are defined in `src/sim/protocol.ts`. In desktop Chromium at 10× the page holds 60 fps with the worker at 60/60 ticks/s; if the worker can't keep up during a boom, ticks/s drops but drawing and touch stay smooth.
+- The worker boundary is the same one the always-on server will use: swap the worker for a connection to the server and the page needs no other changes.
 
 ## Hosting plan
 
@@ -95,7 +96,7 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 
 ## Next steps (suggested order)
 
-1. Move the simulation into a Web Worker so the UI stays smooth at 10× (the redesigned UI still runs the loop on the main thread). Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate at 10× with ~400 orbs).
+1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker).
 2. Signals: give listeners a reason to respond (e.g. `sensingRadius` 2 so a signal reveals unseen food, or sparser, richer patches) and track the brain's own signal connections. Compare against `signalsEnabled=false` every time.
 3. Mobility experiments were run in the mobility session but their results are not in the repo yet; add them to the findings table. Then check the abilities on the merged 60×60 region world with the brain default: which abilities spread, blocked-move share, lean lows.
 4. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
