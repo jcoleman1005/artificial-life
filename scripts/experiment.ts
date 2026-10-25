@@ -141,6 +141,7 @@ function runJob(job: Job): RunResult {
     lookAlikeByChance: m.tribes.globalKinFraction,
     carryCapacity: mean((o) => o.carryCapacity),
     dispersal: mean((o) => o.dispersal),
+    memorySpan: mean((o) => o.memorySpan),
     ...(world.windfallUnitsPlaced > 0
       ? {
           // Windfall food eaten before it rotted (leftovers still on the ground count as uneaten).

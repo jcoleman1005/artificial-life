@@ -16,6 +16,7 @@ export interface SettingsCallbacks {
   onSignalsChange: (enabled: boolean) => void;
   onDispersalChange: (enabled: boolean) => void;
   onWindfallsChange: (enabled: boolean) => void;
+  onMemoryChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -34,6 +35,7 @@ export interface ExperimentToggles {
   signalsEnabled: boolean;
   dispersalEnabled: boolean;
   windfallsEnabled: boolean;
+  memoryEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
   worldSize: WorldSize;
@@ -132,6 +134,7 @@ export class SettingsView {
         ${segmented('Sharing', 'sharing', onOff, toggles.sharingEnabled ? 'on' : 'off')}
         ${segmented('Signals', 'signals', onOff, toggles.signalsEnabled ? 'on' : 'off')}
         ${segmented('Dispersal', 'dispersal', onOff, toggles.dispersalEnabled ? 'on' : 'off')}
+        ${segmented('Memory', 'memory', onOff, toggles.memoryEnabled ? 'on' : 'off')}
         ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
       </section>
       <section class="settings-group">
@@ -185,6 +188,7 @@ export class SettingsView {
     set('signals', t.signalsEnabled ? 'on' : 'off');
     set('dispersal', t.dispersalEnabled ? 'on' : 'off');
     set('windfalls', t.windfallsEnabled ? 'on' : 'off');
+    set('memory', t.memoryEnabled ? 'on' : 'off');
     set('controller', t.controller);
   }
 
@@ -237,6 +241,7 @@ export class SettingsView {
     this.bindSegment('signals', (v) => cb.onSignalsChange(v === 'on'));
     this.bindSegment('dispersal', (v) => cb.onDispersalChange(v === 'on'));
     this.bindSegment('windfalls', (v) => cb.onWindfallsChange(v === 'on'));
+    this.bindSegment('memory', (v) => cb.onMemoryChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
 

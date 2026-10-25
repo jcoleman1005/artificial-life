@@ -195,6 +195,14 @@ export class HistoryView {
       },
       {
         section: 'Body traits',
+        label: 'Memory span',
+        fixedRange: [0, 100],
+        value: (s) => s.memorySpan.mean,
+        spread: (s) => s.memorySpan.sd,
+        format: (s) => `${s.memorySpan.mean.toFixed(1)} ± ${s.memorySpan.sd.toFixed(1)} ticks`,
+      },
+      {
+        section: 'Body traits',
         label: 'Diagonal movers',
         fixedRange: [0, 1],
         value: (s) => s.abilities.diagonal,

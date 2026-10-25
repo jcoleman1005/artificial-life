@@ -69,6 +69,7 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
   return (
     config.tickMetabolismCost +
     config.carryUpkeep * organism.carryCapacity +
+    (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
     // An ability only costs anything in worlds where it is enabled.
     config.abilityUpkeep *
       ((config.diagonalMoves ? organism.abilities.diagonal : 0) +

@@ -1,0 +1,9 @@
+
+> artificial-life@0.1.0 experiment
+> vite-node scripts/experiment.ts -- --compare leapEnabled=false,true --workers 4 --json /home/user/artificial-life/docs/experiments/mobility-leapEnabled.json
+
+16 runs (8 seeds × 2 variants of leapEnabled), 10000 ticks each, 4 workers
+  done: seed 1, leapEnabled=true (1/16)
+  done: seed 1, leapEnabled=false (2/16)
+  done: seed 2, leapEnabled=false (3/16)
+  done: seed 2, leapEnabled=true (4/16)

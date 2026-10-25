@@ -46,6 +46,10 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dispersalEnabled: true,
   maxDispersal: 8,
   dispersalCost: 1.0, // the same as one move
+  memoryEnabled: false, // off until measured against a control
+  maxMemorySpan: 100,
+  memorySpanStep: 5,
+  memoryUpkeep: 0.001, // a 50-tick memory costs 0.05 per tick (a fifth of base metabolism)
   traitMutationRate: 0.1,
   diagonalMoves: true,
   diagonalMoveCost: 1.4,

@@ -59,6 +59,8 @@ export interface HistorySample {
   readonly carryCapacity: WeightStat;
   /** Population mean and standard deviation of the dispersal distance trait. */
   readonly dispersal: WeightStat;
+  /** Population mean and standard deviation of the memory span trait. */
+  readonly memorySpan: WeightStat;
   /** Share of the population with each movement ability, and with none (0..1). */
   readonly abilities: Readonly<Record<AbilityName | 'none', number>>;
   /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
@@ -176,6 +178,7 @@ export class MetricsHistory {
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
       dispersal: meanAndSd(organisms.map((o) => o.dispersal)),
+      memorySpan: meanAndSd(organisms.map((o) => o.memorySpan)),
       abilities: abilityShares(organisms),
       brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
       hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
@@ -213,6 +216,8 @@ export class MetricsHistory {
       'carry_capacity_sd',
       'dispersal_mean',
       'dispersal_sd',
+      'memory_span_mean',
+      'memory_span_sd',
       'diagonal_fraction',
       'squeeze_fraction',
       'leap_fraction',
@@ -246,6 +251,8 @@ export class MetricsHistory {
         s.carryCapacity.sd.toFixed(4),
         s.dispersal.mean.toFixed(4),
         s.dispersal.sd.toFixed(4),
+        s.memorySpan.mean.toFixed(4),
+        s.memorySpan.sd.toFixed(4),
         s.abilities.diagonal.toFixed(4),
         s.abilities.squeeze.toFixed(4),
         s.abilities.leap.toFixed(4),

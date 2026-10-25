@@ -303,6 +303,7 @@ const settingsView = new SettingsView(
     signalsEnabled: sim.config.signalsEnabled,
     dispersalEnabled: sim.config.dispersalEnabled,
     windfallsEnabled: sim.config.windfallsEnabled,
+    memoryEnabled: sim.config.memoryEnabled,
     seasonsEnabled: sim.config.seasonLength > 0,
     controller: sim.config.controller,
     worldSize: 'large',
@@ -323,6 +324,7 @@ const settingsView = new SettingsView(
     onSignalsChange: (enabled) => sim.setConfig({ signalsEnabled: enabled }),
     onDispersalChange: (enabled) => sim.setConfig({ dispersalEnabled: enabled }),
     onWindfallsChange: (enabled) => sim.setConfig({ windfallsEnabled: enabled }),
+    onMemoryChange: (enabled) => sim.setConfig({ memoryEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
       sim.setConfig({ controller });
@@ -612,6 +614,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     signalsEnabled: config.signalsEnabled,
     dispersalEnabled: config.dispersalEnabled,
     windfallsEnabled: config.windfallsEnabled,
+    memoryEnabled: config.memoryEnabled,
     seasonsEnabled: config.seasonLength > 0,
     controller: config.controller,
     worldSize: config.gridWidth <= WORLD_SIZES.small.gridWidth ? 'small' : 'large',

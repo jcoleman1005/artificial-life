@@ -54,6 +54,13 @@ export const BRAIN_INPUTS = [
   'moveOccupied',
   'isLeap',
   'isDiagonal',
+  // Memory (zero when memory is off): remembered places, and the free registers
+  'moveRememberedFood',
+  'moveRememberedSignal',
+  'moveHome',
+  'register0',
+  'register1',
+  'register2',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -190,6 +197,12 @@ export function brainFeatures(
     action.targetOccupied ? 1 : 0, // moveOccupied
     isLeapAction(type) ? 1 : 0, // isLeap
     isDiagonalMove(type) ? 1 : 0, // isDiagonal
+    isMove && sensed.rememberedFood ? aligned(dx, dy, sensed.rememberedFood, 0.1) * sensed.rememberedFood.freshness : 0, // moveRememberedFood
+    isMove && sensed.rememberedSignal ? aligned(dx, dy, sensed.rememberedSignal, 0.1) * sensed.rememberedSignal.freshness : 0, // moveRememberedSignal
+    isMove ? aligned(dx, dy, sensed.home, 0.1) : 0, // moveHome
+    sensed.registers[0] ?? 0, // register0
+    sensed.registers[1] ?? 0, // register1
+    sensed.registers[2] ?? 0, // register2
   ];
 }
 

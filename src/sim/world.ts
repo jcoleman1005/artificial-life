@@ -34,6 +34,15 @@ import {
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain } from './brain';
+import {
+  MEMORY_WEIGHT_COUNT,
+  founderMemorySpan,
+  founderMemoryWeights,
+  inheritMemorySpan,
+  inheritMemoryWeights,
+  newMemory,
+  updateMemory,
+} from './memory';
 
 /**
  * Everything needed to continue a world exactly where it was: settings,
@@ -272,6 +281,8 @@ export class World {
     const brain = createHeadStartBrain(this.prng);
     const abilities = founderAbilities(this.config, this.prng);
     const dispersal = founderDispersal(this.config, this.prng);
+    const memorySpan = founderMemorySpan(this.config, this.prng);
+    const memoryWeights = founderMemoryWeights(this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -282,6 +293,9 @@ export class World {
       carryCapacity,
       abilities,
       dispersal,
+      memorySpan,
+      memoryWeights,
+      memory: newMemory(x, y),
       brain,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
@@ -338,7 +352,15 @@ export class World {
     world.foodPatches.clear();
     for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, { ...p });
     world.organisms.clear();
-    for (const o of state.organisms) world.organisms.set(o.id, { ...clone(o), dispersal: o.dispersal ?? 1 });
+    for (const o of state.organisms) {
+      world.organisms.set(o.id, {
+        ...clone(o),
+        dispersal: o.dispersal ?? 1,
+        memorySpan: o.memorySpan ?? 0,
+        memoryWeights: o.memoryWeights ? [...o.memoryWeights] : new Array<number>(MEMORY_WEIGHT_COUNT).fill(0),
+        memory: o.memory ? clone(o.memory) : newMemory(o.x, o.y),
+      });
+    }
     world.history.importState(state.history);
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
@@ -639,6 +661,7 @@ export class World {
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
+      const startCell = { x: organism.x, y: organism.y };
       let outcome = item.outcome;
       // Base metabolism, plus the upkeep of carry capacity
       const metabolism = metabolismCost(organism, this.config);
@@ -746,6 +769,8 @@ export class World {
               const childBrain = mutateBrain(organism.brain, this.config, this.prng);
               const childAbilities = inheritAbilities(organism.abilities, this.config, this.prng);
               const childDispersal = inheritDispersal(organism.dispersal, this.config, this.prng);
+              const childMemorySpan = inheritMemorySpan(organism.memorySpan, this.config, this.prng);
+              const childMemoryWeights = inheritMemoryWeights(organism.memoryWeights, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
@@ -757,6 +782,9 @@ export class World {
                 carryCapacity: childCapacity,
                 abilities: childAbilities,
                 dispersal: childDispersal,
+                memorySpan: childMemorySpan,
+                memoryWeights: childMemoryWeights,
+                memory: newMemory(birth.x, birth.y),
                 brain: childBrain,
                 lineage: {
                   id: organism.lineage.id,
@@ -828,6 +856,11 @@ export class World {
           outcome = 'rested';
           break;
         }
+      }
+
+      // Memory takes in what was sensed at the start of this tick.
+      if (this.config.memoryEnabled && organism.memorySpan > 0) {
+        updateMemory(organism.memory, organism.memoryWeights, sensed, organism.carryCapacity, startCell, this.tick);
       }
 
       // Clamp energy [0, maxEnergy]

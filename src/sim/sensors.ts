@@ -6,6 +6,7 @@ import type {
   WorldSnapshot,
 } from './types';
 import { tagSimilarity } from './tags';
+import { recall } from './memory';
 
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
@@ -217,6 +218,8 @@ export function senseEnvironment(
 
   const canGive = config.sharingEnabled && carriedFood > 0;
 
+  const remembered = recall(organism.memory, organism.memorySpan, x, y, snapshot.tick, config);
+
   return {
     currentEnergy: energy,
     energyRatio: Math.min(1, Math.max(0, energy / config.maxEnergy)),
@@ -239,5 +242,9 @@ export function senseEnvironment(
     canReproduce,
     canGive,
     canSignal: config.signalsEnabled,
+    rememberedFood: remembered.food,
+    rememberedSignal: remembered.signal,
+    home: remembered.home,
+    registers: remembered.registers,
   };
 }

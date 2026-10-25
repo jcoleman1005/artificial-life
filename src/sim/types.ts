@@ -2,6 +2,7 @@
  * Core types and data structures for the Artificial Life simulation.
  */
 import type { Brain } from './brain';
+import type { MemoryState, Recalled } from './memory';
 
 export interface Point {
   readonly x: number;
@@ -165,6 +166,11 @@ export interface SensedInputs {
   readonly canGive: boolean;
   /** The SIGNAL experiment switch is on. */
   readonly canSignal: boolean;
+  /** Memory (null / zeros when memory is off or the span is 0): remembered food, signal and home, and the free registers. */
+  readonly rememberedFood: Recalled | null;
+  readonly rememberedSignal: Recalled | null;
+  readonly home: Recalled | null;
+  readonly registers: readonly number[];
 }
 
 export interface ActionScore {
@@ -226,6 +232,12 @@ export interface Organism {
    * the parent dispersalCost energy at the birth.
    */
   readonly dispersal: number;
+  /** Inherited body trait: how many ticks named memories last (0 = no memory). Costs memoryUpkeep per tick of span. */
+  readonly memorySpan: number;
+  /** Inherited weights that update the free memory registers. */
+  readonly memoryWeights: readonly number[];
+  /** What it remembers now (not inherited; a child starts with only its birthplace). */
+  memory: MemoryState;
   /** Inherited movement abilities (body traits); see Abilities. */
   readonly abilities: Abilities;
   /** Inherited neural controller, used when config.controller is 'brain'. */
@@ -318,6 +330,10 @@ export interface SimulationConfig {
   dispersalEnabled: boolean; // Experiment switch: children can be born up to their parent's dispersal distance away
   maxDispersal: number; // Upper bound on the inherited dispersal distance
   dispersalCost: number; // Energy the parent pays per step beyond the first
+  memoryEnabled: boolean; // Experiment switch for memory (named memories and free registers, brain only)
+  maxMemorySpan: number; // Upper bound on the inherited memory span (ticks)
+  memorySpanStep: number; // How far a child's memory span can shift at birth
+  memoryUpkeep: number; // Energy per tick for each tick of memory span
   traitMutationRate: number; // Probability a child's body trait shifts by ±1 at birth
   diagonalMoves: boolean; // Allow diagonal moves (for organisms with the ability)
   diagonalMoveCost: number; // Diagonal move cost, as a multiple of moveCost

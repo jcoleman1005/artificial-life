@@ -120,6 +120,16 @@ export class InspectorView {
         ? `dx:${sensed.nearestSignal.dx}, dy:${sensed.nearestSignal.dy} (dist: ${sensed.nearestSignal.distance}, ${Math.round((sensed.nearestSignal.value ?? 0) * 100)}% alike)`
         : 'None';
 
+      const place = (r: { dx: number; dy: number; distance: number; freshness: number } | null) =>
+        r ? `dx:${r.dx}, dy:${r.dy} (dist: ${r.distance}, ${Math.round(r.freshness * 100)}% fresh)` : 'Nothing';
+      const memoryStr = !config.memoryEnabled
+        ? 'Memory is off'
+        : organism.memorySpan === 0
+          ? 'No memory (span 0)'
+          : `Food ${place(sensed.rememberedFood)} · Signal ${place(sensed.rememberedSignal)} · Home ${
+              sensed.home ? `dx:${sensed.home.dx}, dy:${sensed.home.dy}` : 'here'
+            } · Registers ${sensed.registers.map((r) => r.toFixed(2)).join(' / ')}`;
+
       const obsSenseStr = sensed.nearestObstacle
         ? `dx:${sensed.nearestObstacle.dx}, dy:${sensed.nearestObstacle.dy} (dist: ${sensed.nearestObstacle.distance})`
         : 'None in radius';
@@ -153,6 +163,10 @@ export class InspectorView {
           <div class="sense-item">
             <span class="sense-label">Nearest Signal (Radius ${config.signalRadius})</span>
             <span class="sense-val">${signalSenseStr}</span>
+          </div>
+          <div class="sense-item">
+            <span class="sense-label">Memory (span ${organism.memorySpan} ticks)</span>
+            <span class="sense-val">${memoryStr}</span>
           </div>
           <div class="sense-item">
             <span class="sense-label">Current Cell Food</span>
