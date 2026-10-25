@@ -15,6 +15,7 @@ export interface SettingsCallbacks {
   onSharingChange: (enabled: boolean) => void;
   onSignalsChange: (enabled: boolean) => void;
   onDispersalChange: (enabled: boolean) => void;
+  onWindfallsChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -32,6 +33,7 @@ export interface ExperimentToggles {
   sharingEnabled: boolean;
   signalsEnabled: boolean;
   dispersalEnabled: boolean;
+  windfallsEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
   worldSize: WorldSize;
@@ -123,6 +125,7 @@ export class SettingsView {
         ${segmented('Size', 'world', [['small', '30×30'], ['large', '60×60']], toggles.worldSize)}
         ${segmented('Food', 'food', [['anywhere', 'Anywhere'], ['regions', 'Regions'], ['shifting', 'Shifting']], toggles.foodLayout)}
         ${segmented('Seasons', 'seasons', onOff, toggles.seasonsEnabled ? 'on' : 'off')}
+        ${segmented('Windfalls', 'windfalls', onOff, toggles.windfallsEnabled ? 'on' : 'off')}
       </section>
       <section class="settings-group">
         <h3>Behaviour <small>takes effect next tick</small></h3>
@@ -181,6 +184,7 @@ export class SettingsView {
     set('sharing', t.sharingEnabled ? 'on' : 'off');
     set('signals', t.signalsEnabled ? 'on' : 'off');
     set('dispersal', t.dispersalEnabled ? 'on' : 'off');
+    set('windfalls', t.windfallsEnabled ? 'on' : 'off');
     set('controller', t.controller);
   }
 
@@ -232,6 +236,7 @@ export class SettingsView {
     this.bindSegment('sharing', (v) => cb.onSharingChange(v === 'on'));
     this.bindSegment('signals', (v) => cb.onSignalsChange(v === 'on'));
     this.bindSegment('dispersal', (v) => cb.onDispersalChange(v === 'on'));
+    this.bindSegment('windfalls', (v) => cb.onWindfallsChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
 

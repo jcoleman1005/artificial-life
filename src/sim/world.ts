@@ -67,6 +67,9 @@ const WORLD_COUNTERS = [
   'deceasedCount',
   'deceasedLifespanSum',
   'birthDistanceSum',
+  'windfallsTotal',
+  'windfallUnitsPlaced',
+  'windfallUnitsRotted',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
@@ -97,6 +100,10 @@ export class World {
   public deceasedLifespanSum = 0;
   /** Sum of birth distances (steps from parent to child), for the mean. */
   public birthDistanceSum = 0;
+  /** Windfalls so far, the food they brought, and the food that rotted uneaten. */
+  public windfallsTotal = 0;
+  public windfallUnitsPlaced = 0;
+  public windfallUnitsRotted = 0;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -125,6 +132,9 @@ export class World {
     this.deceasedCount = 0;
     this.deceasedLifespanSum = 0;
     this.birthDistanceSum = 0;
+    this.windfallsTotal = 0;
+    this.windfallUnitsPlaced = 0;
+    this.windfallUnitsRotted = 0;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -895,6 +905,40 @@ export class World {
   }
 
   /**
+   * A windfall: a cluster of up to windfallPatches patches around a random
+   * free cell, sharing windfallUnits between them, rotting after
+   * windfallLifetime ticks. Gives up quietly if no free spot turns up.
+   */
+  private placeWindfall(): void {
+    const { gridWidth, gridHeight, windfallUnits, windfallPatches, windfallLifetime } = this.config;
+    const free = (x: number, y: number) =>
+      x >= 0 && y >= 0 && x < gridWidth && y < gridHeight && !this.obstacles.has(`${x},${y}`) && !this.foodPatches.has(`${x},${y}`);
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const cx = this.prng.nextInt(0, gridWidth - 1);
+      const cy = this.prng.nextInt(0, gridHeight - 1);
+      if (!free(cx, cy)) continue;
+      const offsets: [number, number][] = [];
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (dx || dy) offsets.push([dx, dy]);
+      this.prng.shuffle(offsets);
+      const cells: [number, number][] = [[cx, cy]];
+      for (const [dx, dy] of offsets) {
+        if (cells.length >= windfallPatches) break;
+        if (free(cx + dx, cy + dy)) cells.push([cx + dx, cy + dy]);
+      }
+      // Share the units out evenly; the first patches take any remainder.
+      const each = Math.floor(windfallUnits / cells.length);
+      let extra = windfallUnits - each * cells.length;
+      for (const [x, y] of cells) {
+        const stock = each + (extra-- > 0 ? 1 : 0);
+        this.foodPatches.set(`${x},${y}`, { x, y, stock, capacity: stock, expiresAt: this.tick + windfallLifetime });
+      }
+      this.windfallsTotal++;
+      this.windfallUnitsPlaced += windfallUnits;
+      return;
+    }
+  }
+
+  /**
    * Where a child is born. Without dispersal (or with distance 1) it is the
    * chosen adjacent cell. Otherwise a random free cell within the parent's
    * dispersal distance (in steps), limited to what the parent can afford at
@@ -956,11 +1000,24 @@ export class World {
       (r) => regionSeasonAt(this.tick, r, this.config)?.season === 'lean'
     );
 
-    // 1. Food patch stock regeneration
+    // 0. Windfall leftovers rot away
+    let windfallPatchCount = 0;
+    for (const [key, patch] of this.foodPatches) {
+      if (patch.expiresAt === undefined) continue;
+      if (patch.expiresAt <= this.tick) {
+        this.windfallUnitsRotted += patch.stock;
+        this.foodPatches.delete(key);
+      } else {
+        windfallPatchCount++;
+      }
+    }
+
+    // 1. Food patch stock regeneration (windfalls never regrow)
     // Lean regrowth ticks are a subset of plenty ones (a multiple of the interval).
     if (this.tick > 0 && this.tick % foodRegenInterval === 0) {
       const regrowsLean = this.tick % leanRegrowInterval === 0;
       for (const patch of this.foodPatches.values()) {
+        if (patch.expiresAt !== undefined) continue;
         const lean = patch.region === undefined ? worldLean : regionLean[patch.region];
         if ((!lean || regrowsLean) && patch.stock < patch.capacity) {
           patch.stock = Math.min(patch.capacity, patch.stock + foodRegenAmount);
@@ -975,12 +1032,20 @@ export class World {
       let attempts = 0;
       while (
         spawned < foodSpawnCount &&
-        this.foodPatches.size < maxFoodPatches &&
+        // Windfalls don't count against the limit on ordinary patches.
+        this.foodPatches.size - windfallPatchCount < maxFoodPatches &&
         attempts < 50
       ) {
         attempts++;
         if (this.tryPlacePatch(true)) spawned++;
       }
+    }
+
+    // 2b. Windfalls: now and then a rich, short-lived burst of food lands
+    // anywhere, whatever the season. Draws nothing from the PRNG when off.
+    const { windfallsEnabled, windfallInterval } = this.config;
+    if (windfallsEnabled && windfallInterval > 0 && this.tick > 0 && this.tick % windfallInterval === 0) {
+      this.placeWindfall();
     }
 
     // 3. Immigration: newcomers with random tags and policies arrive in

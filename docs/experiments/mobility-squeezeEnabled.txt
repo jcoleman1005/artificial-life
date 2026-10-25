@@ -15,3 +15,6 @@
   done: seed 4, squeezeEnabled=true (10/16)
   done: seed 7, squeezeEnabled=false (11/16)
   done: seed 8, squeezeEnabled=false (12/16)
+  done: seed 5, squeezeEnabled=true (13/16)
+  done: seed 6, squeezeEnabled=true (14/16)
+  done: seed 7, squeezeEnabled=true (15/16)

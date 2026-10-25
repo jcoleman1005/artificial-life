@@ -17,6 +17,11 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   foodSpawnInterval: 12,
   foodSpawnCount: 4,
   maxFoodPatches: 72,
+  windfallsEnabled: false, // off until measured against a control
+  windfallInterval: 150,
+  windfallUnits: 40,
+  windfallPatches: 5,
+  windfallLifetime: 120,
   foodRegionCount: 4,
   foodRegionRadius: 8,
   staggeredSeasons: true, // Lean seasons sweep from region to region

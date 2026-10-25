@@ -141,6 +141,17 @@ function runJob(job: Job): RunResult {
     lookAlikeByChance: m.tribes.globalKinFraction,
     carryCapacity: mean((o) => o.carryCapacity),
     dispersal: mean((o) => o.dispersal),
+    ...(world.windfallUnitsPlaced > 0
+      ? {
+          // Windfall food eaten before it rotted (leftovers still on the ground count as uneaten).
+          'windfallEaten%':
+            (100 *
+              (world.windfallUnitsPlaced -
+                world.windfallUnitsRotted -
+                Array.from(world.foodPatches.values()).reduce((s, p) => s + (p.expiresAt !== undefined ? p.stock : 0), 0))) /
+            world.windfallUnitsPlaced,
+        }
+      : {}),
     birthDistance: world.birthDistanceSum / Math.max(1, m.birthsTotal - world.config.initialOrganisms - m.immigrantsTotal),
     ...Object.fromEntries(
       Object.entries(abilityShares([...world.organisms.values()])).map(([k, v]) => [`ability.${k}`, v])

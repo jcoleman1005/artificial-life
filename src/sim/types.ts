@@ -263,6 +263,8 @@ export interface FoodPatch {
   capacity: number;
   /** Index of the food region it grew in (absent: no region, global seasons). */
   readonly region?: number;
+  /** Windfalls only: the tick it rots away. Windfall patches never regrow. */
+  readonly expiresAt?: number;
 }
 
 /** A fertile disc where food patches grow. Each may run its own season clock. */
@@ -287,6 +289,11 @@ export interface SimulationConfig {
   foodSpawnInterval: number; // Spawn new patches every N ticks
   foodSpawnCount: number;
   maxFoodPatches: number;
+  windfallsEnabled: boolean; // Experiment switch for rare, short-lived bursts of food anywhere
+  windfallInterval: number; // A windfall every N ticks
+  windfallUnits: number; // Food units in one windfall, spread over windfallPatches patches
+  windfallPatches: number; // Patches in one windfall (a small cluster)
+  windfallLifetime: number; // Ticks before a windfall's leftovers rot away
   foodRegionCount: number; // Fertile regions where food grows (0 = food anywhere)
   foodRegionRadius: number; // Radius of each region, in cells
   staggeredSeasons: boolean; // Each region's lean season comes at a different time

@@ -10,6 +10,7 @@ Nothing is deferred. Any feature is fair game to suggest or build: predation, co
 - Visual-first world, with expandable organism inspection, statistics, and experiment controls.
 - Grid-based abstract terrain, obstacles, and distinctive abstract organisms.
 - Food patches spawn at random valid locations, have finite stock, regenerate up to a capacity, and can be replenished by new patch spawns.
+- Windfalls (`windfallsEnabled`, off until measured): every `windfallInterval` ticks a cluster of up to `windfallPatches` ordinary-looking patches holding `windfallUnits` in total lands around a random free cell anywhere, whatever the season. They never regrow, rot after `windfallLifetime` ticks, and don't count against `maxFoodPatches`. Most organisms can't see one, which gives signals something to say. With the switch off they draw nothing from the PRNG.
 - World: 60×60 by default (the original 30×30 world is a preset). Food grows only inside `foodRegionCount` fertile discs of radius `foodRegionRadius`, placed at random at the start of a run (0 regions = food anywhere).
 - Seasons: a fixed cycle of `seasonLength` ticks ends with a lean stretch (`leanFraction` of the cycle) in which food regrows `leanSlowdown` times slower and no new patches spawn. `seasonLength` 0 turns seasons off. With `staggeredSeasons` (the default), each region runs the same cycle shifted by an even fraction, so lean times sweep from region to region and there is no world-wide season.
 - Organisms have energy as their only initial need. Age and reproductive timing come later.
