@@ -1,5 +1,7 @@
 import type { Organism, PolicyWeights, SimulationConfig } from '../sim/types';
 import { setHTMLPreservingDetails } from './dom';
+import { givenName, organismName } from './names';
+import { describeDoing } from './organism-card';
 
 const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['foodAttraction', 'Food Attraction'],
@@ -37,13 +39,16 @@ export class InspectorView {
     });
   }
 
-  public render(organism: Organism | undefined, config: SimulationConfig): void {
+  public render(
+    organism: Organism | undefined,
+    config: SimulationConfig,
+    nameOf: (id: string) => string | null = () => null
+  ): void {
     if (!organism) {
       this.container.innerHTML = `
         <div class="inspector-empty">
-          <div class="empty-icon">🔬</div>
-          <h3>Organism Inspector</h3>
-          <p>Tap any organism on the grid to observe its senses, inherited policy weights, scored choices, and decision history.</p>
+          <h3>No organism selected</h3>
+          <p>Tap an organism in the world to follow it. Its senses, inherited weights, scored choices and recent decisions show up here.</p>
         </div>
       `;
       return;
@@ -52,6 +57,7 @@ export class InspectorView {
     const { energy, policy, lineage, age, offspringCount, foodEatenCount, recentHistory } =
       organism;
     const maxEnergy = config.maxEnergy;
+    const name = organismName(organism);
     const energyPct = Math.min(100, Math.max(0, (energy / maxEnergy) * 100));
     const lastDecision = recentHistory[0];
 
@@ -189,15 +195,14 @@ export class InspectorView {
       <div class="inspector-card">
         <header class="inspector-header">
           <div>
+            <h2><span class="tag-swatch" style="background: hsl(${organism.tag}, 85%, 60%)" aria-hidden="true"></span>${name.full}</h2>
             <div class="header-pre">
-              <span class="tag-swatch" style="background: hsl(${organism.tag}, 85%, 60%)" aria-hidden="true"></span>
-              ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°${
+              ${energy > 0 ? describeDoing(organism, nameOf) : 'Died'} · ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°${
                 lineage.parentId === null && lineage.birthTick > 0 ? ` · immigrant (tick ${lineage.birthTick})` : ''
-              }
+              }${lineage.parentId ? ` · child of ${givenName(lineage.parentId)}` : ''}
             </div>
-            <h2>Organism Details</h2>
           </div>
-          <button type="button" class="btn-close-inspector" aria-label="Close inspector">✕</button>
+          <button type="button" class="btn-close-inspector" aria-label="Deselect">✕</button>
         </header>
 
         <div class="stat-summary-row">

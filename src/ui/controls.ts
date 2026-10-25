@@ -1,10 +1,13 @@
 import type { ColorMode } from '../render/renderer';
 import type { FoodLayout, WorldSize } from '../sim/config';
 
-export interface ControlCallbacks {
+export interface PlaybackCallbacks {
   onPlayPause: () => void;
   onStep: () => void;
   onSpeedChange: (speedMultiplier: number) => void;
+}
+
+export interface SettingsCallbacks {
   onReset: (seed: string | number) => void;
   onNewSeed: () => void;
   onColorModeChange: (mode: ColorMode) => void;
@@ -26,272 +29,158 @@ export interface ExperimentToggles {
   foodLayout: FoodLayout;
 }
 
-export class ControlsView {
-  private readonly container: HTMLElement;
-  private isRunning = false;
-  private hasStarted = false;
-  private currentSpeed = 1;
-  private currentSeed: string | number = 42;
-  private callbacks: ControlCallbacks;
-  private readonly toggles: ExperimentToggles;
+export const SPEEDS = [0.25, 0.5, 1, 2, 5, 10] as const;
+const speedLabel = (s: number) => (s === 0.25 ? '¼×' : s === 0.5 ? '½×' : `${s}×`);
 
-  constructor(
-    container: HTMLElement,
-    initialSeed: string | number,
-    toggles: ExperimentToggles,
-    callbacks: ControlCallbacks
-  ) {
-    this.container = container;
-    this.currentSeed = initialSeed;
-    this.toggles = toggles;
-    this.callbacks = callbacks;
-    this.render();
+const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></svg>';
+const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>';
+const STEP_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6.5v11a1 1 0 0 0 1.55.83l8-5.5a1 1 0 0 0 0-1.66l-8-5.5A1 1 0 0 0 6 6.5z" fill="currentColor"/><rect x="16.5" y="5.5" width="2.5" height="13" rx="1" fill="currentColor"/></svg>';
+
+/** The floating playback pill over the world: play/pause, step, speed, tick. */
+export class PlaybackPill {
+  private readonly playBtn: HTMLButtonElement;
+  private readonly stepBtn: HTMLButtonElement;
+  private readonly speedBtn: HTMLButtonElement;
+  private readonly tickEl: HTMLElement;
+  private speedIndex = SPEEDS.indexOf(1);
+
+  constructor(container: HTMLElement, callbacks: PlaybackCallbacks) {
+    container.innerHTML = `
+      <button type="button" class="pill-btn pill-play" aria-label="Play">${PLAY_ICON}</button>
+      <button type="button" class="pill-btn pill-step" aria-label="Step one tick">${STEP_ICON}</button>
+      <button type="button" class="pill-btn pill-speed" aria-label="Speed 1×, tap to change">1×</button>
+      <span class="pill-tick" aria-live="off">t 0</span>
+    `;
+    this.playBtn = container.querySelector('.pill-play')!;
+    this.stepBtn = container.querySelector('.pill-step')!;
+    this.speedBtn = container.querySelector('.pill-speed')!;
+    this.tickEl = container.querySelector('.pill-tick')!;
+    this.playBtn.addEventListener('click', () => callbacks.onPlayPause());
+    this.stepBtn.addEventListener('click', () => callbacks.onStep());
+    this.speedBtn.addEventListener('click', () => {
+      this.speedIndex = (this.speedIndex + 1) % SPEEDS.length;
+      this.showSpeed();
+      callbacks.onSpeedChange(SPEEDS[this.speedIndex]);
+    });
+  }
+
+  private showSpeed(): void {
+    const label = speedLabel(SPEEDS[this.speedIndex]);
+    this.speedBtn.textContent = label;
+    this.speedBtn.setAttribute('aria-label', `Speed ${label}, tap to change`);
   }
 
   public setRunning(running: boolean): void {
-    this.isRunning = running;
-    if (running) {
-      this.hasStarted = true;
-    }
-    const playBtn = this.container.querySelector<HTMLButtonElement>('#btn-play-pause');
-    if (playBtn) {
-      const label = this.isRunning
-        ? '<span class="icon">⏸</span><span>Pause</span>'
-        : this.hasStarted
-        ? '<span class="icon">▶</span><span>Resume</span>'
-        : '<span class="icon">▶</span><span>Start</span>';
-      playBtn.innerHTML = label;
-      playBtn.classList.toggle('btn-active', this.isRunning);
-    }
-    const stepBtn = this.container.querySelector<HTMLButtonElement>('#btn-step');
-    if (stepBtn) {
-      stepBtn.disabled = this.isRunning;
-    }
+    this.playBtn.innerHTML = running ? PAUSE_ICON : PLAY_ICON;
+    this.playBtn.setAttribute('aria-label', running ? 'Pause' : 'Play');
+    this.playBtn.classList.toggle('running', running);
+    this.stepBtn.disabled = running;
   }
 
-  public resetState(): void {
-    this.isRunning = false;
-    this.hasStarted = false;
-    this.setRunning(false);
+  public setTick(tick: number): void {
+    const text = `t ${tick}`;
+    if (this.tickEl.textContent !== text) this.tickEl.textContent = text;
   }
+}
 
-  public setSeed(seed: string | number): void {
-    this.currentSeed = seed;
-    const seedInput = this.container.querySelector<HTMLInputElement>('#input-seed');
-    if (seedInput) {
-      seedInput.value = String(seed);
-    }
-  }
+const segmented = (label: string, attr: string, options: [string, string][], active: string) => `
+  <div class="setting-row">
+    <span class="setting-label">${label}</span>
+    <div class="segmented" role="group" aria-label="${label}">
+      ${options
+        .map(
+          ([value, text]) =>
+            `<button type="button" data-${attr}="${value}" class="${value === active ? 'active' : ''}" aria-pressed="${value === active}">${text}</button>`
+        )
+        .join('')}
+    </div>
+  </div>`;
 
-  /** Debug readout under the buttons: tick, run state, measured speed. */
-  public setStatus(text: string): void {
-    const status = this.container.querySelector<HTMLElement>('#sim-status');
-    if (status && status.textContent !== text) {
-      status.textContent = text;
-    }
-  }
+/** Experiment switches, grouped: World, Behaviour, Display, Run. */
+export class SettingsView {
+  private readonly container: HTMLElement;
+  private readonly callbacks: SettingsCallbacks;
 
-  public getSpeed(): number {
-    return this.currentSpeed;
-  }
-
-  private render(): void {
-    this.container.innerHTML = `
-      <div class="controls-wrapper">
-        <div class="playback-controls">
-          <button type="button" id="btn-play-pause" class="btn btn-primary" title="Start, Pause, or Resume simulation">
-            <span class="icon">▶</span><span>Start</span>
-          </button>
-          <button type="button" id="btn-step" class="btn btn-secondary" title="Advance exactly one tick">
-            <span class="icon">⏭</span><span>Step</span>
-          </button>
-          <div class="speed-selector" role="group" aria-label="Simulation speed">
-            <button type="button" class="btn-speed" data-speed="0.25" aria-label="Quarter speed">¼×</button>
-            <button type="button" class="btn-speed" data-speed="0.5" aria-label="Half speed">½×</button>
-            <button type="button" class="btn-speed active" data-speed="1">1×</button>
-            <button type="button" class="btn-speed" data-speed="2">2×</button>
-            <button type="button" class="btn-speed" data-speed="5">5×</button>
-            <button type="button" class="btn-speed" data-speed="10">10×</button>
-          </div>
+  constructor(container: HTMLElement, initialSeed: string | number, toggles: ExperimentToggles, callbacks: SettingsCallbacks) {
+    this.container = container;
+    this.callbacks = callbacks;
+    const onOff: [string, string][] = [
+      ['on', 'On'],
+      ['off', 'Off'],
+    ];
+    container.innerHTML = `
+      <section class="settings-group">
+        <h3>World <small>size and food restart the run</small></h3>
+        ${segmented('Size', 'world', [['small', '30×30'], ['large', '60×60']], toggles.worldSize)}
+        ${segmented('Food', 'food', [['anywhere', 'Anywhere'], ['regions', 'Regions'], ['shifting', 'Shifting']], toggles.foodLayout)}
+        ${segmented('Seasons', 'seasons', onOff, toggles.seasonsEnabled ? 'on' : 'off')}
+      </section>
+      <section class="settings-group">
+        <h3>Behaviour <small>takes effect next tick</small></h3>
+        ${segmented('Sharing', 'sharing', onOff, toggles.sharingEnabled ? 'on' : 'off')}
+        ${segmented('Signals', 'signals', onOff, toggles.signalsEnabled ? 'on' : 'off')}
+        ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
+      </section>
+      <section class="settings-group">
+        <h3>Display</h3>
+        ${segmented('Colour by', 'color', [['tag', 'Tag'], ['lineage', 'Family']], 'tag')}
+      </section>
+      <section class="settings-group">
+        <h3>Run</h3>
+        <div class="setting-row">
+          <label class="setting-label" for="input-seed">Seed</label>
+          <input type="text" id="input-seed" inputmode="numeric" autocomplete="off" value="${initialSeed}" />
         </div>
-
-        <div class="seed-controls">
-          <div class="seed-input-group">
-            <label for="input-seed" class="sr-only">Seed</label>
-            <span class="seed-icon">🎲</span>
-            <input type="text" id="input-seed" value="${this.currentSeed}" placeholder="Seed" title="Simulation Seed" />
-          </div>
-          <button type="button" id="btn-reset" class="btn btn-secondary" title="Reset with current seed">Reset</button>
-          <button type="button" id="btn-new-seed" class="btn btn-secondary" title="Generate new random seed">New Seed</button>
+        <div class="setting-actions">
+          <button type="button" id="btn-reset" class="btn btn-secondary">Reset</button>
+          <button type="button" id="btn-new-seed" class="btn btn-secondary">New seed</button>
         </div>
-
-        <div class="experiment-controls">
-          <div class="toggle-field">
-            <span class="toggle-label">World</span>
-            <div class="speed-selector" role="group" aria-label="World size (restarts)">
-              <button type="button" class="btn-speed ${this.toggles.worldSize === 'small' ? 'active' : ''}" data-world="small">30×30</button>
-              <button type="button" class="btn-speed ${this.toggles.worldSize === 'large' ? 'active' : ''}" data-world="large">60×60</button>
-            </div>
-          </div>
-          <div class="toggle-field">
-            <span class="toggle-label">Food</span>
-            <div class="speed-selector" role="group" aria-label="Where food grows (restarts)">
-              <button type="button" class="btn-speed ${this.toggles.foodLayout === 'anywhere' ? 'active' : ''}" data-food="anywhere">Anywhere</button>
-              <button type="button" class="btn-speed ${this.toggles.foodLayout === 'regions' ? 'active' : ''}" data-food="regions">Regions</button>
-              <button type="button" class="btn-speed ${this.toggles.foodLayout === 'shifting' ? 'active' : ''}" data-food="shifting" title="Regions whose lean seasons come at different times">Shifting</button>
-            </div>
-          </div>
-          <div class="toggle-field">
-            <span class="toggle-label">Colour</span>
-            <div class="speed-selector" role="group" aria-label="Colour organisms by">
-              <button type="button" class="btn-speed active" data-color="tag">Tribe tag</button>
-              <button type="button" class="btn-speed" data-color="lineage">Family</button>
-            </div>
-          </div>
-          <div class="toggle-field">
-            <span class="toggle-label">Sharing</span>
-            <div class="speed-selector" role="group" aria-label="Sharing">
-              <button type="button" class="btn-speed ${this.toggles.sharingEnabled ? 'active' : ''}" data-sharing="on">On</button>
-              <button type="button" class="btn-speed ${this.toggles.sharingEnabled ? '' : 'active'}" data-sharing="off">Off</button>
-            </div>
-          </div>
-          <div class="toggle-field">
-            <span class="toggle-label">Signals</span>
-            <div class="speed-selector" role="group" aria-label="Signals">
-              <button type="button" class="btn-speed ${this.toggles.signalsEnabled ? 'active' : ''}" data-signals="on">On</button>
-              <button type="button" class="btn-speed ${this.toggles.signalsEnabled ? '' : 'active'}" data-signals="off">Off</button>
-            </div>
-          </div>
-          <div class="toggle-field">
-            <span class="toggle-label">Controller</span>
-            <div class="speed-selector" role="group" aria-label="Controller">
-              <button type="button" class="btn-speed ${this.toggles.controller === 'dials' ? 'active' : ''}" data-controller="dials">Dials</button>
-              <button type="button" class="btn-speed ${this.toggles.controller === 'brain' ? 'active' : ''}" data-controller="brain">Brain</button>
-            </div>
-          </div>
-          <div class="toggle-field">
-            <span class="toggle-label">Seasons</span>
-            <div class="speed-selector" role="group" aria-label="Lean seasons">
-              <button type="button" class="btn-speed ${this.toggles.seasonsEnabled ? 'active' : ''}" data-seasons="on">On</button>
-              <button type="button" class="btn-speed ${this.toggles.seasonsEnabled ? '' : 'active'}" data-seasons="off">Off</button>
-            </div>
-          </div>
-        </div>
-
         <p id="sim-status" class="sim-status">Tick 0 · Paused</p>
-      </div>
+      </section>
     `;
-
     this.attachEvents();
   }
 
+  public setSeed(seed: string | number): void {
+    const input = this.container.querySelector<HTMLInputElement>('#input-seed');
+    if (input) input.value = String(seed);
+  }
+
+  /** Tick, run state, measured speed. */
+  public setStatus(text: string): void {
+    const status = this.container.querySelector<HTMLElement>('#sim-status');
+    if (status && status.textContent !== text) status.textContent = text;
+  }
+
+  private bindSegment(attr: string, handler: (value: string) => void): void {
+    const buttons = this.container.querySelectorAll<HTMLButtonElement>(`[data-${attr}]`);
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        buttons.forEach((b) => {
+          b.classList.toggle('active', b === btn);
+          b.setAttribute('aria-pressed', String(b === btn));
+        });
+        handler(btn.getAttribute(`data-${attr}`)!);
+      });
+    });
+  }
+
   private attachEvents(): void {
-    const playPauseBtn = this.container.querySelector<HTMLButtonElement>('#btn-play-pause');
-    if (playPauseBtn) {
-      playPauseBtn.addEventListener('click', () => {
-        this.callbacks.onPlayPause();
-      });
-    }
+    const cb = this.callbacks;
+    this.bindSegment('world', (v) => cb.onWorldSizeChange(v as WorldSize));
+    this.bindSegment('food', (v) => cb.onFoodLayoutChange(v as FoodLayout));
+    this.bindSegment('seasons', (v) => cb.onSeasonsChange(v === 'on'));
+    this.bindSegment('sharing', (v) => cb.onSharingChange(v === 'on'));
+    this.bindSegment('signals', (v) => cb.onSignalsChange(v === 'on'));
+    this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
+    this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
 
-    const stepBtn = this.container.querySelector<HTMLButtonElement>('#btn-step');
-    if (stepBtn) {
-      stepBtn.addEventListener('click', () => {
-        this.callbacks.onStep();
-      });
-    }
-
-    const speedButtons = this.container.querySelectorAll<HTMLButtonElement>('.btn-speed[data-speed]');
-    speedButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        speedButtons.forEach((b) => b.classList.remove('active'));
-        btn.classList.add('active');
-        const speed = Number(btn.getAttribute('data-speed')) || 1;
-        this.currentSpeed = speed;
-        this.callbacks.onSpeedChange(speed);
-      });
+    const seedInput = this.container.querySelector<HTMLInputElement>('#input-seed')!;
+    const reset = () => cb.onReset(seedInput.value.trim() || '42');
+    this.container.querySelector('#btn-reset')!.addEventListener('click', reset);
+    seedInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') reset();
     });
-
-    const colorButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-color]');
-    colorButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        colorButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onColorModeChange(btn.dataset.color as ColorMode);
-      });
-    });
-
-    const sharingButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-sharing]');
-    sharingButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        sharingButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onSharingChange(btn.dataset.sharing === 'on');
-      });
-    });
-
-    const signalButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-signals]');
-    signalButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        signalButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onSignalsChange(btn.dataset.signals === 'on');
-      });
-    });
-
-    const controllerButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-controller]');
-    controllerButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        controllerButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onControllerChange(btn.dataset.controller === 'brain' ? 'brain' : 'dials');
-      });
-    });
-
-    const seasonButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-seasons]');
-    seasonButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        seasonButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onSeasonsChange(btn.dataset.seasons === 'on');
-      });
-    });
-
-    const worldButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-world]');
-    worldButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        worldButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onWorldSizeChange(btn.dataset.world as WorldSize);
-      });
-    });
-
-    const foodButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-food]');
-    foodButtons.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        foodButtons.forEach((b) => b.classList.toggle('active', b === btn));
-        this.callbacks.onFoodLayoutChange(btn.dataset.food as FoodLayout);
-      });
-    });
-
-    const resetBtn = this.container.querySelector<HTMLButtonElement>('#btn-reset');
-    const seedInput = this.container.querySelector<HTMLInputElement>('#input-seed');
-    if (resetBtn && seedInput) {
-      resetBtn.addEventListener('click', () => {
-        const seedVal = seedInput.value.trim() || '42';
-        this.currentSeed = seedVal;
-        this.callbacks.onReset(seedVal);
-      });
-    }
-
-    const newSeedBtn = this.container.querySelector<HTMLButtonElement>('#btn-new-seed');
-    if (newSeedBtn) {
-      newSeedBtn.addEventListener('click', () => {
-        this.callbacks.onNewSeed();
-      });
-    }
-
-    if (seedInput) {
-      seedInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          const seedVal = seedInput.value.trim() || '42';
-          this.currentSeed = seedVal;
-          this.callbacks.onReset(seedVal);
-        }
-      });
-    }
+    this.container.querySelector('#btn-new-seed')!.addEventListener('click', () => cb.onNewSeed());
   }
 }
