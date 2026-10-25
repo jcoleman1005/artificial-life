@@ -5,7 +5,8 @@
 //   npm run experiment -- --compare seasonLength=0,800 --set gridWidth=60 --set gridHeight=60
 //
 // Options:
-//   --compare key=a,b,...   one config key and the values to compare (required)
+//   --compare key=a,b,...   one config key and the values to compare (required);
+//                           k1+k2=a,b sets several keys to the same value together
 //   --set key=value         extra config applied to every run (repeatable)
 //   --seeds 1-8 | 1,4,9     seeds to run (default 1-8)
 //   --ticks N               ticks per run (default 10000)
@@ -94,7 +95,7 @@ function runJob(job: Job): RunResult {
       for (const o of world.organisms.values()) {
         const d = o.recentHistory[0];
         if (!d) continue;
-        const base = d.chosenAction.type.replace(/_(NORTH|SOUTH|EAST|WEST)$/, '').toLowerCase();
+        const base = d.chosenAction.type.split('_')[0].toLowerCase();
         const ok = d.outcome === 'success' || d.outcome === 'rested';
         const key = ok ? base : `${base}Failed`;
         actions[key] = (actions[key] ?? 0) + 1;
@@ -139,6 +140,7 @@ function runJob(job: Job): RunResult {
     lookAlikeNeighbours: m.tribes.localKinFraction,
     lookAlikeByChance: m.tribes.globalKinFraction,
     carryCapacity: mean((o) => o.carryCapacity),
+    leapers: mean((o) => o.canLeap),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
     ...Object.fromEntries(POLICY_WEIGHT_KEYS.map((k) => [`w.${k}`, mean((o) => o.policy[k])])),
@@ -210,7 +212,12 @@ async function main() {
   const workers = Math.max(1, Number(get('--workers', '3')));
 
   const jobs: Job[] = seeds.flatMap((seed) =>
-    variants.map((variant) => ({ seed, variant, ticks, overrides: { ...fixed, [compareKey]: parseValue(variant) } }))
+    variants.map((variant) => ({
+      seed,
+      variant,
+      ticks,
+      overrides: { ...fixed, ...Object.fromEntries(compareKey.split('+').map((k) => [k, parseValue(variant)])) },
+    }))
   );
   console.log(`${jobs.length} runs (${seeds.length} seeds × ${variants.length} variants of ${compareKey}), ${ticks} ticks each, ${workers} workers${Object.keys(fixed).length ? `, with ${JSON.stringify(fixed)}` : ''}`);
 

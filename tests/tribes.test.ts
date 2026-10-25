@@ -27,8 +27,10 @@ const NEUTRAL: PolicyWeights = {
   followFoodParent: 0,
   signalOnFood: 0,
   signalWhenHungry: 0,
-  followSignal: 0, restDrive: 0,
+  followSignal: 0,
   restDrive: 0,
+  avoidOccupied: 0,
+  leapEagerness: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -40,6 +42,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     policy: { ...NEUTRAL },
     tag: 0,
     carryCapacity: 2,
+    canLeap: 0,
     brain: TEST_BRAIN,
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },
     age: 0,
@@ -75,6 +78,10 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     foodSpawnInterval: 9999,
     foodRegionCount: 0,
     controller: 'dials', // these tests exercise the dial policy
+    // Classic 4-way movement, so these tests isolate the rules they cover.
+    diagonalMoves: false,
+    squeezeEnabled: false,
+    leapEnabled: false,
     ...overrides,
   });
 }

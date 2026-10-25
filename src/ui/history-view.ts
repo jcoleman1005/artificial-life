@@ -29,6 +29,8 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   signalWhenHungry: 'Signal when hungry',
   followSignal: 'Follow signals',
   restDrive: 'Rest drive',
+  avoidOccupied: 'Avoid occupied cells',
+  leapEagerness: 'Leap eagerness',
 };
 
 /** Trend section for the dial weights, collapsed while the brain is in charge. */
@@ -182,6 +184,14 @@ export class HistoryView {
         value: (s) => s.carryCapacity.mean,
         spread: (s) => s.carryCapacity.sd,
         format: (s) => `${s.carryCapacity.mean.toFixed(2)} ± ${s.carryCapacity.sd.toFixed(2)} units`,
+      },
+      {
+        section: 'Body traits',
+        label: 'Leapers',
+        fixedRange: [0, 1],
+        value: (s) => s.leapers,
+        format: (s) => pct(s.leapers),
+        axisLabel: pct,
       },
       {
         section: 'Brains (used when Controller = Brain)',

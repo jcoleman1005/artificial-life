@@ -17,7 +17,22 @@ export function inheritCarryCapacity(
   return Math.max(0, Math.min(config.maxCarryCapacity, parentCapacity + step));
 }
 
-/** Energy spent per tick just staying alive, including the cost of carry capacity. */
+/** Whether a founder can leap (1) or not (0). */
+export function founderCanLeap(config: Readonly<SimulationConfig>, prng: PRNG): number {
+  return prng.next() < config.founderLeapChance ? 1 : 0;
+}
+
+/** A child's leap ability: usually the parent's, flipped with probability traitMutationRate. */
+export function inheritCanLeap(parentCanLeap: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
+  return prng.next() < config.traitMutationRate ? 1 - parentCanLeap : parentCanLeap;
+}
+
+/** Energy spent per tick just staying alive, including the upkeep of body traits. */
 export function metabolismCost(organism: Readonly<Organism>, config: Readonly<SimulationConfig>): number {
-  return config.tickMetabolismCost + config.carryUpkeep * organism.carryCapacity;
+  return (
+    config.tickMetabolismCost +
+    config.carryUpkeep * organism.carryCapacity +
+    // The leap ability only costs anything in worlds where leaping exists.
+    (config.leapEnabled ? config.leapUpkeep * organism.canLeap : 0)
+  );
 }

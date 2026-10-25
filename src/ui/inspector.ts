@@ -22,6 +22,8 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['signalWhenHungry', 'Signal When Hungry'],
   ['followSignal', 'Follow Signals'],
   ['restDrive', 'Rest Drive'],
+  ['avoidOccupied', 'Avoid Occupied Cells'],
+  ['leapEagerness', 'Leap Eagerness'],
 ];
 
 export class InspectorView {
@@ -226,6 +228,10 @@ export class InspectorView {
           <div class="summary-pill">
             <span class="pill-title">Carrying</span>
             <span class="pill-value">${organism.carriedFood} / ${organism.carryCapacity}</span>
+          </div>
+          <div class="summary-pill">
+            <span class="pill-title">Can Leap</span>
+            <span class="pill-value">${organism.canLeap === 1 ? 'Yes' : 'No'}</span>
           </div>
           <div class="summary-pill">
             <span class="pill-title">Given / Got</span>

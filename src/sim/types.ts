@@ -28,6 +28,14 @@ export type ActionType =
   | 'MOVE_SOUTH'
   | 'MOVE_EAST'
   | 'MOVE_WEST'
+  | 'MOVE_NORTHEAST'
+  | 'MOVE_NORTHWEST'
+  | 'MOVE_SOUTHEAST'
+  | 'MOVE_SOUTHWEST'
+  | 'LEAP_NORTH'
+  | 'LEAP_SOUTH'
+  | 'LEAP_EAST'
+  | 'LEAP_WEST'
   | 'EAT'
   | 'REPRODUCE_NORTH'
   | 'REPRODUCE_SOUTH'
@@ -45,11 +53,14 @@ export interface LegalAction {
   readonly type: ActionType;
   readonly target?: Point;
   /**
-   * MOVE only: the target cell holds the mover's own child or parent, and the
-   * move is a swap: the two trade places (family can pass through each other).
+   * MOVE only: the target cell holds another organism and the move is a swap:
+   * the two trade places if the occupant stays put. Family ('child', 'parent')
+   * pass at the normal cost; anyone else is squeezed past at extra cost.
    */
   readonly swapWithId?: string;
-  readonly swapRelation?: 'child' | 'parent';
+  readonly swapRelation?: 'child' | 'parent' | 'squeeze';
+  /** MOVE only: the target cell holds a non-family organism (a squeeze or a blocked move). */
+  readonly targetOccupied?: boolean;
   /** GIVE only: the adjacent organism receiving a carried food unit. */
   readonly recipientId?: string;
   /** GIVE only: how alike the recipient's tag looks (0..1). */
@@ -105,6 +116,10 @@ export interface PolicyWeights {
   followSignal: number;
   /** Preference for resting (staying put at no extra cost) over other actions ([-2, 2]). */
   restDrive: number;
+  /** How strongly to avoid moving into cells held by non-family organisms ([-2, 2]). */
+  avoidOccupied: number;
+  /** Extra willingness to leap over a neighbour, for organisms able to ([-2, 2]). */
+  leapEagerness: number;
 }
 
 export interface SensedEntity {
@@ -205,6 +220,8 @@ export interface Organism {
    * Each unit of capacity adds carryUpkeep to its metabolism every tick.
    */
   readonly carryCapacity: number;
+  /** Inherited body trait: 1 if this organism can leap over a neighbour, else 0. */
+  readonly canLeap: number;
   /** Inherited neural controller, used when config.controller is 'brain'. */
   readonly brain: Brain;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
@@ -270,6 +287,14 @@ export interface SimulationConfig {
   carryUpkeep: number; // Extra energy per tick for each unit of carry capacity
   maxCarryCapacity: number; // Upper bound on the inherited carry capacity
   traitMutationRate: number; // Probability a child's body trait shifts by ±1 at birth
+  diagonalMoves: boolean; // Allow the 4 diagonal moves
+  diagonalMoveCost: number; // Diagonal move cost, as a multiple of moveCost
+  squeezeEnabled: boolean; // Allow trading places with a non-family organism that stays put
+  squeezeCostMultiplier: number; // Squeeze cost, as a multiple of the move's cost
+  leapEnabled: boolean; // Allow organisms with the canLeap trait to leap
+  leapCostMultiplier: number; // Leap cost, as a multiple of moveCost
+  leapUpkeep: number; // Extra energy per tick for having the leap ability
+  founderLeapChance: number; // Chance a founder can leap
   controller: 'dials' | 'brain'; // Which inherited controller chooses actions
   brainMutationRate: number; // Probability each brain weight mutates at birth
   brainMutationStdDev: number; // Size of a brain weight mutation

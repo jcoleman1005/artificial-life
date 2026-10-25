@@ -1,6 +1,8 @@
 import type { FoodPatch, Organism } from '../sim/types';
 import type { World } from '../sim/world';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
+import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
+import type { ActionType } from '../sim/types';
 
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
@@ -13,8 +15,9 @@ export interface ViewInsets {
   right: number;
 }
 
-/** Unit vector for an action that ends in a compass direction. */
-function directionOf(type: string): [number, number] {
+/** Unit vector for an action that ends in a direction (moves, leaps, gifts). */
+function directionOf(type: ActionType): [number, number] {
+  if (isMoveAction(type) || isLeapAction(type)) return unitDirectionOf(type);
   if (type.endsWith('_NORTH')) return [0, -1];
   if (type.endsWith('_SOUTH')) return [0, 1];
   if (type.endsWith('_EAST')) return [1, 0];
@@ -540,8 +543,9 @@ export class CanvasRenderer {
     const stroke = Math.max(1.2, r * 0.17);
     ctx.lineWidth = stroke;
 
-    if (type.startsWith('MOVE_') && succeeded) {
-      // Moving: a white arrow along the way it went
+    const moving = isMoveAction(type) || isLeapAction(type);
+    if (moving && succeeded) {
+      // Moving (or leaping): a white arrow along the way it went
       const [hx, hy] = directionOf(type);
       const tip = r * 0.5;
       const wing = r * 0.28;
@@ -552,7 +556,7 @@ export class CanvasRenderer {
       ctx.lineTo(cx + hx * tip, cy + hy * tip);
       ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
       ctx.stroke();
-    } else if (type.startsWith('MOVE_')) {
+    } else if (moving) {
       // Blocked: a white bar on the side it pushed toward
       const [hx, hy] = directionOf(type);
       const off = r * 0.5;

@@ -30,8 +30,10 @@ const ZERO_POLICY: PolicyWeights = {
   followFoodParent: 0,
   signalOnFood: 0,
   signalWhenHungry: 0,
-  followSignal: 0, restDrive: 0,
+  followSignal: 0,
   restDrive: 0,
+  avoidOccupied: 0,
+  leapEagerness: 0,
 };
 
 function brainWorld(overrides: Partial<SimulationConfig> = {}): World {
@@ -62,6 +64,7 @@ function organism(id: string, x: number, y: number, overrides: Partial<Organism>
     policy: ZERO_POLICY,
     tag: 0,
     carryCapacity: 2,
+    canLeap: 0,
     brain: createHeadStartBrain(new PRNG(1)),
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },
     age: 100,
