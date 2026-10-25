@@ -9,6 +9,7 @@ import type {
 } from './types';
 import { PRNG } from './prng';
 import { isKin, shareWeightFor, tagSimilarity } from './tags';
+import { isLeapAction, unitDirectionOf } from './directions';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -24,6 +25,8 @@ export const WEIGHT_MAX = 2.0;
 export const EAT_PRIORITY_SCALE = 20;
 export const HUNGER_URGENCY_SCALE = 10;
 export const PARENT_PULL_SCALE = 3;
+/** Penalty per unit of avoidOccupied for moving into a cell held by a non-family organism. */
+export const OCCUPIED_SCALE = 1.5;
 
 /**
  * Creates a randomized initial policy for pioneer organisms.
@@ -48,6 +51,9 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     eatPriority: Number(prng.nextFloat(1.5, 2.0).toFixed(3)),
     hungerUrgency: Number(prng.nextFloat(1.5, 2.0).toFixed(3)),
     followFoodParent: Number(prng.nextFloat(0.5, 1.5).toFixed(3)),
+    // Head start: prefer free cells to occupied ones; evolution can change it.
+    avoidOccupied: Number(prng.nextFloat(1.0, 2.0).toFixed(3)),
+    leapEagerness: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
   };
 }
 
@@ -85,6 +91,8 @@ export function mutatePolicy(
     eatPriority: mutateWeight(parentPolicy.eatPriority),
     hungerUrgency: mutateWeight(parentPolicy.hungerUrgency),
     followFoodParent: mutateWeight(parentPolicy.followFoodParent),
+    avoidOccupied: mutateWeight(parentPolicy.avoidOccupied),
+    leapEagerness: mutateWeight(parentPolicy.leapEagerness),
   };
 }
 
@@ -100,50 +108,80 @@ export function getLegalActions(
   const actions: LegalAction[] = [];
   const { x, y } = organism;
 
-  // 1. Move actions (Orthogonal)
+  const width = snapshot.gridWidth;
+  const inBounds = (cx: number, cy: number) =>
+    cx >= 0 && cx < width && cy >= 0 && cy < snapshot.gridHeight;
+  const isWall = (cx: number, cy: number) =>
+    !inBounds(cx, cy) || snapshot.obstacleGrid[cy * width + cx] === 1;
+  const occupantAt = (cx: number, cy: number) => {
+    if (!inBounds(cx, cy)) return undefined;
+    const index = snapshot.organismGrid[cy * width + cx];
+    return index >= 0 ? snapshot.organisms[index] : undefined;
+  };
+
+  // 1. Move actions: orthogonal, plus diagonal when enabled
   const candidateMoves: { type: LegalAction['type']; dx: number; dy: number }[] = [
     { type: 'MOVE_NORTH', dx: 0, dy: -1 },
     { type: 'MOVE_SOUTH', dx: 0, dy: 1 },
     { type: 'MOVE_EAST', dx: 1, dy: 0 },
     { type: 'MOVE_WEST', dx: -1, dy: 0 },
   ];
+  if (config.diagonalMoves) {
+    candidateMoves.push(
+      { type: 'MOVE_NORTHEAST', dx: 1, dy: -1 },
+      { type: 'MOVE_NORTHWEST', dx: -1, dy: -1 },
+      { type: 'MOVE_SOUTHEAST', dx: 1, dy: 1 },
+      { type: 'MOVE_SOUTHWEST', dx: -1, dy: 1 }
+    );
+  }
 
   for (const move of candidateMoves) {
     const targetX = x + move.dx;
     const targetY = y + move.dy;
+    if (isWall(targetX, targetY)) continue;
 
-    // Boundary check
-    if (
-      targetX < 0 ||
-      targetX >= snapshot.gridWidth ||
-      targetY < 0 ||
-      targetY >= snapshot.gridHeight
-    ) {
+    // No cutting a corner: a diagonal needs at least one of its two side cells open.
+    if (move.dx !== 0 && move.dy !== 0 && isWall(x + move.dx, y) && isWall(x, y + move.dy)) {
       continue;
     }
 
-    // Obstacle check
-    const cell = targetY * snapshot.gridWidth + targetX;
-    if (snapshot.obstacleGrid[cell] === 1) {
-      continue;
-    }
-
-    // Parents and their children may pass through each other by trading places.
-    const occupantIndex = snapshot.organismGrid[cell];
-    const occupant = occupantIndex >= 0 ? snapshot.organisms[occupantIndex] : undefined;
+    // Into an occupied cell: family trade places at the normal cost; anyone
+    // else can be squeezed past (at extra cost) if squeezing is enabled.
+    const occupant = occupantAt(targetX, targetY);
     const swapRelation =
       occupant?.lineage.parentId === organism.id
         ? 'child'
         : occupant && organism.lineage.parentId === occupant.id
           ? 'parent'
-          : undefined;
+          : occupant && config.squeezeEnabled
+            ? 'squeeze'
+            : undefined;
 
     actions.push({
       type: move.type,
       target: { x: targetX, y: targetY },
       swapWithId: swapRelation ? occupant!.id : undefined,
       swapRelation,
+      targetOccupied: occupant !== undefined && swapRelation !== 'child' && swapRelation !== 'parent',
     });
+  }
+
+  // 1b. Leaps: an organism with the canLeap trait can jump over an adjacent
+  // organism (orthogonally) into the free cell beyond it.
+  if (config.leapEnabled && organism.canLeap === 1) {
+    const candidateLeaps: { type: LegalAction['type']; dx: number; dy: number }[] = [
+      { type: 'LEAP_NORTH', dx: 0, dy: -1 },
+      { type: 'LEAP_SOUTH', dx: 0, dy: 1 },
+      { type: 'LEAP_EAST', dx: 1, dy: 0 },
+      { type: 'LEAP_WEST', dx: -1, dy: 0 },
+    ];
+    for (const leap of candidateLeaps) {
+      const landX = x + 2 * leap.dx;
+      const landY = y + 2 * leap.dy;
+      if (!occupantAt(x + leap.dx, y + leap.dy)) continue; // only over an organism
+      if (isWall(landX, landY) || occupantAt(landX, landY)) continue;
+      actions.push({ type: leap.type, target: { x: landX, y: landY } });
+    }
   }
 
   // 2. Eat action
@@ -322,13 +360,17 @@ export function scoreAction(
     case 'MOVE_NORTH':
     case 'MOVE_SOUTH':
     case 'MOVE_EAST':
-    case 'MOVE_WEST': {
-      let dx = 0;
-      let dy = 0;
-      if (action.type === 'MOVE_NORTH') dy = -1;
-      if (action.type === 'MOVE_SOUTH') dy = 1;
-      if (action.type === 'MOVE_EAST') dx = 1;
-      if (action.type === 'MOVE_WEST') dx = -1;
+    case 'MOVE_WEST':
+    case 'MOVE_NORTHEAST':
+    case 'MOVE_NORTHWEST':
+    case 'MOVE_SOUTHEAST':
+    case 'MOVE_SOUTHWEST':
+    case 'LEAP_NORTH':
+    case 'LEAP_SOUTH':
+    case 'LEAP_EAST':
+    case 'LEAP_WEST': {
+      // Unit direction, so diagonals and leaps score on the same scale as steps.
+      const [dx, dy] = unitDirectionOf(action.type);
 
       // 1. Food attraction component
       if (sensed.nearestFood) {
@@ -392,8 +434,22 @@ export function scoreAction(
       }
 
       if (action.swapRelation) {
-        // Not a score term: marks that this move trades places with family.
-        components[action.swapRelation === 'child' ? 'passesChild' : 'passesParent'] = 0;
+        // Not a score term: marks that this move trades places with another organism.
+        const marker = { child: 'passesChild', parent: 'passesParent', squeeze: 'squeezesPast' } as const;
+        components[marker[action.swapRelation]] = 0;
+      }
+
+      // Sensing occupied cells: an evolved reluctance to push into strangers
+      if (action.targetOccupied) {
+        const occupiedComp = -policy.avoidOccupied * OCCUPIED_SCALE;
+        components['occupied'] = Number(occupiedComp.toFixed(3));
+        totalScore += occupiedComp;
+      }
+
+      if (isLeapAction(action.type)) {
+        const leapComp = policy.leapEagerness;
+        components['leapEagerness'] = Number(leapComp.toFixed(3));
+        totalScore += leapComp;
       }
 
       // 5. Explore tendency (seeded stochastic wander preference)

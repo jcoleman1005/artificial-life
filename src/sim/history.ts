@@ -16,6 +16,8 @@ export const POLICY_WEIGHT_KEYS = [
   'eatPriority',
   'hungerUrgency',
   'followFoodParent',
+  'avoidOccupied',
+  'leapEagerness',
 ] as const satisfies readonly (keyof PolicyWeights)[];
 
 export type PolicyWeightKey = (typeof POLICY_WEIGHT_KEYS)[number];
@@ -49,6 +51,8 @@ export interface HistorySample {
   readonly weights: Readonly<Record<PolicyWeightKey, WeightStat>>;
   /** Population mean and standard deviation of the carry-capacity body trait. */
   readonly carryCapacity: WeightStat;
+  /** Share of the population with the leap ability (0..1). */
+  readonly leapers: number;
   /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
   readonly brainDrift: WeightStat;
   readonly hiddenStrength: WeightStat;
@@ -137,6 +141,7 @@ export class MetricsHistory {
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
+      leapers: organisms.length ? organisms.filter((o) => o.canLeap === 1).length / organisms.length : 0,
       brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
       hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
     });
@@ -169,6 +174,7 @@ export class MetricsHistory {
       'lean_season',
       'carry_capacity_mean',
       'carry_capacity_sd',
+      'leapers_fraction',
       'brain_drift_mean',
       'brain_hidden_strength_mean',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
@@ -194,6 +200,7 @@ export class MetricsHistory {
         s.lean ? 1 : 0,
         s.carryCapacity.mean.toFixed(4),
         s.carryCapacity.sd.toFixed(4),
+        s.leapers.toFixed(4),
         s.brainDrift.mean.toFixed(4),
         s.hiddenStrength.mean.toFixed(4),
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [

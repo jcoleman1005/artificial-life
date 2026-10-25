@@ -1,12 +1,15 @@
 import type { FoodPatch, Organism } from '../sim/types';
 import type { World } from '../sim/world';
 import { seasonAt } from '../sim/seasons';
+import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
+import type { ActionType } from '../sim/types';
 
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
 
-/** Unit vector for an action that ends in a compass direction. */
-function directionOf(type: string): [number, number] {
+/** Unit vector for an action that ends in a direction (moves, leaps, gifts). */
+function directionOf(type: ActionType): [number, number] {
+  if (isMoveAction(type) || isLeapAction(type)) return unitDirectionOf(type);
   if (type.endsWith('_NORTH')) return [0, -1];
   if (type.endsWith('_SOUTH')) return [0, 1];
   if (type.endsWith('_EAST')) return [1, 0];
@@ -319,7 +322,8 @@ export class CanvasRenderer {
     }
     ctx.fill();
 
-    if (type.startsWith('MOVE_') && succeeded) {
+    const moving = isMoveAction(type) || isLeapAction(type);
+    if (moving && succeeded) {
       // Moving: an arrowhead pointing the way it went
       const [hx, hy] = directionOf(type);
       const tip = bodyRadius * 0.75;
@@ -337,7 +341,7 @@ export class CanvasRenderer {
       const half = bodyRadius * 0.38;
       ctx.fillStyle = glyph;
       ctx.fillRect(cx - half, cy - half, half * 2, half * 2);
-    } else if (type.startsWith('MOVE_')) {
+    } else if (moving) {
       // Blocked: a dark bar on the side it tried to move toward
       const [hx, hy] = directionOf(type);
       const off = bodyRadius * 0.45;

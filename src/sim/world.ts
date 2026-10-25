@@ -22,7 +22,14 @@ import { computeWorldMetrics } from './metrics';
 import { MetricsHistory } from './history';
 import { inheritTag } from './tags';
 import { seasonAt } from './seasons';
-import { founderCarryCapacity, inheritCarryCapacity, metabolismCost } from './traits';
+import {
+  founderCanLeap,
+  founderCarryCapacity,
+  inheritCanLeap,
+  inheritCarryCapacity,
+  metabolismCost,
+} from './traits';
+import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain } from './brain';
 
 export class World {
@@ -150,6 +157,7 @@ export class World {
     const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
     const carryCapacity = founderCarryCapacity(this.config, this.prng);
     const brain = createHeadStartBrain(this.prng);
+    const canLeap = founderCanLeap(this.config, this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -158,6 +166,7 @@ export class World {
       policy,
       tag,
       carryCapacity,
+      canLeap,
       brain,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
@@ -282,11 +291,15 @@ export class World {
       let swapWithId: string | undefined;
       let reproTargetKey: string | undefined;
 
-      if (chosenAction.type.startsWith('MOVE_') && chosenAction.swapWithId) {
+      if (isMoveAction(chosenAction.type) && chosenAction.swapWithId) {
         // A swap keeps both cells occupied, so it stays out of the ordinary
         // move resolution below and the parent's cell remains reserved.
         swapWithId = chosenAction.swapWithId;
-      } else if (chosenAction.type.startsWith('MOVE_') && chosenAction.target) {
+      } else if (
+        (isMoveAction(chosenAction.type) || isLeapAction(chosenAction.type)) &&
+        chosenAction.target
+      ) {
+        // Leaps resolve like moves to their landing cell.
         moveTargetKey = `${chosenAction.target.x},${chosenAction.target.y}`;
       } else if (chosenAction.type.startsWith('REPRODUCE_') && chosenAction.target) {
         reproTargetKey = `${chosenAction.target.x},${chosenAction.target.y}`;
@@ -486,11 +499,27 @@ export class World {
         case 'MOVE_NORTH':
         case 'MOVE_SOUTH':
         case 'MOVE_EAST':
-        case 'MOVE_WEST': {
+        case 'MOVE_WEST':
+        case 'MOVE_NORTHEAST':
+        case 'MOVE_NORTHWEST':
+        case 'MOVE_SOUTHEAST':
+        case 'MOVE_SOUTHWEST':
+        case 'LEAP_NORTH':
+        case 'LEAP_SOUTH':
+        case 'LEAP_EAST':
+        case 'LEAP_WEST': {
+          // Diagonals cost more (longer step); squeezing past a stranger and
+          // leaping cost more again. Nothing is paid for a move that fails.
+          const { moveCost } = this.config;
+          const cost = isLeapAction(chosenAction.type)
+            ? moveCost * this.config.leapCostMultiplier
+            : moveCost *
+              (isDiagonalMove(chosenAction.type) ? this.config.diagonalMoveCost : 1) *
+              (chosenAction.swapRelation === 'squeeze' ? this.config.squeezeCostMultiplier : 1);
           if (approved && item.swapWithId) {
-            // Trade places with the family member after all actions (see below).
-            organism.energy -= this.config.moveCost;
-            energyDelta -= this.config.moveCost;
+            // Trade places with the other organism after all actions (see below).
+            organism.energy -= cost;
+            energyDelta -= cost;
             pendingSwaps.set([organism.id, item.swapWithId].sort().join('|'), {
               mover: organism,
               otherId: item.swapWithId,
@@ -499,11 +528,11 @@ export class World {
           } else if (approved && chosenAction.target) {
             organism.x = chosenAction.target.x;
             organism.y = chosenAction.target.y;
-            organism.energy -= this.config.moveCost;
-            energyDelta -= this.config.moveCost;
+            organism.energy -= cost;
+            energyDelta -= cost;
             outcome = 'success';
           }
-          // If not approved, no moveCost paid!
+          // If not approved, no move cost is paid.
           break;
         }
 
@@ -536,6 +565,7 @@ export class World {
                 this.prng
               );
               const childBrain = mutateBrain(organism.brain, this.config, this.prng);
+              const childCanLeap = inheritCanLeap(organism.canLeap, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
@@ -545,6 +575,7 @@ export class World {
                 policy: childPolicy,
                 tag: childTag,
                 carryCapacity: childCapacity,
+                canLeap: childCanLeap,
                 brain: childBrain,
                 lineage: {
                   id: organism.lineage.id,

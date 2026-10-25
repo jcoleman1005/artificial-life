@@ -25,6 +25,8 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   eatPriority: 'Eat priority',
   hungerUrgency: 'Hunger urgency',
   followFoodParent: 'Follow food parent',
+  avoidOccupied: 'Avoid occupied cells',
+  leapEagerness: 'Leap eagerness',
 };
 
 const REFERENCE = '#64748b';
@@ -150,6 +152,14 @@ export class HistoryView {
         value: (s) => s.carryCapacity.mean,
         spread: (s) => s.carryCapacity.sd,
         format: (s) => `${s.carryCapacity.mean.toFixed(2)} ± ${s.carryCapacity.sd.toFixed(2)} units`,
+      },
+      {
+        section: 'Body traits',
+        label: 'Leapers',
+        fixedRange: [0, 1],
+        value: (s) => s.leapers,
+        format: (s) => pct(s.leapers),
+        axisLabel: pct,
       },
       {
         section: 'Brains (used when Controller = Brain)',

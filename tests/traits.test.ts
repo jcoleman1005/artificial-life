@@ -30,8 +30,10 @@ describe('Carry capacity trait', () => {
 
   it('costs upkeep every tick in proportion to capacity', () => {
     const config = { ...DEFAULT_CONFIG, tickMetabolismCost: 0.25, carryUpkeep: 0.05 };
-    expect(metabolismCost({ carryCapacity: 0 } as Organism, config)).toBeCloseTo(0.25);
-    expect(metabolismCost({ carryCapacity: 4 } as Organism, config)).toBeCloseTo(0.45);
+    expect(metabolismCost({ carryCapacity: 0, canLeap: 0 } as Organism, config)).toBeCloseTo(0.25);
+    expect(metabolismCost({ carryCapacity: 4, canLeap: 0 } as Organism, config)).toBeCloseTo(0.45);
+    // Leap ability adds its own upkeep
+    expect(metabolismCost({ carryCapacity: 0, canLeap: 1 } as Organism, { ...config, leapUpkeep: 0.03 })).toBeCloseTo(0.28);
 
     const world = new World({
       seed: 1,
@@ -41,6 +43,7 @@ describe('Carry capacity trait', () => {
       immigrationInterval: 0,
       tickMetabolismCost: 0.25,
       carryUpkeep: 0.05,
+      leapUpkeep: 0,
       moveCost: 0,
     });
     const org = Array.from(world.organisms.values())[0];
@@ -75,10 +78,11 @@ describe('Carry capacity trait', () => {
         policy: {
           foodAttraction: 0, obstacleAvoidance: 0, crowdingAvoidance: 0, exploreTendency: 0,
           eatDrive: 0, reproduceDrive: 0, kinAffinity: 0, shareWithKin: 0, shareWithStrangers: 0,
-          careForChildren: 0, forageDrive: 2, eatPriority: 0, hungerUrgency: 0, followFoodParent: 0,
+          careForChildren: 0, forageDrive: 2, eatPriority: 0, hungerUrgency: 0, followFoodParent: 0, avoidOccupied: 0, leapEagerness: 0,
         },
         tag: 0,
         carryCapacity: capacity,
+        canLeap: 0,
         brain: createHeadStartBrain(new PRNG(0)),
         lineage: { id: 'l', parentId: null, generation: 1, birthTick: 0 },
         age: 0,

@@ -1,4 +1,5 @@
 import type { PRNG } from './prng';
+import { isDiagonalMove, isLeapAction, isMoveAction, unitDirectionOf } from './directions';
 import type {
   ActionScore,
   LegalAction,
@@ -45,6 +46,9 @@ export const BRAIN_INPUTS = [
   'moveFamilySwap',
   'moveNoise',
   'pushedByEating',
+  'moveOccupied',
+  'isLeap',
+  'isDiagonal',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -78,6 +82,7 @@ const HEAD_START: Readonly<Partial<Record<BrainInput, number>>> = {
   moveParentFood: 3,
   moveNoise: 0.4,
   pushedByEating: -35,
+  moveOccupied: -2.25, // like the avoidOccupied dial's head start
 };
 
 export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEAD_START[name] ?? 0);
@@ -109,14 +114,6 @@ export function mutateBrain(parent: Brain, config: Readonly<SimulationConfig>, p
   };
 }
 
-function directionOf(type: string): [number, number] {
-  if (type.endsWith('_NORTH')) return [0, -1];
-  if (type.endsWith('_SOUTH')) return [0, 1];
-  if (type.endsWith('_EAST')) return [1, 0];
-  if (type.endsWith('_WEST')) return [-1, 0];
-  return [0, 0];
-}
-
 /** Alignment of a unit move with an offset, scaled down with distance. */
 function aligned(dx: number, dy: number, target: { dx: number; dy: number; distance: number } | null, falloff: number) {
   if (!target) return 0;
@@ -135,13 +132,14 @@ export function brainFeatures(
   prng: PRNG
 ): number[] {
   const type = action.type;
-  const isMove = type.startsWith('MOVE_');
+  // Leaps count as movement: they share the directional inputs.
+  const isMove = isMoveAction(type) || isLeapAction(type);
   const isGive = type.startsWith('GIVE_');
   const isReproduce = type.startsWith('REPRODUCE_');
   const hunger = 1 - sensed.energyRatio;
   const hungry = sensed.energyRatio < 0.5;
   const need = action.recipientNeed ?? 0;
-  const [dx, dy] = isMove ? directionOf(type) : [0, 0];
+  const [dx, dy] = isMove ? unitDirectionOf(type) : [0, 0];
 
   let moveKin = 0;
   if (isMove && sensed.kinPull) {
@@ -174,9 +172,12 @@ export function brainFeatures(
     isMove ? aligned(dx, dy, sensed.nearestOrganism, 0.3) : 0, // moveCrowd
     moveKin, // moveKin
     isMove ? aligned(dx, dy, sensed.parentWithFood, 0) : 0, // moveParentFood
-    isMove && action.swapWithId ? 1 : 0, // moveFamilySwap
+    isMove && (action.swapRelation === 'child' || action.swapRelation === 'parent') ? 1 : 0, // moveFamilySwap
     isMove ? prng.nextFloat(-1, 1) : 0, // moveNoise
     canEatNow && type !== 'EAT' && !action.recipientIsChild ? 1 : 0, // pushedByEating
+    action.targetOccupied ? 1 : 0, // moveOccupied
+    isLeapAction(type) ? 1 : 0, // isLeap
+    isDiagonalMove(type) ? 1 : 0, // isDiagonal
   ];
 }
 
