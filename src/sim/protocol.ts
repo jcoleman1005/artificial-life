@@ -8,6 +8,8 @@
  * survives structured cloning.
  */
 import type { HistorySample } from './history';
+import type { WorldEvent } from './events';
+import type { HeatmapKind } from './activity';
 import type {
   DecisionOutcome,
   FoodPatch,
@@ -89,7 +91,7 @@ export type ToWorker =
   | { readonly kind: 'config'; readonly config: Partial<SimulationConfig> }
   | { readonly kind: 'select'; readonly id: string | null }
   /** Which slow data the page is showing, so the worker only sends that. */
-  | { readonly kind: 'panels'; readonly history: boolean }
+  | { readonly kind: 'panels'; readonly history: boolean; readonly heatmap: HeatmapKind | null }
   | { readonly kind: 'csv'; readonly requestId: number };
 
 /** Terrain and settings: sent at start and after every reset. */
@@ -97,6 +99,8 @@ export interface WorldStatic {
   readonly config: SimulationConfig;
   readonly obstacles: readonly string[];
   readonly foodRegions: readonly FoodRegion[];
+  /** Recent world events, oldest first (the feed starts from these). */
+  readonly events: readonly WorldEvent[];
 }
 
 /** Messages from the worker to the page. */
@@ -111,6 +115,8 @@ export type FromWorker =
       readonly ticksPerSecond: number;
       /** True when the frame comes from a single Step, so the page can glide it. */
       readonly fromStep: boolean;
+      /** World events since the previous frame. */
+      readonly events: readonly WorldEvent[];
       /** Present when panels are due (a few times a second, and after a step or selection). */
       readonly panels?: PanelData;
     }
@@ -122,4 +128,6 @@ export interface PanelData {
   readonly selected: Organism | null;
   /** History samples, only when the page asked for them. */
   readonly history?: readonly HistorySample[];
+  /** The heatmap the page is showing (one value per cell, row by row), only when asked for. */
+  readonly heatmap?: { readonly kind: HeatmapKind; readonly cells: Float32Array };
 }

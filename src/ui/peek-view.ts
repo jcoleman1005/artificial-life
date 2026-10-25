@@ -1,9 +1,9 @@
 import type { FoodRegion, SimulationConfig } from '../sim/types';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
-import type { ColourGroup } from './groups';
+import type { ColourGroup } from '../sim/groups';
 
 /** Compass name of a region's place in the world, e.g. "north-west". */
-function compass(region: FoodRegion, config: SimulationConfig): string {
+export function compass(region: FoodRegion, config: SimulationConfig): string {
   const dx = (region.x + 0.5) / config.gridWidth - 0.5;
   const dy = (region.y + 0.5) / config.gridHeight - 0.5;
   if (Math.hypot(dx, dy) < 0.12) return 'centre';

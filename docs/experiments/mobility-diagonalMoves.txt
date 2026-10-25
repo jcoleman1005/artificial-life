@@ -1,0 +1,15 @@
+
+> artificial-life@0.1.0 experiment
+> vite-node scripts/experiment.ts -- --compare diagonalMoves=false,true --workers 4 --json docs/experiments/mobility-diagonalMoves.json
+
+16 runs (8 seeds × 2 variants of diagonalMoves), 10000 ticks each, 4 workers
+  done: seed 1, diagonalMoves=false (1/16)
+  done: seed 1, diagonalMoves=true (2/16)
+  done: seed 2, diagonalMoves=false (3/16)
+  done: seed 2, diagonalMoves=true (4/16)
+  done: seed 3, diagonalMoves=false (5/16)
+  done: seed 4, diagonalMoves=false (6/16)
+  done: seed 3, diagonalMoves=true (7/16)
+  done: seed 4, diagonalMoves=true (8/16)
+  done: seed 5, diagonalMoves=false (9/16)
+  done: seed 6, diagonalMoves=false (10/16)

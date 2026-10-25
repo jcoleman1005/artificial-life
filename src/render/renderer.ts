@@ -1,11 +1,29 @@
 import type { FoodPatch } from '../sim/types';
 import type { OrganismView, WorldView } from '../sim/protocol';
+import type { HeatmapKind } from '../sim/activity';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
 
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
+
+/**
+ * One optional layer over the world (one at a time):
+ * - family: the selected organism's parent and children, its lineage lit and others dimmed;
+ * - senses: the selected organism's sight and signal ranges, and signal ripples;
+ * - trails: short fading paths behind organisms;
+ * - crowding / deaths / feeding: fading heatmaps of where those happen.
+ */
+export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | HeatmapKind;
+
+const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
+  crowding: '251, 146, 60',
+  deaths: '248, 113, 113',
+  feeding: '134, 239, 172',
+};
+/** Trail points kept per organism (one per frame). */
+const TRAIL_LENGTH = 12;
 
 /** Space at the canvas edges covered by overlays (sheet, playback pill). */
 export interface ViewInsets {
@@ -72,6 +90,9 @@ export class CanvasRenderer {
   /** While zoomed, keep the selected organism centred (until the view is dragged). */
   private following = true;
   private zoomAnimation: { from: number; to: number; start: number } | null = null;
+  private overlay: OverlayMode = 'none';
+  private heatmap: Float32Array | null = null;
+  private trails = new Map<string, { x: number; y: number }[]>();
 
   constructor(canvas: HTMLCanvasElement, world: WorldView) {
     this.canvas = canvas;
@@ -90,6 +111,17 @@ export class CanvasRenderer {
 
   public setColorMode(mode: ColorMode): void {
     this.colorMode = mode;
+  }
+
+  public setOverlay(mode: OverlayMode): void {
+    this.overlay = mode;
+    this.trails.clear();
+    if (mode === 'none' || mode === 'family' || mode === 'senses' || mode === 'trails') this.heatmap = null;
+  }
+
+  /** The heatmap to draw (one value per cell), or null. */
+  public setHeatmap(cells: Float32Array | null): void {
+    this.heatmap = cells;
   }
 
   public hueOf(org: OrganismView): number {
@@ -188,11 +220,23 @@ export class CanvasRenderer {
     for (const org of this.world.organisms.values()) {
       this.previousPositions.set(org.id, { x: org.x, y: org.y });
     }
+    if (this.overlay === 'trails') {
+      for (const [id, { x, y }] of this.previousPositions) {
+        const trail = this.trails.get(id) ?? [];
+        const last = trail[trail.length - 1];
+        if (!last || last.x !== x || last.y !== y) trail.push({ x, y });
+        if (trail.length > TRAIL_LENGTH) trail.shift();
+        this.trails.set(id, trail);
+      }
+      for (const id of this.trails.keys()) if (!this.previousPositions.has(id)) this.trails.delete(id);
+    }
   }
 
   /** Forget remembered positions (after a reset, ids restart from 1). */
   public clearMotion(): void {
     this.previousPositions.clear();
+    this.trails.clear();
+    this.heatmap = null;
     this.progress = 1;
   }
 
@@ -342,6 +386,13 @@ export class CanvasRenderer {
       this.drawFoodPatch(patch, detail);
     }
 
+    // Overlays drawn under the organisms
+    if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
+      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView);
+    }
+    if (this.overlay === 'trails') this.drawTrails(selectedOrg);
+    if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
+
     // Sensing range of the selected organism: a soft dashed square
     if (selectedOrg) {
       const radius = config.sensingRadius;
@@ -360,10 +411,14 @@ export class CanvasRenderer {
       ctx.setLineDash([]);
     }
 
-    // Organisms
+    // Organisms (with the family overlay, everyone outside the selected lineage is dimmed)
+    const family = this.overlay === 'family' && selectedOrg ? selectedOrg.lineage.id : null;
+    if (family && selectedOrg) this.drawFamilyLines(selectedOrg);
     for (const org of this.world.organisms.values()) {
       if (!inView(org.x, org.y)) continue;
+      if (family && org.lineage.id !== family) ctx.globalAlpha = 0.18;
       this.drawOrganism(org, detail);
+      ctx.globalAlpha = 1;
     }
     if (selectedOrg) this.drawSelection(selectedOrg);
 
@@ -374,6 +429,112 @@ export class CanvasRenderer {
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+  }
+
+  /** Fading cells, scaled to the busiest cell. */
+  private drawHeatmap(cells: Float32Array, rgb: string, inView: (x: number, y: number) => boolean): void {
+    const { ctx, cellSize } = this;
+    const { gridWidth } = this.world.config;
+    let max = 0;
+    for (let i = 0; i < cells.length; i++) if (cells[i] > max) max = cells[i];
+    if (max < 0.05) return;
+    for (let i = 0; i < cells.length; i++) {
+      const v = cells[i] / max;
+      if (v < 0.03) continue;
+      const x = i % gridWidth;
+      const y = (i - x) / gridWidth;
+      if (!inView(x, y)) continue;
+      // Square root lifts quiet cells so the pattern reads, not only the hot spot.
+      ctx.fillStyle = `rgba(${rgb}, ${(0.12 + 0.6 * Math.sqrt(v)).toFixed(3)})`;
+      ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+
+  /** Short fading paths behind organisms (brighter for the selected one). */
+  private drawTrails(selected: OrganismView | undefined): void {
+    const { ctx, cellSize } = this;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const org of this.world.organisms.values()) {
+      const trail = this.trails.get(org.id);
+      if (!trail || trail.length < 1) continue;
+      const isSelected = selected?.id === org.id;
+      const points = [...trail.map((p) => [(p.x + 0.5) * cellSize, (p.y + 0.5) * cellSize] as const), this.displayCentre(org)];
+      ctx.strokeStyle = `hsl(${this.hueOf(org)}, 80%, 65%)`;
+      ctx.lineWidth = Math.max(1, cellSize * (isSelected ? 0.14 : 0.07));
+      for (let i = 1; i < points.length; i++) {
+        ctx.globalAlpha = (isSelected ? 0.9 : 0.45) * (i / points.length);
+        ctx.beginPath();
+        ctx.moveTo(points[i - 1][0], points[i - 1][1]);
+        ctx.lineTo(points[i][0], points[i][1]);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+  }
+
+  /**
+   * Signals spreading to their real reach (a diamond: reach is counted in
+   * steps), and the selected organism's own signal reach.
+   */
+  private drawSignalRipples(selected: OrganismView | undefined): void {
+    const { ctx, cellSize } = this;
+    const reach = this.world.config.signalRadius;
+    const diamond = (cx: number, cy: number, r: number) => {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - r);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx, cy + r);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+    };
+    ctx.lineWidth = Math.max(1, cellSize * 0.06);
+    for (const org of this.world.organisms.values()) {
+      const last = org.recentHistory[0];
+      if (last?.chosenAction.type !== 'SIGNAL' || last.outcome !== 'success') continue;
+      const [cx, cy] = this.displayCentre(org);
+      const p = this.progress;
+      ctx.strokeStyle = `hsla(${this.hueOf(org)}, 85%, 70%, ${(0.55 * (1 - p) + 0.08).toFixed(3)})`;
+      diamond(cx, cy, Math.max(0.1, p) * (reach + 0.5) * cellSize);
+      ctx.stroke();
+    }
+    if (selected) {
+      const [cx, cy] = this.displayCentre(selected);
+      ctx.strokeStyle = 'rgba(103, 232, 249, 0.45)';
+      ctx.fillStyle = 'rgba(103, 232, 249, 0.04)';
+      ctx.setLineDash([3, 5]);
+      diamond(cx, cy, (reach + 0.5) * cellSize);
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  /** Lines from the selected organism to its living parent (solid) and children (dashed). */
+  private drawFamilyLines(selected: OrganismView): void {
+    const { ctx, cellSize } = this;
+    const [sx, sy] = this.displayCentre(selected);
+    ctx.lineWidth = Math.max(1, cellSize * 0.07);
+    ctx.lineCap = 'round';
+    const link = (other: OrganismView, dashed: boolean) => {
+      const [ox, oy] = this.displayCentre(other);
+      ctx.setLineDash(dashed ? [3, 4] : []);
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ox, oy);
+      ctx.stroke();
+    };
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+    const parent = selected.lineage.parentId ? this.world.organisms.get(selected.lineage.parentId) : undefined;
+    if (parent) link(parent, false);
+    ctx.strokeStyle = 'rgba(252, 216, 119, 0.8)';
+    for (const org of this.world.organisms.values()) {
+      if (org.lineage.parentId === selected.id) link(org, true);
+    }
+    ctx.setLineDash([]);
+    ctx.lineCap = 'butt';
   }
 
   /** Gold arrows from givers to receivers, and thin lines from parents to newborns. */

@@ -1,5 +1,7 @@
 import { DEFAULT_CONFIG } from '../sim/config';
 import type { HistorySample } from '../sim/history';
+import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
+import type { HeatmapKind } from '../sim/activity';
 import type {
   FromWorker,
   OrganismView,
@@ -16,6 +18,8 @@ export interface ClientEvents {
   frame(fromStep: boolean): void;
   /** Terrain and settings were replaced (start, reset). */
   reset(): void;
+  /** New world events arrived (oldest first). */
+  events(events: readonly WorldEvent[]): void;
 }
 
 /**
@@ -37,6 +41,11 @@ export class SimulationClient implements WorldView {
   private metrics: WorldMetrics | null = null;
   private selectedDetail: Organism | null = null;
   private history: readonly HistorySample[] = [];
+  private heatmap: { kind: HeatmapKind; cells: Float32Array } | null = null;
+  private wantsHistory = false;
+  private wantsHeatmap: HeatmapKind | null = null;
+  /** Recent world events, oldest first. */
+  public worldEvents: WorldEvent[] = [];
   private nextRequestId = 1;
   private readonly pendingCsv = new Map<number, (csv: string) => void>();
   private readonly worker: Worker;
@@ -58,6 +67,8 @@ export class SimulationClient implements WorldView {
         this.config = message.config;
         this.obstacles = new Set(message.obstacles);
         this.foodRegions = message.foodRegions;
+        this.worldEvents = [...message.events];
+        this.heatmap = null;
         this.events.reset();
         break;
       case 'frame': {
@@ -67,6 +78,11 @@ export class SimulationClient implements WorldView {
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.ticksPerSecond = message.ticksPerSecond;
         if (message.panels) this.applyPanels(message.panels);
+        if (message.events.length > 0) {
+          this.worldEvents.push(...message.events);
+          if (this.worldEvents.length > EVENT_LOG_SIZE) this.worldEvents.splice(0, this.worldEvents.length - EVENT_LOG_SIZE);
+          this.events.events(message.events);
+        }
         this.events.frame(message.fromStep);
         break;
       }
@@ -81,6 +97,7 @@ export class SimulationClient implements WorldView {
     this.metrics = panels.metrics;
     this.selectedDetail = panels.selected;
     if (panels.history) this.history = panels.history;
+    this.heatmap = panels.heatmap ?? null;
   }
 
   // Commands
@@ -114,7 +131,18 @@ export class SimulationClient implements WorldView {
   }
   /** Ask for history samples only while the Trends tab is showing. */
   public setWantsHistory(wants: boolean): void {
-    this.send({ kind: 'panels', history: wants });
+    this.wantsHistory = wants;
+    this.send({ kind: 'panels', history: wants, heatmap: this.wantsHeatmap });
+  }
+  /** Ask for one heatmap only while its overlay is showing (null: none). */
+  public setWantsHeatmap(kind: HeatmapKind | null): void {
+    this.wantsHeatmap = kind;
+    if (!kind) this.heatmap = null;
+    this.send({ kind: 'panels', history: this.wantsHistory, heatmap: kind });
+  }
+  /** The latest heatmap the worker sent, if one is showing. */
+  public getHeatmap(): { kind: HeatmapKind; cells: Float32Array } | null {
+    return this.heatmap;
   }
   public requestCSV(): Promise<string> {
     const requestId = this.nextRequestId++;

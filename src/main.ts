@@ -10,9 +10,12 @@ import { HistoryView } from './ui/history-view';
 import { BottomSheet } from './ui/sheet';
 import { OrganismCard } from './ui/organism-card';
 import { PeekView, groupsTableHTML, seasonSummary } from './ui/peek-view';
-import { colourGroups } from './ui/groups';
+import { colourGroups } from './sim/groups';
 import { givenName } from './ui/names';
 import { LEGEND_HTML } from './ui/legend';
+import { eventListHTML, latestEventHTML } from './ui/events-view';
+import type { OverlayMode } from './render/renderer';
+import { HEATMAP_KINDS, type HeatmapKind } from './sim/activity';
 import { DEFAULT_CONFIG, FOOD_LAYOUTS, WORLD_SIZES } from './sim/config';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -23,12 +26,30 @@ if (!app) {
 const GEAR_ICON =
   '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7.4 7.4 0 0 0-1.7-1l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6c-.6.3-1.2.6-1.7 1l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6L4.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6a.5.5 0 0 0-.1.6l2 3.5c.1.2.4.3.6.2l2.5-1c.5.4 1.1.7 1.7 1l.4 2.6c0 .2.3.4.5.4h4c.2 0 .5-.2.5-.4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1c.2.1.5 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6L19.4 13zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>';
 
+const LAYERS_ICON =
+  '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 3 2 8.5l10 5.5 10-5.5L12 3zm-7.6 9.2L2 13.5 12 19l10-5.5-2.4-1.3L12 16.4l-7.6-4.2z"/></svg>';
+
+/** The world overlays, one at a time: [mode, label, hint]. */
+const OVERLAYS: readonly (readonly [OverlayMode, string, string])[] = [
+  ['none', 'No layer', ''],
+  ['family', 'Family', 'parent, children, lineage'],
+  ['senses', 'Senses & signals', 'sight, signal reach, ripples'],
+  ['trails', 'Trails', 'where they just went'],
+  ['crowding', 'Crowding', 'blocked moves'],
+  ['deaths', 'Deaths', 'where they die'],
+  ['feeding', 'Feeding', 'where they eat'],
+];
+
 app.innerHTML = `
   <main class="app">
     <section class="stage" aria-label="World">
       <canvas id="sim-canvas" aria-label="The world. Tap an organism to follow it."></canvas>
       <div id="org-card" class="org-card" role="button" tabindex="0" aria-label="Selected organism: open details" hidden></div>
-      <div class="zoom-controls" role="group" aria-label="Zoom">
+      <div class="zoom-controls" role="group" aria-label="Layers and zoom">
+        <button type="button" class="round-btn btn-layers" aria-label="Layers" aria-haspopup="true" aria-expanded="false">${LAYERS_ICON}</button>
+        <div class="layer-menu" role="menu" hidden>
+          ${OVERLAYS.map(([mode, label, hint]) => `<button type="button" role="menuitemradio" aria-checked="false" data-overlay="${mode}"><span>${label}</span><small>${hint}</small></button>`).join('')}
+        </div>
         <button type="button" class="round-btn" data-zoom="in" aria-label="Zoom in">+</button>
         <span id="zoom-level" class="zoom-level">1×</span>
         <button type="button" class="round-btn" data-zoom="out" aria-label="Zoom out">−</button>
@@ -46,6 +67,7 @@ app.innerHTML = `
             <button type="button" class="round-btn btn-settings" aria-label="Settings">${GEAR_ICON}</button>
           </div>
           <div class="group-strip" role="img" aria-label="Colour groups"></div>
+          <div class="peek-event" aria-live="polite"></div>
         </div>
         <nav class="sheet-tabs" role="tablist">
           <button type="button" role="tab" data-tab="stats" class="active" aria-selected="true">Stats</button>
@@ -57,6 +79,8 @@ app.innerHTML = `
         <section class="tab-panel" data-panel="stats">
           <p id="stats-status" class="sim-status"></p>
           <section id="metrics-container" class="metrics-section" aria-label="Simulation metrics"></section>
+          <h3 class="panel-heading">Recent events</h3>
+          <div id="events-container"></div>
           <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
           <div id="groups-container"></div>
           ${LEGEND_HTML}
@@ -96,12 +120,17 @@ const sim = new SimulationClient({
     layout();
     refreshPanels();
   },
+  events: () => {
+    // Shown by the next panel refresh (straight away while paused).
+  },
 });
 const renderer = new CanvasRenderer(canvas, sim);
 
 // 2. Views
 const metricsView = new MetricsView($('#metrics-container'));
 const groupsContainer = $('#groups-container');
+const eventsContainer = $('#events-container');
+const peekEvent = $('.peek-event');
 const statsStatus = $('#stats-status');
 const peekView = new PeekView($('.sheet-peek'));
 let lastSelectedId: string | null = null;
@@ -164,6 +193,10 @@ let lastPanelRefresh = 0;
 let needsRender = true;
 
 function onFrame(fromStep: boolean): void {
+  if (HEATMAP_KINDS.includes(overlay as HeatmapKind)) {
+    const heat = sim.getHeatmap();
+    if (heat && heat.kind === overlay) renderer.setHeatmap(heat.cells);
+  }
   frameAt = performance.now();
   glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? Math.max(1000 / (BASE_TICKS_PER_SECOND * speedMultiplier), 16) : 0;
   needsRender = true;
@@ -197,6 +230,8 @@ function refreshPanels(): void {
   const groups = colourGroups(sim.organisms.values());
   const population = sim.organisms.size;
   peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config), groups);
+  const latest = latestEventHTML(sim.worldEvents, sim.foodRegions, sim.config);
+  if (peekEvent.innerHTML !== latest) peekEvent.innerHTML = latest;
   pill.setTick(sim.tick);
   const status = statusText();
   settingsView.setStatus(status);
@@ -213,6 +248,7 @@ function refreshPanels(): void {
       const metrics = sim.getMetrics();
       if (metrics) metricsView.render(metrics);
       groupsContainer.innerHTML = groupsTableHTML(groups, population);
+      eventsContainer.innerHTML = eventListHTML(sim.worldEvents, sim.foodRegions, sim.config);
     } else if (tab === 'trends') {
       historyView.render(sim.getHistorySamples());
     } else {
@@ -401,6 +437,53 @@ canvas.addEventListener(
   { passive: false }
 );
 
+// Layers: one overlay at a time, picked from a small menu over the world.
+// Heatmaps are only sent by the worker while one is showing. The choice is
+// remembered on this device.
+const OVERLAY_KEY = 'alife.overlay';
+let overlay: OverlayMode = 'none';
+const layersButton = $<HTMLButtonElement>('.btn-layers');
+const layerMenu = $('.layer-menu');
+function setOverlay(mode: OverlayMode): void {
+  overlay = mode;
+  renderer.setOverlay(mode);
+  sim.setWantsHeatmap(HEATMAP_KINDS.includes(mode as HeatmapKind) ? (mode as HeatmapKind) : null);
+  layersButton.classList.toggle('active', mode !== 'none');
+  layersButton.setAttribute('aria-label', `Layers: ${OVERLAYS.find(([m]) => m === mode)?.[1] ?? 'none'}`);
+  layerMenu.querySelectorAll<HTMLButtonElement>('[data-overlay]').forEach((b) => {
+    b.setAttribute('aria-checked', String(b.dataset.overlay === mode));
+  });
+  try {
+    localStorage.setItem(OVERLAY_KEY, mode);
+  } catch {
+    // Storage can be unavailable (private mode); the choice just isn't remembered.
+  }
+  needsRender = true;
+}
+function setLayerMenuOpen(open: boolean): void {
+  layerMenu.hidden = !open;
+  layersButton.setAttribute('aria-expanded', String(open));
+}
+layersButton.addEventListener('click', () => setLayerMenuOpen(layerMenu.hidden));
+layerMenu.addEventListener('click', (e) => {
+  const item = (e.target as Element).closest<HTMLButtonElement>('[data-overlay]');
+  if (!item) return;
+  setOverlay(item.dataset.overlay as OverlayMode);
+  setLayerMenuOpen(false);
+});
+document.addEventListener('pointerdown', (e) => {
+  if (!layerMenu.hidden && !(e.target as Element).closest('.layer-menu, .btn-layers')) setLayerMenuOpen(false);
+});
+{
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(OVERLAY_KEY);
+  } catch {
+    saved = null;
+  }
+  setOverlay(OVERLAYS.some(([m]) => m === saved) ? (saved as OverlayMode) : 'none');
+}
+
 // 6. Settings sheet
 const settingsOverlay = $('.settings-overlay');
 const settingsButton = $('.btn-settings');
@@ -415,6 +498,10 @@ $('.settings-backdrop').addEventListener('click', () => setSettingsOpen(false));
 
 // Keyboard: Escape closes, space plays/pauses, "." steps (desktop).
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !layerMenu.hidden) {
+    setLayerMenuOpen(false);
+    return;
+  }
   if (e.key === 'Escape' && !settingsOverlay.hidden) {
     setSettingsOpen(false);
     return;
@@ -451,7 +538,10 @@ function layout(): void {
   needsRender = true;
 }
 
-new ResizeObserver(() => layout()).observe(stage);
+const layoutObserver = new ResizeObserver(() => layout());
+layoutObserver.observe(stage);
+// The peek strip grows when the first event line appears.
+layoutObserver.observe($('.sheet-peek'));
 window.addEventListener('orientationchange', () => layout());
 
 layout();

@@ -1,7 +1,7 @@
 /**
- * Colour groups for display: organisms bucketed by tag hue. A neutral,
- * display-only grouping ("groups", not species); it reads the population and
- * changes nothing in the simulation.
+ * Colour groups: organisms bucketed by tag hue. A neutral, observation-only
+ * grouping ("groups", not species) used for display and world events; it
+ * reads the population and changes nothing in the simulation.
  */
 
 /** Twelve 30° hue buckets, centred on 0°, 30°, … with a plain colour name. */

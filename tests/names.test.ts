@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { familyName, givenName, organismName } from '../src/ui/names';
-import { colourGroups, groupIndexOf } from '../src/ui/groups';
+import { colourGroups, groupIndexOf } from '../src/sim/groups';
 
 describe('generated names', () => {
   it('is deterministic', () => {

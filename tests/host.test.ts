@@ -108,8 +108,13 @@ describe('Simulation host (the Web Worker side)', () => {
     const host = new SimulationHost(env, SMALL);
     for (let i = 0; i < 5; i++) host.handle({ kind: 'step' });
     expect(frames().at(-1)!.panels!.history).toBeUndefined();
-    host.handle({ kind: 'panels', history: true });
+    host.handle({ kind: 'panels', history: true, heatmap: null });
     expect(frames().at(-1)!.panels!.history!.length).toBeGreaterThan(0);
+    expect(frames().at(-1)!.panels!.heatmap).toBeUndefined();
+    host.handle({ kind: 'panels', history: false, heatmap: 'crowding' });
+    const heat = frames().at(-1)!.panels!.heatmap!;
+    expect(heat.kind).toBe('crowding');
+    expect(heat.cells).toHaveLength(20 * 20);
     host.handle({ kind: 'csv', requestId: 3 });
     const csv = posted.at(-1) as Extract<FromWorker, { kind: 'csv' }>;
     expect(csv.requestId).toBe(3);

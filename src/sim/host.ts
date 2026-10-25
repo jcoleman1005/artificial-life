@@ -1,4 +1,6 @@
 import { World } from './world';
+import { WorldEventDetector, type WorldEvent } from './events';
+import { ActivityMaps, type HeatmapKind } from './activity';
 import { toOrganismView, type FromWorker, type PanelData, type ToWorker } from './protocol';
 import type { SimulationConfig } from './types';
 
@@ -31,11 +33,18 @@ export class SimulationHost {
   private timer: unknown = null;
   private lastPanels = -Infinity;
   private wantsHistory = false;
+  private heatmap: HeatmapKind | null = null;
+  // Observers of the world (they never change it): world events and heatmaps.
+  private events = new WorldEventDetector();
+  private activity!: ActivityMaps;
+  /** Events found since the last frame was sent. */
+  private pendingEvents: WorldEvent[] = [];
   private readonly tickTimes: number[] = [];
 
   constructor(env: HostEnvironment, config?: Partial<SimulationConfig>) {
     this.env = env;
     this.world = new World(config);
+    this.resetObservers();
     this.postStatic();
     this.postFrame(false, true);
   }
@@ -58,7 +67,7 @@ export class SimulationHost {
         break;
       case 'step':
         if (this.running) return;
-        this.world.step();
+        this.stepWorld();
         this.postFrame(true, true);
         break;
       case 'speed':
@@ -74,6 +83,7 @@ export class SimulationHost {
         this.stopTimer();
         if (message.config) Object.assign(this.world.config, message.config);
         this.world.reset(message.seed);
+        this.resetObservers();
         this.tickTimes.length = 0;
         this.postStatic();
         this.postFrame(false, true);
@@ -89,6 +99,7 @@ export class SimulationHost {
         break;
       case 'panels':
         this.wantsHistory = message.history;
+        this.heatmap = message.heatmap;
         this.postFrame(false, true);
         break;
       case 'csv':
@@ -107,13 +118,27 @@ export class SimulationHost {
     const interval = 1000 / this.ticksPerSecond;
     let stepped = 0;
     while (this.accumulator >= interval) {
-      this.world.step();
+      this.stepWorld();
       this.tickTimes.push(now);
       this.accumulator -= interval;
       stepped++;
     }
     if (stepped > 0) this.postFrame(false, now - this.lastPanels >= PANEL_INTERVAL_MS);
     this.scheduleNext();
+  }
+
+  /** One world tick, then the observers look at the result. */
+  private stepWorld(): void {
+    this.world.step();
+    this.pendingEvents.push(...this.events.observe(this.world));
+    this.activity.observe(this.world);
+  }
+
+  private resetObservers(): void {
+    this.events = new WorldEventDetector();
+    this.events.observe(this.world); // starting state, e.g. groups already large
+    this.activity = new ActivityMaps(this.world.config.gridWidth, this.world.config.gridHeight);
+    this.pendingEvents = [];
   }
 
   private scheduleNext(): void {
@@ -133,6 +158,7 @@ export class SimulationHost {
       config: { ...world.config },
       obstacles: Array.from(world.obstacles),
       foodRegions: world.foodRegions.map((r) => ({ ...r })),
+      events: [...this.events.recentEvents()],
     });
   }
 
@@ -147,6 +173,7 @@ export class SimulationHost {
         metrics: world.getMetrics(),
         selected: world.getSelectedOrganism() ?? null,
         ...(this.wantsHistory ? { history: world.history.getSamples() } : {}),
+        ...(this.heatmap ? { heatmap: { kind: this.heatmap, cells: this.activity.snapshot(this.heatmap) } } : {}),
       };
     }
     this.env.post({
@@ -156,7 +183,9 @@ export class SimulationHost {
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
       ticksPerSecond: this.tickTimes.length,
       fromStep,
+      events: this.pendingEvents,
       ...(panels ? { panels } : {}),
     });
+    this.pendingEvents = [];
   }
 }
