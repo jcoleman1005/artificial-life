@@ -19,6 +19,7 @@ _Last updated: 2026-10-25._
 | Checks after any change | `npm run check && npm test && npm run build` |
 | Compare variants across seeds (headless) | `npm run experiment -- --compare key=a,b [--set k=v] [--seeds 1-8] [--ticks 10000] [--from saved.json]` |
 | Prove an engine change alters no outcome | `npm run fingerprint` before and after; output must match |
+| Always-on server (one shared world, saved to `./data`; see `docs/server.md`) | `npm run server` |
 | Engine speed | `npm run perf` |
 | Check a Proxmox host's capacity (read-only) | `git show origin/main:scripts/proxmox-scout.sh \| ssh root@HOST 'bash -s'` |
 
@@ -44,7 +45,8 @@ _Last updated: 2026-10-25._
 - World events feed (seasons per region, colour groups rising / dying out / taking the lead, population records and crashes, extinction, generation milestones): latest event under the peek strip, recent events in the Stats tab.
 - Layers button over the world (one at a time): Family (lineage lit, others dimmed, lines to parent and children), Senses & signals (sight square, signal reach, signal ripples), Trails, and Crowding / Deaths / Feeding heatmaps (counted in the worker every tick, fading with a ~140-tick half-life).
 - Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
-- 145 deterministic tests.
+- **Always-on server** (`server/`, `docs/server.md`): one world for every viewer, running whether or not anyone watches; saved to `data/world.json` every 5 minutes, on shutdown and on play/pause/speed changes, with hourly gzip backups (48 kept, plus one before any reset or load); resumes as it was on restart. The page detects it and streams the world (Server-Sent Events, gzip, ~10 frames/s per viewer) instead of running a worker; served from anywhere else it runs its own world as before. Playback and settings changes from one viewer show on all; selection, tabs and overlays are per viewer. Options for port, speed cap, watch-only and more; a Termux:Boot script for the S21.
+- 155 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -75,11 +77,11 @@ _Last updated: 2026-10-25._
 - About 16–18 µs per organism per tick. Default 60×60 world: dials 6.5 ms/tick, brain 7.5 ms/tick (peak ~490 organisms, ~10 ms). The 30×30 preset is about half that.
 - Memory: about 5 MB for the world at 30×30, about 14 MB at 60×60. A persistent server needs about 512 MB RAM and 1 core.
 - The simulation runs in a **Web Worker** (`src/sim/worker.ts` → `SimulationHost` in `src/sim/host.ts`), which owns the World and the tick timing. The page (`src/ui/simulation-client.ts`) only draws and handles input: each frame carries light organism records and food; metrics, history (only while Trends is open) and the selected organism's full record come at most 5× a second. Messages are defined in `src/sim/protocol.ts`. In desktop Chromium at 10× the page holds 60 fps with the worker at 60/60 ticks/s; if the worker can't keep up during a boom, ticks/s drops but drawing and touch stay smooth.
-- The worker boundary is the same one the always-on server will use: swap the worker for a connection to the server and the page needs no other changes.
+- The always-on server runs the same `SimulationHost` with any number of viewers (`server/app.ts`); the page talks to it with the same messages over SSE and POST (`src/ui/simulation-client.ts`).
 
 ## Hosting plan
 
-**Decision: host the always-on world on the old Galaxy S21 (a dedicated device, used for nothing else), with snapshots backed up to Proxmox.** The server code does not exist yet; the plan is for whichever host runs the same Node.js service.
+**Decision: host the always-on world on the old Galaxy S21 (a dedicated device, used for nothing else), with snapshots backed up to Proxmox.** The server exists (`docs/server.md`, which also has the step-by-step S21 setup); it is not yet running on the phone.
 
 Proxmox scout results (host `pve`, 2026-10-25, `scripts/proxmox-scout.sh`):
 
@@ -93,7 +95,7 @@ Proxmox scout results (host `pve`, 2026-10-25, `scripts/proxmox-scout.sh`):
 
 Why the S21: its CPU is estimated 10–16× faster than `pve`'s, and running there adds no load to the busy Proxmox host. Proxmox remains the fallback host and the backup target.
 
-S21 setup (once the server exists):
+S21 setup (the commands are in `docs/server.md`):
 - Termux and Termux:Boot from F-Droid (not the Play Store); battery optimisation off for both; `termux-wake-lock`; Wi-Fi on during sleep; automatic system updates off.
 - Battery safety: Settings → Battery → Protect battery (charge limit 85%); keep it cool and out of a case; cap the tick rate; check occasionally for swelling.
 - Tailscale on the phone for access from other devices.
@@ -127,7 +129,7 @@ There is no target outcome: new features go in on by default and the world is le
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
 **Phase 4: slow burners on the always-on server**
-13. The always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above. Long brain runs (100k+ ticks).
+13. ~~The always-on Node.js server.~~ Built 2026-10-25 (moved ahead of Phases 2–3). Next: install it on the S21 (`docs/server.md`), then long brain runs (100k+ ticks).
 14. Sexual reproduction and mate preference (visible species splitting by colour; name colour groups in a way that scales to it).
 15. Pheromone trails, then individual recognition, then lifetime plasticity.
 

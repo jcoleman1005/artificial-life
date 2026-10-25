@@ -1,7 +1,7 @@
 # Artificial Life Lab — Agent Instructions
 
 ## Goal
-Build a persistent artificial-life simulation, developed on Fedora and primarily viewed on a Samsung Galaxy S21 browser. The first milestone (a playable, mobile-friendly 2D grid simulation) is done; the always-on server is planned (see `docs/STATUS.md`).
+Build a persistent artificial-life simulation, developed on Fedora and primarily viewed on a Samsung Galaxy S21 browser. The first milestone (a playable, mobile-friendly 2D grid simulation) is done, and the always-on server exists (`docs/server.md`); see `docs/STATUS.md` for what's next.
 
 ## Scope
 Nothing is deferred. Any feature is fair game to suggest or build: predation, conflict between groups, sexual breeding and species, age, memory, lifetime learning, richer bodies, the always-on server, persistence, world branching, naturalistic rendering, and anything else. Suggest freely; agree larger changes with the user before building them, and record each decision under "Decisions already made". The agreed build order is the Roadmap in `docs/STATUS.md`.
@@ -48,12 +48,12 @@ Nothing is deferred. Any feature is fair game to suggest or build: predation, co
 - Simultaneous decisions: all organisms choose actions from the same pre-tick snapshot. Resolve conflicts with a seeded random tie-breaker.
 - Use a dedicated seeded PRNG in simulation code; do not use Math.random() for simulation outcomes.
 - Metrics remain separate: survival, reproductive success, and behavioral diversity.
-- Keep simulation logic independent from Canvas rendering and UI. The simulation runs in a Web Worker (`SimulationHost`); the page talks to it only through the messages in `src/sim/protocol.ts`, and reads the world through `WorldView`/`OrganismView`.
+- Keep simulation logic independent from Canvas rendering and UI. The simulation runs in a `SimulationHost`, inside a Web Worker or on the always-on server; the page talks to it only through the messages in `src/sim/protocol.ts`, and reads the world through `WorldView`/`OrganismView`.
 - Observers watch the world after each tick and never change it (no randomness, no writes): `WorldEventDetector` (world events: region seasons turning, colour groups rising to 10+, dying out or taking the lead, population records in steps of 100, crashes below half the recent peak, extinction, generation milestones every 25) and `ActivityMaps` (fading heatmaps of blocked moves, deaths and meals). The feed shows world events only: one line under the peek strip and a list in the Stats tab.
 - Overlays over the world, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
 - Snapshots: `World.exportState()` / `World.fromState()` save and restore a world exactly (settings, PRNG seed and state, counters, terrain, food, organisms in their original order, trend history); a restored world continues bit-identically. A `SavedWorld` (format `alife-world`, version 1) wraps it with the event feed. The browser keeps one auto-save (every 2 minutes while running, on pause, when hidden) and resumes it automatically on open, with a "Start fresh" option; branch points are saved worlds you can jump back to; files move worlds between devices. Saves from before a field existed load with its neutral default (e.g. dispersal 1); bump the version only for changes old saves cannot be read under.
 - Experiments can start from a saved world (`npm run experiment -- --from saved.json`): every variant and seed continues the same evolved state, each seed with its own random stream, and counters are measured from that start.
-- Planned: server-side persistence.
+- Always-on server (`server/`, Node.js, no extra dependencies): one shared `SimulationHost` for any number of viewers. Playback, settings, reset and load are shared; selection, tabs and overlays are per viewer. The page picks server mode by asking `/api/info`, streams the world over Server-Sent Events (gzip, frames merged to at most `--fps` per viewer) and sends commands by POST; anywhere else it runs its own Web Worker. The server saves `data/world.json` (the `SavedWorld` format) every few minutes, on shutdown and on playback changes, keeps hourly gzip backups plus one before every reset or load, and resumes playing as it was. A damaged save stops start-up rather than starting a new world. The browser's auto-save is off in server mode. It is not safe to expose publicly unless `--watch-only`.
 
 ## Working notes
 - Read `docs/STATUS.md` at the start of a session and update it at the end: current state, findings, next steps.

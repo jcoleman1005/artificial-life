@@ -11,18 +11,34 @@ export const PANEL_INTERVAL_MS = 200;
 const MAX_LAG_MS = 250;
 
 export interface HostEnvironment {
-  post(message: FromWorker): void;
+  /** The page, when there is exactly one (the Web Worker). The server connects viewers instead. */
+  post?(message: FromWorker): void;
   now(): number;
   /** Runs `fn` after `ms`; returns a handle for cancel. */
   schedule(fn: () => void, ms: number): unknown;
   cancel(handle: unknown): void;
 }
 
+/** One page watching the world. Selection and panels are its own; everything else is shared. */
+interface Viewer {
+  readonly post: (message: FromWorker) => void;
+  selectedId: string | null;
+  wantsHistory: boolean;
+  heatmap: HeatmapKind | null;
+}
+
+/** The saved part of the playback state, so a server can resume as it was. */
+export interface PlaybackState {
+  readonly running: boolean;
+  readonly ticksPerSecond: number;
+}
+
 /**
  * Runs the World and its tick timing, driven by messages from the page.
- * Used inside the Web Worker (src/sim/worker.ts); kept free of worker APIs
- * so tests can drive it directly. It only steps the World, so outcomes are
- * exactly those of stepping a World by hand with the same seed.
+ * Used inside the Web Worker (src/sim/worker.ts) for one page, and by the
+ * always-on server (server/) for any number of viewers; kept free of worker
+ * and Node APIs so tests can drive it directly. It only steps the World, so
+ * outcomes are exactly those of stepping a World by hand with the same seed.
  */
 export class SimulationHost {
   public world: World;
@@ -33,8 +49,8 @@ export class SimulationHost {
   private lastPump = 0;
   private timer: unknown = null;
   private lastPanels = -Infinity;
-  private wantsHistory = false;
-  private heatmap: HeatmapKind | null = null;
+  private readonly viewers = new Map<number, Viewer>();
+  private nextViewerId = 1;
   // Observers of the world (they never change it): world events and heatmaps.
   private events = new WorldEventDetector();
   private activity!: ActivityMaps;
@@ -46,11 +62,42 @@ export class SimulationHost {
     this.env = env;
     this.world = new World(config);
     this.resetObservers();
-    this.postStatic();
-    this.postFrame(false, true);
+    if (env.post) this.connect(env.post);
   }
 
-  public handle(message: ToWorker): void {
+  /**
+   * Adds a viewer and sends it the terrain and a first frame. Returns its id,
+   * which is also given to `beforeWelcome` before anything is sent.
+   */
+  public connect(post: (message: FromWorker) => void, beforeWelcome?: (id: number) => void): number {
+    const id = this.nextViewerId++;
+    const viewer: Viewer = { post, selectedId: null, wantsHistory: false, heatmap: null };
+    this.viewers.set(id, viewer);
+    beforeWelcome?.(id);
+    this.postStatic(viewer);
+    viewer.post(this.frameFor(viewer, this.baseFrame(false), this.metricsIfAny()));
+    return id;
+  }
+
+  public disconnect(id: number): void {
+    this.viewers.delete(id);
+  }
+
+  public get viewerCount(): number {
+    return this.viewers.size;
+  }
+
+  public playback(): PlaybackState {
+    return { running: this.running, ticksPerSecond: this.ticksPerSecond };
+  }
+
+  /**
+   * Handles a message from a viewer (by default the first one, i.e. the
+   * worker's page). Selection, panels and requests are per viewer; playback,
+   * settings, reset and load change the shared world.
+   */
+  public handle(message: ToWorker, viewerId?: number): void {
+    const viewer = viewerId === undefined ? this.viewers.values().next().value : this.viewers.get(viewerId);
     switch (message.kind) {
       case 'play':
         if (this.running) return;
@@ -85,6 +132,7 @@ export class SimulationHost {
         if (message.config) Object.assign(this.world.config, message.config);
         this.world.reset(message.seed);
         this.resetObservers();
+        for (const v of this.viewers.values()) v.selectedId = null;
         this.tickTimes.length = 0;
         this.postStatic();
         this.postFrame(false, true);
@@ -92,25 +140,28 @@ export class SimulationHost {
       case 'config':
         // Live switches take effect from the next tick.
         Object.assign(this.world.config, message.config);
+        for (const v of this.viewers.values()) v.post({ kind: 'config', config: { ...this.world.config } });
         this.postFrame(false, true);
         break;
       case 'select':
-        this.world.selectOrganism(message.id);
+        if (!viewer) return;
+        viewer.selectedId = message.id;
         this.postFrame(false, true);
         break;
       case 'panels':
-        this.wantsHistory = message.history;
-        this.heatmap = message.heatmap;
+        if (!viewer) return;
+        viewer.wantsHistory = message.history;
+        viewer.heatmap = message.heatmap;
         this.postFrame(false, true);
         break;
       case 'csv':
-        this.env.post({ kind: 'csv', requestId: message.requestId, csv: this.world.history.toCSV() });
+        viewer?.post({ kind: 'csv', requestId: message.requestId, csv: this.world.history.toCSV() });
         break;
       case 'save':
-        this.env.post({ kind: 'saved', requestId: message.requestId, saved: this.save() });
+        viewer?.post({ kind: 'saved', requestId: message.requestId, saved: this.save() });
         break;
       case 'load':
-        this.load(message.saved);
+        this.load(message.saved, viewer);
         break;
     }
   }
@@ -134,7 +185,8 @@ export class SimulationHost {
     this.scheduleNext();
   }
 
-  private save(): SavedWorld {
+  /** The whole world as a SavedWorld (also what the server writes to disk). */
+  public save(): SavedWorld {
     return {
       format: 'alife-world',
       version: 1,
@@ -145,12 +197,13 @@ export class SimulationHost {
   }
 
   /** Replaces the world with a saved one, paused. A bad save leaves the current world running. */
-  private load(saved: SavedWorld): void {
+  private load(saved: SavedWorld, from?: Viewer): void {
     let world: World;
     try {
       world = World.fromState(saved.world);
     } catch (error) {
-      this.env.post({ kind: 'error', message: `Could not load that world: ${(error as Error).message}` });
+      from?.post({ kind: 'error', message: `Could not load that world: ${(error as Error).message}` });
+      if (!from) throw error;
       return;
     }
     this.running = false;
@@ -161,6 +214,7 @@ export class SimulationHost {
     this.activity = new ActivityMaps(world.config.gridWidth, world.config.gridHeight);
     this.pendingEvents = [];
     this.tickTimes.length = 0;
+    for (const v of this.viewers.values()) v.selectedId = null;
     this.postStatic();
     this.postFrame(false, true);
   }
@@ -189,41 +243,68 @@ export class SimulationHost {
     this.timer = null;
   }
 
-  private postStatic(): void {
+  private postStatic(only?: Viewer): void {
     const { world } = this;
-    this.env.post({
+    const message: FromWorker = {
       kind: 'static',
       config: { ...world.config },
       obstacles: Array.from(world.obstacles),
       foodRegions: world.foodRegions.map((r) => ({ ...r })),
       events: [...this.events.recentEvents()],
-    });
+    };
+    for (const v of only ? [only] : this.viewers.values()) v.post(message);
   }
 
-  private postFrame(fromStep: boolean, withPanels: boolean): void {
+  /** The part of a frame every viewer shares. */
+  private baseFrame(fromStep: boolean): Omit<Extract<FromWorker, { kind: 'frame' }>, 'panels'> {
     const { world } = this;
     const now = this.env.now();
     while (this.tickTimes.length > 0 && now - this.tickTimes[0] > 1000) this.tickTimes.shift();
-    let panels: PanelData | undefined;
-    if (withPanels) {
-      this.lastPanels = now;
-      panels = {
-        metrics: world.getMetrics(),
-        selected: world.getSelectedOrganism() ?? null,
-        ...(this.wantsHistory ? { history: world.history.getSamples() } : {}),
-        ...(this.heatmap ? { heatmap: { kind: this.heatmap, cells: this.activity.snapshot(this.heatmap) } } : {}),
-      };
-    }
-    this.env.post({
+    return {
       kind: 'frame',
       tick: world.tick,
       organisms: Array.from(world.organisms.values(), toOrganismView),
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
       ticksPerSecond: this.tickTimes.length,
+      running: this.running,
+      targetTicksPerSecond: this.ticksPerSecond,
       fromStep,
       events: this.pendingEvents,
-      ...(panels ? { panels } : {}),
-    });
+    };
+  }
+
+  private metricsIfAny() {
+    return this.viewers.size > 0 ? this.world.getMetrics() : null;
+  }
+
+  /** A viewer's frame: the shared part plus its own panels, when due. */
+  private frameFor(
+    viewer: Viewer,
+    base: Omit<Extract<FromWorker, { kind: 'frame' }>, 'panels'>,
+    metrics: ReturnType<World['getMetrics']> | null
+  ): FromWorker {
+    if (!metrics) return base;
+    const panels: PanelData = {
+      metrics,
+      selected: (viewer.selectedId && this.world.getOrganism(viewer.selectedId)) || null,
+      ...(viewer.wantsHistory ? { history: this.world.history.getSamples() } : {}),
+      ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap) } } : {}),
+    };
+    return { ...base, panels };
+  }
+
+  private postFrame(fromStep: boolean, withPanels: boolean): void {
+    if (this.viewers.size === 0) {
+      this.pendingEvents = []; // nobody to tell; a new viewer gets the recent events with the terrain
+      return;
+    }
+    const base = this.baseFrame(fromStep);
+    let metrics: ReturnType<World['getMetrics']> | null = null;
+    if (withPanels) {
+      this.lastPanels = this.env.now();
+      metrics = this.world.getMetrics();
+    }
+    for (const v of this.viewers.values()) v.post(this.frameFor(v, base, metrics));
     this.pendingEvents = [];
   }
 }

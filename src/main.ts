@@ -117,7 +117,8 @@ const canvas = $<HTMLCanvasElement>('#sim-canvas');
 const stage = $('.stage');
 const sheetEl = $('.sheet');
 
-// 1. The simulation runs in a Web Worker (src/sim/worker.ts); `sim` mirrors
+// 1. The simulation runs in a Web Worker (src/sim/worker.ts), or on the
+// always-on server when the page was opened from it (server/); `sim` mirrors
 // what the page draws and sends it commands.
 const initialSeed = 42;
 const sim = new SimulationClient({
@@ -140,6 +141,17 @@ const sim = new SimulationClient({
     // Shown by the next panel refresh (straight away while paused).
   },
   error: (message) => showNotice(message),
+  config: () => {
+    // Changed by another viewer of the shared world.
+    settingsView.setToggles(togglesFor(sim.config));
+    historyView.setController(sim.config.controller);
+    refreshPanels();
+  },
+  connection: (connected) => {
+    if (connected) notice.hidden = true;
+    else showNotice('Lost the connection to the server; reconnecting…');
+    refreshPanels();
+  },
 });
 const renderer = new CanvasRenderer(canvas, sim);
 
@@ -209,13 +221,33 @@ const PANEL_REFRESH_MS = 200;
 let lastPanelRefresh = 0;
 let needsRender = true;
 
+/** When this page last changed playback itself; frames sent before that may still say otherwise. */
+let lastPlaybackChange = -Infinity;
+
+/** Follows the world's playback state: another viewer of a shared world may have changed it. */
+function syncPlayback(): void {
+  if (performance.now() - lastPlaybackChange < 1000) return;
+  if (sim.running !== isRunning) {
+    isRunning = sim.running;
+    pill.setRunning(isRunning);
+  }
+  const multiplier = sim.targetTicksPerSecond / BASE_TICKS_PER_SECOND;
+  if (multiplier > 0 && Math.abs(multiplier - speedMultiplier) > 1e-6) {
+    speedMultiplier = multiplier;
+    pill.setSpeed(multiplier);
+  }
+}
+
 function onFrame(fromStep: boolean): void {
+  syncPlayback();
   if (HEATMAP_KINDS.includes(overlay as HeatmapKind)) {
     const heat = sim.getHeatmap();
     if (heat && heat.kind === overlay) renderer.setHeatmap(heat.cells);
   }
   frameAt = performance.now();
-  glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? Math.max(1000 / (BASE_TICKS_PER_SECOND * speedMultiplier), 16) : 0;
+  // From the server, frames come at most every frameIntervalMs, so glide over that long at least.
+  const frameGap = Math.max(1000 / (BASE_TICKS_PER_SECOND * speedMultiplier), sim.serverInfo?.frameIntervalMs ?? 0, 16);
+  glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? frameGap : 0;
   needsRender = true;
   if (!isRunning) refreshPanels();
 }
@@ -228,7 +260,8 @@ function statusText(): string {
   } else {
     state = sim.tick === 0 ? 'Paused · press play or step' : 'Paused';
   }
-  return `Tick ${sim.tick} · ${state} · seed ${sim.config.seed}`;
+  const where = sim.mode === 'server' ? (sim.connected ? ' · shared world on the server' : ' · reconnecting to the server') : '';
+  return `Tick ${sim.tick} · ${state} · seed ${sim.config.seed}${where}`;
 }
 
 /** Selected organism (light record for the card, full record for the inspector), or its last state if it just died. */
@@ -278,6 +311,7 @@ function refreshPanels(): void {
 
 const pill = new PlaybackPill($('#playback'), {
   onPlayPause: () => {
+    lastPlaybackChange = performance.now();
     isRunning = !isRunning;
     pill.setRunning(isRunning);
     if (isRunning) sim.play();
@@ -289,6 +323,7 @@ const pill = new PlaybackPill($('#playback'), {
   },
   onStep: () => sim.step(), // the frame it sends back glides over STEP_ANIMATION_MS
   onSpeedChange: (speed) => {
+    lastPlaybackChange = performance.now();
     speedMultiplier = speed;
     sim.setSpeed(BASE_TICKS_PER_SECOND * speed);
     refreshPanels();
@@ -627,7 +662,8 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
 }
 
 async function autosave(): Promise<void> {
-  if (!autosaveReady) return;
+  // The server keeps its own world saved; the browser's auto-save is for worlds run in this page.
+  if (!autosaveReady || sim.mode !== 'worker') return;
   const saved = await sim.save();
   await putWorld(infoFor(AUTOSAVE_KEY, 'auto', 'Auto-save', saved), saved);
 }
@@ -715,8 +751,14 @@ async function loadFromFile(file: File): Promise<void> {
   showNotice(`Loaded tick ${parsed.world.tick} from ${file.name}`);
 }
 
-/** On open: resume the auto-saved world, if there is one. */
+/** On open: resume the auto-saved world, if there is one (unless the world lives on the server). */
 async function resumeOnOpen(): Promise<void> {
+  await sim.ready;
+  if (sim.mode === 'server') {
+    const info = sim.serverInfo;
+    showNotice(`Watching the always-on world on the server${info?.watchOnly ? ' (watch-only)' : ''}`);
+    return;
+  }
   const saved = await getWorld(AUTOSAVE_KEY);
   if (saved && isSavedWorld(saved) && saved.world.tick > 0) {
     loadSaved(saved);
