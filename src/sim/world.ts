@@ -43,6 +43,17 @@ import {
   newMemory,
   updateMemory,
 } from './memory';
+import {
+  SoilField,
+  computePlantMetrics,
+  createPlant,
+  founderGenome,
+  grazePlant,
+  newPlantCounters,
+  plantAt,
+  stepPlants,
+  type PlantCounters,
+} from './plants';
 
 /**
  * Everything needed to continue a world exactly where it was: settings,
@@ -62,6 +73,8 @@ export interface WorldState {
   readonly foodPatches: readonly FoodPatch[];
   readonly organisms: readonly Organism[];
   readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
+  /** Plant totals (absent in saves from before plants). */
+  readonly plantCounters?: PlantCounters;
 }
 
 const WORLD_COUNTERS = [
@@ -113,6 +126,10 @@ export class World {
   public windfallsTotal = 0;
   public windfallUnitsPlaced = 0;
   public windfallUnitsRotted = 0;
+  /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
+  public plantCounters: PlantCounters = newPlantCounters();
+  /** Soil fertility and season region per cell, built on first use (terrain and regions never change). */
+  private soilField: SoilField | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -144,6 +161,8 @@ export class World {
     this.windfallsTotal = 0;
     this.windfallUnitsPlaced = 0;
     this.windfallUnitsRotted = 0;
+    this.plantCounters = newPlantCounters();
+    this.soilField = null;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -259,6 +278,12 @@ export class World {
     }
     const key = `${x},${y}`;
     if (this.obstacles.has(key) || this.foodPatches.has(key)) return false;
+    if (this.config.plantsEnabled) {
+      // A founder plant instead of a patch, starting with the patch's stock.
+      const plant = createPlant(this.plantCounters, founderGenome(this.prng), this.config.foodPatchInitialStock, this.tick, null);
+      plantAt(this.foodPatches, this.soil(), gridWidth, x, y, plant);
+      return true;
+    }
     this.foodPatches.set(key, {
       x,
       y,
@@ -267,6 +292,12 @@ export class World {
       ...(region === undefined ? {} : { region }),
     });
     return true;
+  }
+
+  /** Soil fertility and season regions, built once the terrain and regions exist. */
+  private soil(): SoilField {
+    this.soilField ??= new SoilField(this.config, this.foodRegions, this.obstacles);
+    return this.soilField;
   }
 
   /**
@@ -328,9 +359,10 @@ export class World {
       counters: Object.fromEntries(WORLD_COUNTERS.map((k) => [k, this[k]])) as Record<WorldCounter, number>,
       obstacles: Array.from(this.obstacles),
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
-      foodPatches: Array.from(this.foodPatches.values(), (p) => ({ ...p })),
+      foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       organisms: Array.from(this.organisms.values(), (o) => clone({ ...o, recentHistory: o.recentHistory.slice(0, 1) })),
       history: this.history.exportState(),
+      plantCounters: { ...this.plantCounters },
     };
   }
 
@@ -350,7 +382,9 @@ export class World {
     world.foodRegions.length = 0;
     world.foodRegions.push(...state.foodRegions.map((r) => ({ ...r })));
     world.foodPatches.clear();
-    for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, { ...p });
+    for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, clone(p));
+    world.plantCounters = { ...newPlantCounters(), ...state.plantCounters };
+    world.soilField = null;
     world.organisms.clear();
     for (const o of state.organisms) {
       world.organisms.set(o.id, {
@@ -680,8 +714,10 @@ export class World {
               this.config.foodEnergyYield
             );
             organism.energy += energyGain;
-            if (fromPatch) patch.stock -= 1;
-            else organism.carriedFood -= 1;
+            if (fromPatch) {
+              patch.stock -= 1;
+              grazePlant(patch, this.tick, this.plantCounters);
+            } else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
             outcome = 'success';
@@ -816,6 +852,7 @@ export class World {
           const patch = this.foodPatches.get(`${organism.x},${organism.y}`);
           if (patch && patch.stock > 0 && organism.carriedFood < organism.carryCapacity) {
             patch.stock -= 1;
+            grazePlant(patch, this.tick, this.plantCounters);
             organism.carriedFood += 1;
             outcome = 'success';
           } else {
@@ -1045,9 +1082,24 @@ export class World {
       }
     }
 
-    // 1. Food patch stock regeneration (windfalls never regrow)
+    // 1a. Plants grow, seed and die in place of classic regrowth and spawning.
+    if (this.config.plantsEnabled) {
+      stepPlants({
+        config: this.config,
+        tick: this.tick,
+        prng: this.prng,
+        obstacles: this.obstacles,
+        patches: this.foodPatches,
+        field: this.soil(),
+        regionLean,
+        worldLean,
+        counters: this.plantCounters,
+      });
+    }
+
+    // 1b. Food patch stock regeneration (windfalls never regrow)
     // Lean regrowth ticks are a subset of plenty ones (a multiple of the interval).
-    if (this.tick > 0 && this.tick % foodRegenInterval === 0) {
+    if (!this.config.plantsEnabled && this.tick > 0 && this.tick % foodRegenInterval === 0) {
       const regrowsLean = this.tick % leanRegrowInterval === 0;
       for (const patch of this.foodPatches.values()) {
         if (patch.expiresAt !== undefined) continue;
@@ -1060,7 +1112,7 @@ export class World {
 
     // 2. Food patch spawning (only where it is not lean)
     const anyPlenty = this.foodRegions.length > 0 ? regionLean.includes(false) : !worldLean;
-    if (anyPlenty && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
+    if (!this.config.plantsEnabled && anyPlenty && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
       let spawned = 0;
       let attempts = 0;
       while (
@@ -1146,6 +1198,7 @@ export class World {
       signalsTotal: this.signalsTotal,
       signalsOnFoodTotal: this.signalsOnFoodTotal,
       season: this.worldSeason(),
+      plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
     };
   }
 
