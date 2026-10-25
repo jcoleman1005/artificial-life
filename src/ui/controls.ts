@@ -278,7 +278,11 @@ export class SettingsView {
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
 
     const seedInput = this.container.querySelector<HTMLInputElement>('#input-seed')!;
-    const reset = () => cb.onReset(seedInput.value.trim() || '42');
+    // A whole number is used as a number, so typing 42 gives the same world as the default seed 42.
+    const reset = () => {
+      const text = seedInput.value.trim() || '42';
+      cb.onReset(/^\d+$/.test(text) ? Number(text) : text);
+    };
     this.container.querySelector('#btn-reset')!.addEventListener('click', reset);
     seedInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') reset();
