@@ -13,3 +13,5 @@
   done: seed 4, leapEnabled=false (8/16)
   done: seed 5, leapEnabled=false (9/16)
   done: seed 5, leapEnabled=true (10/16)
+  done: seed 6, leapEnabled=true (11/16)
+  done: seed 6, leapEnabled=false (12/16)
