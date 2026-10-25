@@ -66,6 +66,7 @@ _Last updated: 2026-10-25._
 | **Signals over 50,000 ticks** (`docs/experiments/signals-50k.md`) | **Still no communication.** Signallers now lean toward signalling on food (about 1.4× their usual rate, in 5/8 dials and 6/8 brain seeds, very variable), but receivers move toward signals at chance (49%) in every seed. Dial signal weights stay within neutral drift. Signals slightly lower the population (brain: 7/8 seeds). |
 | **Mobility on vs off** (brain, 30×30, before regions; diagonals + squeeze + leap, all organisms) | **Trapping solved, at a cost.** Blocked moves 49% → 8%; average population 258 → 390 (8/8); lean low 77 → 100 (7/8). But resting rose 27% → 76%, births roughly halved, one look-alike group took over (largest 152 → 445), and carrying and gifts nearly vanished (carry capacity 1.43 → 0.29). Leaps were 0.06% of actions. |
 | **Which movement ability wins?** (30×30, before regions; each founder gets one of diagonal, squeeze, leap or none, 25% each) | **Squeezing, in 8/8 seeds under both controllers** (89% of dials, 99% of brain organisms at 10,000 ticks). Diagonals stay at ~27% under dials but reach 82% under the brain (probably riding along with squeezer lineages; unchecked). Leaping falls to 4–7%, near what immigrants bring in; organisms with no ability die out. Not yet rerun on the 60×60 region world. |
+| **Each ability on vs off on the merged world** (60×60, 4 staggered regions, brain, signals on; one switch off at a time, the others on; `docs/experiments/mobility-*.txt`) | **Squeezing is what matters.** Squeeze off → on: blocked moves 49.5% → 5.1%, average population 405 → 608 and lean low 340 → 524 (both 8/8); the ability spreads to 99% and resting rises 16% → 62%. Diagonals spread (69% vs 23% drift) but cost a little (avg pop 649 → 608, lower in 6/8). Leaping is selected against (8% vs 25% drift), used in 0.02% of actions, and costs a little too (627 → 608, lower in 7/8). |
 
 ## Engine
 
@@ -105,7 +106,7 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 
 **Phase 0: finish what's in flight, then foundations**
 1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
-2. Mobility check: results from the mobility branch are in the findings table (30×30, before regions); still to do: check the abilities on the merged 60×60 region world with the brain default (which abilities spread, blocked-move share, lean lows).
+2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Possible follow-up: turn leaping off by default.
 3. ~~Event log and overlay layers.~~ Done 2026-10-25 (world events only; overlays one at a time).
 4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files. Not yet: `npm run experiment -- --from saved.json` (every variant run from the same evolved state); split-screen, if at all.
 
