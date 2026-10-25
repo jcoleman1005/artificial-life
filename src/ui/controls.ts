@@ -98,6 +98,8 @@ export class ControlsView {
             <span class="icon">⏭</span><span>Step</span>
           </button>
           <div class="speed-selector" role="group" aria-label="Simulation speed">
+            <button type="button" class="btn-speed" data-speed="0.25" aria-label="Quarter speed">¼×</button>
+            <button type="button" class="btn-speed" data-speed="0.5" aria-label="Half speed">½×</button>
             <button type="button" class="btn-speed active" data-speed="1">1×</button>
             <button type="button" class="btn-speed" data-speed="2">2×</button>
             <button type="button" class="btn-speed" data-speed="5">5×</button>
