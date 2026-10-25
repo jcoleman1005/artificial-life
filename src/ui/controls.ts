@@ -1,4 +1,5 @@
 import type { ColorMode } from '../render/renderer';
+import type { FoodLayout, WorldSize } from '../sim/config';
 
 export interface ControlCallbacks {
   onPlayPause: () => void;
@@ -10,12 +11,17 @@ export interface ControlCallbacks {
   onSharingChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
+  /** World size and food layout restart the run with the current seed. */
+  onWorldSizeChange: (size: WorldSize) => void;
+  onFoodLayoutChange: (layout: FoodLayout) => void;
 }
 
 export interface ExperimentToggles {
   sharingEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
+  worldSize: WorldSize;
+  foodLayout: FoodLayout;
 }
 
 export class ControlsView {
@@ -119,6 +125,21 @@ export class ControlsView {
 
         <div class="experiment-controls">
           <div class="toggle-field">
+            <span class="toggle-label">World</span>
+            <div class="speed-selector" role="group" aria-label="World size (restarts)">
+              <button type="button" class="btn-speed ${this.toggles.worldSize === 'small' ? 'active' : ''}" data-world="small">30×30</button>
+              <button type="button" class="btn-speed ${this.toggles.worldSize === 'large' ? 'active' : ''}" data-world="large">60×60</button>
+            </div>
+          </div>
+          <div class="toggle-field">
+            <span class="toggle-label">Food</span>
+            <div class="speed-selector" role="group" aria-label="Where food grows (restarts)">
+              <button type="button" class="btn-speed ${this.toggles.foodLayout === 'anywhere' ? 'active' : ''}" data-food="anywhere">Anywhere</button>
+              <button type="button" class="btn-speed ${this.toggles.foodLayout === 'regions' ? 'active' : ''}" data-food="regions">Regions</button>
+              <button type="button" class="btn-speed ${this.toggles.foodLayout === 'shifting' ? 'active' : ''}" data-food="shifting" title="Regions whose lean seasons come at different times">Shifting</button>
+            </div>
+          </div>
+          <div class="toggle-field">
             <span class="toggle-label">Colour</span>
             <div class="speed-selector" role="group" aria-label="Colour organisms by">
               <button type="button" class="btn-speed active" data-color="tag">Tribe tag</button>
@@ -210,6 +231,22 @@ export class ControlsView {
       btn.addEventListener('click', () => {
         seasonButtons.forEach((b) => b.classList.toggle('active', b === btn));
         this.callbacks.onSeasonsChange(btn.dataset.seasons === 'on');
+      });
+    });
+
+    const worldButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-world]');
+    worldButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        worldButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onWorldSizeChange(btn.dataset.world as WorldSize);
+      });
+    });
+
+    const foodButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-food]');
+    foodButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        foodButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onFoodLayoutChange(btn.dataset.food as FoodLayout);
       });
     });
 

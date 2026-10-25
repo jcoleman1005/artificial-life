@@ -48,7 +48,7 @@ describe('Seasons', () => {
     expect(plenty).toBe(32); // every 4 ticks
     expect(lean).toBe(4); // every 32 ticks
 
-    const world = new World({ seed: 2, seasonLength: 320, leanFraction: 0.5, immigrationInterval: 0 });
+    const world = new World({ seed: 2, seasonLength: 320, leanFraction: 0.5, immigrationInterval: 0, staggeredSeasons: false });
     while (world.tick < 160) world.step();
     const patchesAtLeanStart = world.foodPatches.size;
     while (world.tick < 300) world.step();
@@ -56,10 +56,16 @@ describe('Seasons', () => {
   });
 
   it('reports the season in metrics and history', () => {
-    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5 });
+    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: false });
     for (let t = 0; t < 15; t++) world.step();
     expect(world.getMetrics().season).toBe('lean');
     const samples = world.history.getSamples();
     expect(samples.filter((s) => s.lean).map((s) => s.tick)).toEqual([10, 11, 12, 13, 14, 15]);
+  });
+
+  it('has no world season when seasons are staggered by region', () => {
+    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: true });
+    for (let t = 0; t < 15; t++) world.step();
+    expect(world.getMetrics().season).toBeNull();
   });
 });

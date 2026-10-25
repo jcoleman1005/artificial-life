@@ -221,6 +221,48 @@ body {
   touch-action: manipulation;
 }
 
+/* Zoomed in, swipes on the canvas pan the view instead of scrolling. */
+.canvas-wrapper.zoomed {
+  touch-action: none;
+}
+
+.zoom-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(12, 18, 24, 0.82);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.zoom-btn {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #e5edf5;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.zoom-btn:active {
+  background: var(--bg-card-subtle);
+}
+
+.zoom-level {
+  min-width: 2.2em;
+  text-align: center;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: #c7d2dd;
+}
+
 #sim-canvas {
   display: block;
   width: 100%;

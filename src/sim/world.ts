@@ -4,6 +4,7 @@ import type {
   DecisionOutcome,
   DecisionRecord,
   FoodPatch,
+  FoodRegion,
   LegalAction,
   Organism,
   SimulationConfig,
@@ -21,7 +22,7 @@ import {
 import { computeWorldMetrics } from './metrics';
 import { MetricsHistory } from './history';
 import { inheritTag } from './tags';
-import { seasonAt } from './seasons';
+import { regionSeasonAt, seasonAt } from './seasons';
 import { founderCarryCapacity, inheritCarryCapacity, metabolismCost } from './traits';
 import { createHeadStartBrain, evaluateBrain, mutateBrain } from './brain';
 
@@ -32,6 +33,8 @@ export class World {
 
   public readonly obstacles = new Set<string>(); // "x,y"
   public readonly foodPatches = new Map<string, FoodPatch>(); // "x,y" -> FoodPatch
+  /** Fertile regions where food grows (empty: food can grow anywhere). */
+  public readonly foodRegions: FoodRegion[] = [];
   public readonly organisms = new Map<string, Organism>(); // id -> Organism
 
   private nextOrganismSeq = 0;
@@ -72,6 +75,7 @@ export class World {
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
+    this.foodRegions.length = 0;
     this.organisms.clear();
     this.selectedOrganismId = null;
     this.history.clear();
@@ -91,7 +95,8 @@ export class World {
       }
     }
 
-    // 2. Generate initial food patches at valid free locations
+    // 2. Fertile regions (when enabled), then the initial food patches in them
+    this.createFoodRegions();
     let placedPatches = 0;
     let patchAttempts = 0;
     while (
@@ -99,19 +104,7 @@ export class World {
       patchAttempts < gridWidth * gridHeight * 3
     ) {
       patchAttempts++;
-      const x = this.prng.nextInt(0, gridWidth - 1);
-      const y = this.prng.nextInt(0, gridHeight - 1);
-      const key = `${x},${y}`;
-
-      if (!this.obstacles.has(key) && !this.foodPatches.has(key)) {
-        this.foodPatches.set(key, {
-          x,
-          y,
-          stock: this.config.foodPatchInitialStock,
-          capacity: this.config.foodPatchCapacity,
-        });
-        placedPatches++;
-      }
+      if (this.tryPlacePatch()) placedPatches++;
     }
 
     // 3. Generate initial pioneer organisms at valid free locations
@@ -138,6 +131,70 @@ export class World {
 
     this.birthsTotal = placedOrganisms;
     this.updateMetrics();
+  }
+
+  /**
+   * Places food regions as discs at random centres, kept apart where
+   * possible. Each gets an evenly spaced season phase, used when seasons are
+   * staggered. Draws nothing from the PRNG when regions are off.
+   */
+  private createFoodRegions(): void {
+    const { foodRegionCount: count, foodRegionRadius: radius, gridWidth, gridHeight } = this.config;
+    for (let i = 0; i < count; i++) {
+      let best: { x: number; y: number } | null = null;
+      let bestGap = -Infinity;
+      // Up to 20 tries for a centre at least 1.5 radii from the others;
+      // otherwise the try farthest from its nearest neighbour.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const x = this.prng.nextInt(0, gridWidth - 1);
+        const y = this.prng.nextInt(0, gridHeight - 1);
+        let gap = Infinity;
+        for (const r of this.foodRegions) gap = Math.min(gap, Math.hypot(r.x - x, r.y - y));
+        if (gap > bestGap) {
+          best = { x, y };
+          bestGap = gap;
+        }
+        if (gap >= radius * 1.5) break;
+      }
+      this.foodRegions.push({ ...best!, radius, seasonPhase: i / count });
+    }
+  }
+
+  /**
+   * One attempt to place a new food patch at a random cell: anywhere when
+   * there are no regions, otherwise inside a randomly chosen region that is
+   * not in a lean season (pass `skipLean`). Returns whether a patch was placed.
+   */
+  private tryPlacePatch(skipLean = false): boolean {
+    const { gridWidth, gridHeight } = this.config;
+    let x: number;
+    let y: number;
+    let region: number | undefined;
+    if (this.foodRegions.length === 0) {
+      x = this.prng.nextInt(0, gridWidth - 1);
+      y = this.prng.nextInt(0, gridHeight - 1);
+    } else {
+      region = this.prng.nextInt(0, this.foodRegions.length - 1);
+      const r = this.foodRegions[region];
+      const radius = Math.floor(r.radius);
+      const dx = this.prng.nextInt(-radius, radius);
+      const dy = this.prng.nextInt(-radius, radius);
+      if (dx * dx + dy * dy > r.radius * r.radius) return false;
+      if (skipLean && regionSeasonAt(this.tick, r, this.config)?.season === 'lean') return false;
+      x = r.x + dx;
+      y = r.y + dy;
+      if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return false;
+    }
+    const key = `${x},${y}`;
+    if (this.obstacles.has(key) || this.foodPatches.has(key)) return false;
+    this.foodPatches.set(key, {
+      x,
+      y,
+      stock: this.config.foodPatchInitialStock,
+      capacity: this.config.foodPatchCapacity,
+      ...(region === undefined ? {} : { region }),
+    });
+    return true;
   }
 
   /**
@@ -695,23 +752,29 @@ export class World {
       gridHeight,
     } = this.config;
 
-    // Lean times: food regrows more slowly and no new patches appear.
-    const lean = seasonAt(this.tick, this.config)?.season === 'lean';
-    const regenInterval = lean
-      ? foodRegenInterval * Math.max(1, this.config.leanSlowdown)
-      : foodRegenInterval;
+    // Lean times: food regrows more slowly and no new patches appear. With
+    // regions, each region may be in its own season.
+    const leanRegrowInterval = foodRegenInterval * Math.max(1, this.config.leanSlowdown);
+    const worldLean = seasonAt(this.tick, this.config)?.season === 'lean';
+    const regionLean = this.foodRegions.map(
+      (r) => regionSeasonAt(this.tick, r, this.config)?.season === 'lean'
+    );
 
     // 1. Food patch stock regeneration
-    if (this.tick > 0 && this.tick % regenInterval === 0) {
+    // Lean regrowth ticks are a subset of plenty ones (a multiple of the interval).
+    if (this.tick > 0 && this.tick % foodRegenInterval === 0) {
+      const regrowsLean = this.tick % leanRegrowInterval === 0;
       for (const patch of this.foodPatches.values()) {
-        if (patch.stock < patch.capacity) {
+        const lean = patch.region === undefined ? worldLean : regionLean[patch.region];
+        if ((!lean || regrowsLean) && patch.stock < patch.capacity) {
           patch.stock = Math.min(patch.capacity, patch.stock + foodRegenAmount);
         }
       }
     }
 
-    // 2. Food patch spawning
-    if (!lean && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
+    // 2. Food patch spawning (only where it is not lean)
+    const anyPlenty = this.foodRegions.length > 0 ? regionLean.includes(false) : !worldLean;
+    if (anyPlenty && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
       let spawned = 0;
       let attempts = 0;
       while (
@@ -720,19 +783,7 @@ export class World {
         attempts < 50
       ) {
         attempts++;
-        const x = this.prng.nextInt(0, gridWidth - 1);
-        const y = this.prng.nextInt(0, gridHeight - 1);
-        const key = `${x},${y}`;
-
-        if (!this.obstacles.has(key) && !this.foodPatches.has(key)) {
-          this.foodPatches.set(key, {
-            x,
-            y,
-            stock: this.config.foodPatchInitialStock,
-            capacity: this.config.foodPatchCapacity,
-          });
-          spawned++;
-        }
+        if (this.tryPlacePatch(true)) spawned++;
       }
     }
 
@@ -798,8 +849,17 @@ export class World {
         this.immigrantsTotal,
         this.config
       ),
-      season: seasonAt(this.tick, this.config)?.season ?? null,
+      season: this.worldSeason(),
     };
+  }
+
+  /**
+   * The season shared by the whole world, or null when seasons are off or
+   * staggered by region (then each region has its own).
+   */
+  public worldSeason(): 'plenty' | 'lean' | null {
+    if (this.config.staggeredSeasons && this.foodRegions.length > 0) return null;
+    return seasonAt(this.tick, this.config)?.season ?? null;
   }
 
   public getOrganism(id: string): Organism | undefined {

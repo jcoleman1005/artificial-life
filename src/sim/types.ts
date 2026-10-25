@@ -204,6 +204,17 @@ export interface FoodPatch {
   readonly y: number;
   stock: number;
   capacity: number;
+  /** Index of the food region it grew in (absent: no region, global seasons). */
+  readonly region?: number;
+}
+
+/** A fertile disc where food patches grow. Each may run its own season clock. */
+export interface FoodRegion {
+  readonly x: number;
+  readonly y: number;
+  readonly radius: number;
+  /** How far ahead (0..1 of a cycle) this region's seasons run when staggered. */
+  readonly seasonPhase: number;
 }
 
 export interface SimulationConfig {
@@ -219,6 +230,9 @@ export interface SimulationConfig {
   foodSpawnInterval: number; // Spawn new patches every N ticks
   foodSpawnCount: number;
   maxFoodPatches: number;
+  foodRegionCount: number; // Fertile regions where food grows (0 = food anywhere)
+  foodRegionRadius: number; // Radius of each region, in cells
+  staggeredSeasons: boolean; // Each region's lean season comes at a different time
   initialOrganisms: number;
   maxEnergy: number;
   initialEnergy: number;

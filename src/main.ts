@@ -6,7 +6,7 @@ import { ControlsView } from './ui/controls';
 import { InspectorView } from './ui/inspector';
 import { HistoryView } from './ui/history-view';
 import { seasonAt } from './sim/seasons';
-import { DEFAULT_CONFIG } from './sim/config';
+import { DEFAULT_CONFIG, FOOD_LAYOUTS, WORLD_SIZES } from './sim/config';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -27,8 +27,13 @@ app.innerHTML = `
       <section class="canvas-panel" aria-label="World Viewport">
         <div class="canvas-wrapper">
           <canvas id="sim-canvas"></canvas>
+          <div class="zoom-controls" role="group" aria-label="Zoom">
+            <button type="button" class="zoom-btn" data-zoom="out" aria-label="Zoom out">−</button>
+            <span id="zoom-level" class="zoom-level">1×</span>
+            <button type="button" class="zoom-btn" data-zoom="in" aria-label="Zoom in">+</button>
+          </div>
         </div>
-        <p class="canvas-hint">Tap any organism to inspect its senses and policy scoring</p>
+        <p class="canvas-hint">Tap any organism to inspect it · zoom in to follow it, drag to look around</p>
       </section>
 
       <section class="interaction-panel">
@@ -47,6 +52,8 @@ app.innerHTML = `
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="5" fill="#60a5fa"/><circle cx="10" cy="10" r="8" fill="none" stroke="#f87171" stroke-width="1.2" stroke-dasharray="2 2"/></svg>Starving (under 25%)</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="rgba(34,197,94,0.2)"/><circle cx="10" cy="10" r="5" fill="#4ade80"/><circle cx="10" cy="10" r="1.6" fill="#14532d"/></svg>Food patch</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><rect x="2" y="3" width="16" height="14" rx="2" fill="#17130c" stroke="#3a3020"/></svg>Lean season</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="rgba(74,222,128,0.22)"/><circle cx="10" cy="10" r="2.5" fill="#4ade80"/></svg>Food region</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="8.5" fill="rgba(180,120,40,0.35)"/><circle cx="10" cy="10" r="1.5" fill="#86efac"/></svg>Region in lean season</li>
           </ul>
           <p class="legend-note">Body colour is the tribe tag (or family); size shows energy. Symbols show what it did last tick.</p>
         </details>
@@ -137,9 +144,11 @@ function updateStatus(): void {
   }
   const extinct = population === 0 ? ' · Extinct' : '';
   const season = seasonAt(world.tick, world.config);
-  const seasonText = season
-    ? ` · ${season.season === 'lean' ? 'Lean' : 'Plenty'} (${season.ticksLeft} left)`
-    : '';
+  const seasonText = !season
+    ? ''
+    : world.worldSeason() === null
+      ? ' · Seasons shift by region'
+      : ` · ${season.season === 'lean' ? 'Lean' : 'Plenty'} (${season.ticksLeft} left)`;
   controlsView.setStatus(`Tick ${world.tick} · ${state}${seasonText}${extinct}`);
 }
 
@@ -181,6 +190,8 @@ const controlsView = new ControlsView(
     sharingEnabled: world.config.sharingEnabled,
     seasonsEnabled: world.config.seasonLength > 0,
     controller: world.config.controller,
+    worldSize: 'large',
+    foodLayout: 'shifting',
   },
   {
   onPlayPause: () => {
@@ -202,20 +213,15 @@ const controlsView = new ControlsView(
     recentTickTimes.length = 0;
     updateStatus();
   },
-  onReset: (seed) => {
-    isRunning = false;
-    controlsView.resetState();
-    world.reset(seed);
-    renderer.clearMotion();
-    world.selectOrganism(null);
-    lastSelectedId = null;
-    lastSelectedOrganismSnapshot = null;
-    recentTickTimes.length = 0;
-    metricsView.render(world.getMetrics());
-    inspectorView.render(undefined, world.config);
-    historyView.render(world.history.getSamples());
-    updateStatus();
-    renderer.render();
+  onReset: (seed) => restart(seed),
+  onWorldSizeChange: (size) => {
+    Object.assign(world.config, WORLD_SIZES[size]);
+    renderer.resize();
+    restart(world.config.seed);
+  },
+  onFoodLayoutChange: (layout) => {
+    Object.assign(world.config, FOOD_LAYOUTS[layout]);
+    restart(world.config.seed);
   },
   onColorModeChange: (mode) => {
     renderer.setColorMode(mode);
@@ -236,24 +242,29 @@ const controlsView = new ControlsView(
     renderer.render();
   },
   onNewSeed: () => {
-    isRunning = false;
-    controlsView.resetState();
     const newSeed = Math.floor(Math.random() * 900000 + 100000);
     controlsView.setSeed(newSeed);
-    world.reset(newSeed);
-    renderer.clearMotion();
-    world.selectOrganism(null);
-    lastSelectedId = null;
-    lastSelectedOrganismSnapshot = null;
-    recentTickTimes.length = 0;
-    metricsView.render(world.getMetrics());
-    inspectorView.render(undefined, world.config);
-    historyView.render(world.history.getSamples());
-    updateStatus();
-    renderer.render();
+    restart(newSeed);
   },
 });
 updateStatus();
+
+/** Stops and restarts the world from tick 0 with the given seed. */
+function restart(seed: string | number): void {
+  isRunning = false;
+  controlsView.resetState();
+  world.reset(seed);
+  renderer.clearMotion();
+  world.selectOrganism(null);
+  lastSelectedId = null;
+  lastSelectedOrganismSnapshot = null;
+  recentTickTimes.length = 0;
+  metricsView.render(world.getMetrics());
+  inspectorView.render(undefined, world.config);
+  historyView.render(world.history.getSamples());
+  updateStatus();
+  renderer.render();
+}
 
 // 5. Main animation & tick loop
 function loop(timestamp: number): void {
@@ -295,6 +306,7 @@ function handleCanvasPointer(clientX: number, clientY: number): void {
   const org = world.getOrganismAt(cell.x, cell.y);
   if (org) {
     world.selectOrganism(org.id);
+    renderer.follow();
     lastSelectedId = org.id;
     lastSelectedOrganismSnapshot = { ...org };
     inspectorView.render(org, world.config);
@@ -308,9 +320,51 @@ function handleCanvasPointer(clientX: number, clientY: number): void {
 }
 
 // 'click' rather than 'pointerdown' so a swipe that starts on the canvas
-// scrolls the page instead of selecting an organism.
+// scrolls the page instead of selecting an organism. While zoomed in, a drag
+// pans the view instead, and the click that ends a drag is ignored.
+let dragFrom: { x: number; y: number } | null = null;
+let dragged = false;
+canvas.addEventListener('pointerdown', (e) => {
+  if (renderer.getZoom() <= 1) return;
+  dragFrom = { x: e.clientX, y: e.clientY };
+  dragged = false;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', (e) => {
+  if (!dragFrom) return;
+  const [dx, dy] = [e.clientX - dragFrom.x, e.clientY - dragFrom.y];
+  if (!dragged && Math.hypot(dx, dy) < 6) return;
+  dragged = true;
+  renderer.panBy(dx, dy);
+  dragFrom = { x: e.clientX, y: e.clientY };
+  if (!isRunning) renderer.render();
+});
+const endDrag = () => {
+  dragFrom = null;
+};
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
 canvas.addEventListener('click', (e) => {
+  if (dragged) {
+    dragged = false;
+    return;
+  }
   handleCanvasPointer(e.clientX, e.clientY);
+});
+
+// Zoom buttons over the canvas. Zoomed in, the view follows the selected
+// organism; the page stops scrolling from swipes on the canvas so they can pan.
+const ZOOM_LEVELS = [1, 2, 3, 4];
+const zoomLabel = document.querySelector<HTMLElement>('#zoom-level')!;
+document.querySelectorAll<HTMLButtonElement>('[data-zoom]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const index = ZOOM_LEVELS.indexOf(renderer.getZoom());
+    const next = btn.dataset.zoom === 'in' ? Math.min(ZOOM_LEVELS.length - 1, index + 1) : Math.max(0, index - 1);
+    renderer.setZoom(ZOOM_LEVELS[next]);
+    zoomLabel.textContent = `${ZOOM_LEVELS[next]}×`;
+    canvas.parentElement!.classList.toggle('zoomed', ZOOM_LEVELS[next] > 1);
+    renderer.render();
+  });
 });
 
 // 7. Responsive handling: the wrapper's size changes on window resize,

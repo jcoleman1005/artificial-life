@@ -68,6 +68,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     immigrationInterval: 0,
     seasonLength: 0,
     foodSpawnInterval: 9999,
+    foodRegionCount: 0,
     ...overrides,
   });
 }

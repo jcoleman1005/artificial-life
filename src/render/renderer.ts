@@ -1,6 +1,6 @@
 import type { FoodPatch, Organism } from '../sim/types';
 import type { World } from '../sim/world';
-import { seasonAt } from '../sim/seasons';
+import { regionSeasonAt, seasonAt } from '../sim/seasons';
 
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
@@ -25,6 +25,13 @@ export class CanvasRenderer {
   // far (0..1) the current frame is through that tick.
   private previousPositions = new Map<string, { x: number; y: number }>();
   private progress = 1;
+  // Zoom and pan: the world is drawn `zoom` times larger and shifted so the
+  // pixel (viewX, viewY) of the zoomed world sits at the canvas's top-left.
+  private zoom = 1;
+  private viewX = 0;
+  private viewY = 0;
+  /** While zoomed, keep the selected organism centred (until the view is dragged). */
+  private following = true;
 
   constructor(canvas: HTMLCanvasElement, world: World) {
     this.canvas = canvas;
@@ -43,6 +50,41 @@ export class CanvasRenderer {
 
   public setColorMode(mode: ColorMode): void {
     this.colorMode = mode;
+  }
+
+  public getZoom(): number {
+    return this.zoom;
+  }
+
+  /** Zooms about the centre of the current view. */
+  public setZoom(zoom: number): void {
+    const centreX = (this.viewX + this.canvasSize / 2) / this.zoom;
+    const centreY = (this.viewY + this.canvasSize / 2) / this.zoom;
+    this.zoom = Math.max(1, zoom);
+    this.cellSize = (this.canvasSize / this.world.config.gridWidth) * this.zoom;
+    this.viewX = centreX * this.zoom - this.canvasSize / 2;
+    this.viewY = centreY * this.zoom - this.canvasSize / 2;
+    this.following = true;
+    this.clampView();
+  }
+
+  /** Drags the view by a screen offset in CSS pixels; stops following. */
+  public panBy(dx: number, dy: number): void {
+    this.viewX -= dx;
+    this.viewY -= dy;
+    this.following = false;
+    this.clampView();
+  }
+
+  /** Follow the selected organism again (after a new selection). */
+  public follow(): void {
+    this.following = true;
+  }
+
+  private clampView(): void {
+    const max = this.canvasSize * (this.zoom - 1);
+    this.viewX = Math.max(0, Math.min(max, this.viewX));
+    this.viewY = Math.max(0, Math.min(max, this.viewY));
   }
 
   /** Call just before each world step, so moves can be drawn as glides. */
@@ -87,7 +129,8 @@ export class CanvasRenderer {
     this.canvas.height = Math.floor(displaySize * dpr);
 
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    this.cellSize = displaySize / this.world.config.gridWidth;
+    this.cellSize = (displaySize / this.world.config.gridWidth) * this.zoom;
+    this.clampView();
   }
 
   /**
@@ -102,8 +145,8 @@ export class CanvasRenderer {
       return null;
     }
 
-    const gridX = Math.floor(px / this.cellSize);
-    const gridY = Math.floor(py / this.cellSize);
+    const gridX = Math.floor((px + this.viewX) / this.cellSize);
+    const gridY = Math.floor((py + this.viewY) / this.cellSize);
 
     if (
       gridX >= 0 &&
@@ -126,26 +169,42 @@ export class CanvasRenderer {
     const { gridWidth, gridHeight } = this.world.config;
     const selectedOrg = this.world.getSelectedOrganism();
 
-    // 1. Background (warmer and darker in a lean season)
-    const lean = seasonAt(this.world.tick, this.world.config)?.season === 'lean';
+    // 1. Background (warmer and darker in a lean season). With staggered
+    // regions there is no world season: each region is shaded instead.
+    const { config } = this.world;
+    const regionSeasons = config.staggeredSeasons && this.world.foodRegions.length > 0;
+    const lean = !regionSeasons && seasonAt(this.world.tick, config)?.season === 'lean';
     ctx.fillStyle = lean ? '#17130c' : '#0f171e';
     ctx.fillRect(0, 0, canvasSize, canvasSize);
 
-    // 2. Subtle grid lines
-    ctx.strokeStyle = '#1a2732';
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= gridWidth; x++) {
-      ctx.beginPath();
-      ctx.moveTo(x * cellSize, 0);
-      ctx.lineTo(x * cellSize, gridHeight * cellSize);
-      ctx.stroke();
+    // Zoomed: follow the selected organism, then shift the world into view.
+    if (this.zoom > 1 && this.following && selectedOrg) {
+      const [sx, sy] = this.displayCentre(selectedOrg);
+      this.viewX = sx - canvasSize / 2;
+      this.viewY = sy - canvasSize / 2;
+      this.clampView();
     }
-    for (let y = 0; y <= gridHeight; y++) {
+    ctx.save();
+    ctx.translate(-this.viewX, -this.viewY);
+
+    // Fertile regions: a faint disc, amber while that region is lean
+    for (const region of this.world.foodRegions) {
+      const regionLean = regionSeasonAt(this.world.tick, region, config)?.season === 'lean';
+      ctx.fillStyle = regionLean ? 'rgba(180, 120, 40, 0.13)' : 'rgba(74, 222, 128, 0.07)';
       ctx.beginPath();
-      ctx.moveTo(0, y * cellSize);
-      ctx.lineTo(gridWidth * cellSize, y * cellSize);
-      ctx.stroke();
+      ctx.arc(
+        (region.x + 0.5) * cellSize,
+        (region.y + 0.5) * cellSize,
+        (region.radius + 0.5) * cellSize,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
     }
+
+    // 2. Subtle grid lines (left out when cells are too small for them to help)
+    if (cellSize >= 8) this.drawGridLines();
+
 
     // 3. Render Obstacles
     ctx.fillStyle = '#2d3d4a';
@@ -190,6 +249,27 @@ export class CanvasRenderer {
 
     // 7. Interactions that span two cells: food gifts and births
     this.drawInteractions();
+    ctx.restore();
+  }
+
+  private drawGridLines(): void {
+    const { ctx, cellSize } = this;
+    const { gridWidth, gridHeight } = this.world.config;
+    ctx.strokeStyle = '#1a2732';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= gridWidth; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * cellSize, 0);
+      ctx.lineTo(x * cellSize, gridHeight * cellSize);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= gridHeight; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * cellSize);
+      ctx.lineTo(gridWidth * cellSize, y * cellSize);
+      ctx.stroke();
+    }
+
   }
 
   /** Gold arrows from givers to receivers, and thin lines from parents to newborns. */
