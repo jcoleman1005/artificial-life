@@ -42,6 +42,10 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 - Keep simulation logic independent from Canvas rendering and UI.
 - Eventually support snapshots, resume, speed controls, and branching experiments. Server-side persistence is a later milestone.
 
+## Working notes
+- Read `docs/STATUS.md` at the start of a session and update it at the end: current state, findings, next steps.
+- Use `npm run experiment` for comparisons instead of writing one-off scripts, and `npm run fingerprint` to prove an engine optimization changes no outcome.
+
 ## Engineering rules
 - TypeScript strict mode.
 - Avoid unnecessary dependencies and services.

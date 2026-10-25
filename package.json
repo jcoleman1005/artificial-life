@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "check": "tsc -b --pretty",
     "fingerprint": "vite-node scripts/fingerprint.ts",
-    "perf": "vite-node scripts/perf.ts"
+    "perf": "vite-node scripts/perf.ts",
+    "experiment": "vite-node scripts/experiment.ts --"
   },
   "dependencies": {},
   "devDependencies": {
