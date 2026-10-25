@@ -220,8 +220,8 @@ export interface Organism {
    * Each unit of capacity adds carryUpkeep to its metabolism every tick.
    */
   readonly carryCapacity: number;
-  /** Inherited body trait: 1 if this organism can leap over a neighbour, else 0. */
-  readonly canLeap: number;
+  /** Inherited movement abilities (body traits); see Abilities. */
+  readonly abilities: Abilities;
   /** Inherited neural controller, used when config.controller is 'brain'. */
   readonly brain: Brain;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
@@ -233,6 +233,22 @@ export interface Organism {
   signalTick: number;
   recentHistory: DecisionRecord[];
 }
+
+/**
+ * Inherited movement abilities, each 1 (has it) or 0. They only work in
+ * worlds where the matching config switch is on, and each one held there
+ * costs abilityUpkeep energy per tick.
+ */
+export interface Abilities {
+  /** Can move diagonally. */
+  readonly diagonal: number;
+  /** Can squeeze past (trade places with) a non-family neighbour that stays put. */
+  readonly squeeze: number;
+  /** Can leap over an adjacent organism into the free cell beyond. */
+  readonly leap: number;
+}
+
+export type AbilityName = keyof Abilities;
 
 export interface FoodPatch {
   readonly x: number;
@@ -287,14 +303,15 @@ export interface SimulationConfig {
   carryUpkeep: number; // Extra energy per tick for each unit of carry capacity
   maxCarryCapacity: number; // Upper bound on the inherited carry capacity
   traitMutationRate: number; // Probability a child's body trait shifts by ±1 at birth
-  diagonalMoves: boolean; // Allow the 4 diagonal moves
+  diagonalMoves: boolean; // Allow diagonal moves (for organisms with the ability)
   diagonalMoveCost: number; // Diagonal move cost, as a multiple of moveCost
-  squeezeEnabled: boolean; // Allow trading places with a non-family organism that stays put
+  squeezeEnabled: boolean; // Allow squeezing past a non-family organism that stays put (for organisms with the ability)
   squeezeCostMultiplier: number; // Squeeze cost, as a multiple of the move's cost
-  leapEnabled: boolean; // Allow organisms with the canLeap trait to leap
+  leapEnabled: boolean; // Allow leaping (for organisms with the ability)
   leapCostMultiplier: number; // Leap cost, as a multiple of moveCost
-  leapUpkeep: number; // Extra energy per tick for having the leap ability
-  founderLeapChance: number; // Chance a founder can leap
+  abilityUpkeep: number; // Extra energy per tick for each movement ability held (in worlds where it is enabled)
+  founderAbilities: 'one' | 'all'; // 'one': each founder gets one enabled ability or none, at random; 'all': every enabled ability
+  abilityMutationRate: number; // Probability each ability flips (gained or lost) at birth
   controller: 'dials' | 'brain'; // Which inherited controller chooses actions
   brainMutationRate: number; // Probability each brain weight mutates at birth
   brainMutationStdDev: number; // Size of a brain weight mutation

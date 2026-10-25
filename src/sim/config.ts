@@ -45,8 +45,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   squeezeCostMultiplier: 2,
   leapEnabled: true,
   leapCostMultiplier: 2.5,
-  leapUpkeep: 0.03,
-  founderLeapChance: 0.3,
+  abilityUpkeep: 0.03,
+  founderAbilities: 'one',
+  abilityMutationRate: 0.02,
   controller: 'brain', // Dials stay as an interpretable reference controller
   brainMutationRate: 0.05,
   brainMutationStdDev: 0.3,

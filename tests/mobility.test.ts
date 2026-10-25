@@ -3,7 +3,7 @@ import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { createHeadStartBrain } from '../src/sim/brain';
-import { inheritCanLeap } from '../src/sim/traits';
+import { founderAbilities, inheritAbilities } from '../src/sim/traits';
 import type { Organism, PolicyWeights, SimulationConfig } from '../src/sim/types';
 
 const TEST_BRAIN = createHeadStartBrain(new PRNG(0));
@@ -40,7 +40,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     policy: { ...NEUTRAL },
     tag: 0,
     carryCapacity: 0,
-    canLeap: 0,
+    abilities: { diagonal: 1, squeeze: 1, leap: 1 },
     brain: TEST_BRAIN,
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },
     age: 100,
@@ -55,7 +55,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
   };
 }
 
-/** An empty world where only movement costs energy, with all mobility options on. */
+/** An empty world where only movement costs energy, with all mobility options on (organisms here hold all abilities by default). */
 function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
     seed: 21,
@@ -68,7 +68,7 @@ function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
     seasonLength: 0,
     tickMetabolismCost: 0,
     carryUpkeep: 0,
-    leapUpkeep: 0,
+    abilityUpkeep: 0,
     reproductionThreshold: 1000,
     foodRegenInterval: 9999,
     foodSpawnInterval: 9999,
@@ -205,13 +205,13 @@ describe('Squeezing past', () => {
 });
 
 describe('Leaping', () => {
-  function leapScene(opts: { canLeap?: number; landing?: 'free' | 'organism' | 'obstacle' } = {}) {
+  function leapScene(opts: { canLeap?: boolean; landing?: 'free' | 'organism' | 'obstacle' } = {}) {
     const world = mobileWorld({ diagonalMoves: false, squeezeEnabled: false });
     world.foodPatches.set('9,5', { x: 9, y: 5, stock: 3, capacity: 3 });
     world.foodPatches.set('6,5', { x: 6, y: 5, stock: 3, capacity: 3 }); // the one leapt over stays eating
     const leaper = makeOrganism('leaper', 5, 5, {
       energy: 80,
-      canLeap: opts.canLeap ?? 1,
+      abilities: { diagonal: 1, squeeze: 1, leap: opts.canLeap === false ? 0 : 1 },
       policy: { ...NEUTRAL, foodAttraction: 2, leapEagerness: 2 },
     });
     const over = makeOrganism('over', 6, 5);
@@ -232,18 +232,75 @@ describe('Leaping', () => {
 
   it('is only offered to organisms with the trait, over an organism, onto a free cell', () => {
     const leaps = (o: Organism) => offered(o).filter((t) => t.startsWith('LEAP_'));
-    expect(leaps(leapScene({ canLeap: 0 }).leaper)).toEqual([]);
+    expect(leaps(leapScene({ canLeap: false }).leaper)).toEqual([]);
     expect(leaps(leapScene({ landing: 'organism' }).leaper)).not.toContain('LEAP_EAST');
     expect(leaps(leapScene({ landing: 'obstacle' }).leaper)).not.toContain('LEAP_EAST');
     // Nothing to leap over to the west
     expect(leaps(leapScene().leaper)).not.toContain('LEAP_WEST');
   });
 
-  it('is inherited, flipping only through mutation', () => {
+});
+
+describe('Abilities are per organism', () => {
+  it('offers diagonals only to organisms with the diagonal ability', () => {
+    const world = mobileWorld();
+    const o = makeOrganism('o', 5, 5, { abilities: { diagonal: 0, squeeze: 1, leap: 1 } });
+    addAll(world, o);
+    world.step();
+    expect(offered(o).filter((t) => t.startsWith('MOVE_'))).toEqual([
+      'MOVE_NORTH',
+      'MOVE_SOUTH',
+      'MOVE_EAST',
+      'MOVE_WEST',
+    ]);
+  });
+
+  it('blocks a squeeze by an organism without the squeeze ability', () => {
+    const world = mobileWorld({ diagonalMoves: false, leapEnabled: false });
+    world.foodPatches.set('8,5', { x: 8, y: 5, stock: 3, capacity: 3 });
+    world.foodPatches.set('6,5', { x: 6, y: 5, stock: 3, capacity: 3 });
+    const mover = makeOrganism('mover', 5, 5, {
+      energy: 80,
+      abilities: { diagonal: 1, squeeze: 0, leap: 1 },
+      policy: { ...NEUTRAL, foodAttraction: 2 },
+    });
+    const stranger = makeOrganism('stranger', 6, 5, { energy: 50 });
+    addAll(world, mover, stranger);
+    world.step();
+    const east = mover.recentHistory[0].scores.find((s) => s.action.type === 'MOVE_EAST')!.action;
+    expect(east.swapRelation).toBeUndefined();
+    expect([mover.x, stranger.x]).not.toEqual([6, 5]);
+  });
+
+  it("gives each founder exactly one enabled ability or none, in 'one' mode", () => {
+    const prng = new PRNG(5);
+    const seen = new Set<string>();
+    for (let i = 0; i < 400; i++) {
+      const a = founderAbilities(DEFAULT_CONFIG, prng);
+      expect(a.diagonal + a.squeeze + a.leap).toBeLessThanOrEqual(1);
+      seen.add(JSON.stringify(a));
+    }
+    expect(seen.size).toBe(4); // none, diagonal, squeeze, leap
+    // Disabled abilities are never handed out
+    for (let i = 0; i < 100; i++) {
+      expect(founderAbilities({ ...DEFAULT_CONFIG, leapEnabled: false }, prng).leap).toBe(0);
+    }
+    expect(founderAbilities({ ...DEFAULT_CONFIG, founderAbilities: 'all', squeezeEnabled: false }, prng)).toEqual({
+      diagonal: 1,
+      squeeze: 0,
+      leap: 1,
+    });
+  });
+
+  it('are inherited, each flipping only through mutation', () => {
     const prng = new PRNG(3);
-    expect(inheritCanLeap(1, { ...DEFAULT_CONFIG, traitMutationRate: 0 }, prng)).toBe(1);
-    expect(inheritCanLeap(1, { ...DEFAULT_CONFIG, traitMutationRate: 1 }, prng)).toBe(0);
-    expect(inheritCanLeap(0, { ...DEFAULT_CONFIG, traitMutationRate: 1 }, prng)).toBe(1);
+    const parent = { diagonal: 1, squeeze: 0, leap: 1 };
+    expect(inheritAbilities(parent, { ...DEFAULT_CONFIG, abilityMutationRate: 0 }, prng)).toEqual(parent);
+    expect(inheritAbilities(parent, { ...DEFAULT_CONFIG, abilityMutationRate: 1 }, prng)).toEqual({
+      diagonal: 0,
+      squeeze: 1,
+      leap: 0,
+    });
   });
 });
 

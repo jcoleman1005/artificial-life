@@ -8,7 +8,7 @@ _Last updated: 2026-10-25._
 ## Branches
 
 - `main`: everything to date, including the larger world, food regions, signals, the redesigned UI, mobility (diagonals, squeezing, leaping) and the brain as default. Start new work from here.
-- All other branches (`fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`, `feature/slower-speeds`, `feature/mobility`, `tools/proxmox-scout`, `claude/agents-status-docs-idfhjh`, `claude/signal-experiments`) are fully merged into `main`; safe to delete.
+- Old branches were merged and deleted on 2026-10-25. Each session works on its own branch off `main`; merge it once checked on the phone.
 - Each session works on its own branch off `main`; merge it once checked on the phone.
 
 ## Running it
@@ -28,7 +28,7 @@ _Last updated: 2026-10-25._
 
 - 60×60 grid world (the old 30×30 world is a preset) with obstacles, food patches, lean/plenty seasons (800-tick cycle, last 40% lean), and immigration (1 founder every 25 ticks).
 - Food grows only in 4 fertile regions (radius 8). By default their seasons are staggered by a quarter cycle each, so a lean season sweeps from region to region.
-- Movement (merged from `feature/mobility`): one orthogonal or diagonal step (diagonals cost 1.4×), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour for organisms with the inherited `canLeap` trait (2.5× cost, small upkeep). Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
+- Movement abilities (from `feature/mobility`), each an inherited body trait: diagonal steps (1.4× cost), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour (2.5× cost). By default each founder gets one ability or none (`founderAbilities: 'one'`), abilities flip at birth with `abilityMutationRate` (0.02), and each held ability costs `abilityUpkeep` (0.03) per tick, so selection can show which pays. Without an ability, movement is classic 4-way. Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
 - Organisms: energy, inherited tag (tribe colour), inherited carry capacity (with upkeep), food carrying and giving (need-aware, graded by tag similarity), parental care, childhood parent-following, family pass-through, and signals (a SIGNAL action others within 8 cells sense the next tick; meaning left to evolution).
 - Two inherited controllers, switchable live in the app. **The brain is the default**; the dials are the readable reference.
   - **Dials**: 20 interpretable weights, including `restDrive` (resting used to be fixed at 0). Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule. Under the brain, the inspector's dial weights and the dial trend charts start collapsed and are labelled inactive.
@@ -97,7 +97,7 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 
 1. Move the simulation into a Web Worker so the UI stays smooth at 10× (the redesigned UI still runs the loop on the main thread). Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate at 10× with ~400 orbs).
 2. Signals: give listeners a reason to respond (e.g. `sensingRadius` 2 so a signal reveals unseen food, or sparser, richer patches) and track the brain's own signal connections. Compare against `signalsEnabled=false` every time.
-3. Measure what mobility changed (merged untested together with regions and signals): compare `diagonalMoves`, `squeezeEnabled`, `leapEnabled` on/off on the 60×60 region world, especially blocked-move share and lean lows.
+3. Mobility experiments were run in the mobility session but their results are not in the repo yet; add them to the findings table. Then check the abilities on the merged 60×60 region world with the brain default: which abilities spread, blocked-move share, lean lows.
 4. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
 5. Snapshots and resume, then the always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above.
 6. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.

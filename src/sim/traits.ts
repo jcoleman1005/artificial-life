@@ -1,5 +1,5 @@
 import type { PRNG } from './prng';
-import type { Organism, SimulationConfig } from './types';
+import type { Abilities, AbilityName, Organism, SimulationConfig } from './types';
 
 /** Carry capacity for a founder (pioneer or immigrant): 1–3 units. */
 export function founderCarryCapacity(config: Readonly<SimulationConfig>, prng: PRNG): number {
@@ -17,14 +17,39 @@ export function inheritCarryCapacity(
   return Math.max(0, Math.min(config.maxCarryCapacity, parentCapacity + step));
 }
 
-/** Whether a founder can leap (1) or not (0). */
-export function founderCanLeap(config: Readonly<SimulationConfig>, prng: PRNG): number {
-  return prng.next() < config.founderLeapChance ? 1 : 0;
+/** Movement abilities switched on in this world, in a fixed order. */
+export function enabledAbilities(config: Readonly<SimulationConfig>): AbilityName[] {
+  const names: AbilityName[] = [];
+  if (config.diagonalMoves) names.push('diagonal');
+  if (config.squeezeEnabled) names.push('squeeze');
+  if (config.leapEnabled) names.push('leap');
+  return names;
 }
 
-/** A child's leap ability: usually the parent's, flipped with probability traitMutationRate. */
-export function inheritCanLeap(parentCanLeap: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
-  return prng.next() < config.traitMutationRate ? 1 - parentCanLeap : parentCanLeap;
+export const NO_ABILITIES: Abilities = { diagonal: 0, squeeze: 0, leap: 0 };
+
+/**
+ * A founder's movement abilities. In 'one' mode each founder gets exactly one
+ * of the enabled abilities, or none, with equal chances, so lineages start out
+ * specialised and selection can show which one pays.
+ */
+export function founderAbilities(config: Readonly<SimulationConfig>, prng: PRNG): Abilities {
+  const enabled = enabledAbilities(config);
+  if (config.founderAbilities === 'all') {
+    return {
+      diagonal: enabled.includes('diagonal') ? 1 : 0,
+      squeeze: enabled.includes('squeeze') ? 1 : 0,
+      leap: enabled.includes('leap') ? 1 : 0,
+    };
+  }
+  const pick = prng.nextInt(0, enabled.length); // enabled.length means none
+  return pick < enabled.length ? { ...NO_ABILITIES, [enabled[pick]]: 1 } : { ...NO_ABILITIES };
+}
+
+/** A child's abilities: the parent's, each flipped with probability abilityMutationRate. */
+export function inheritAbilities(parent: Readonly<Abilities>, config: Readonly<SimulationConfig>, prng: PRNG): Abilities {
+  const flip = (v: number) => (prng.next() < config.abilityMutationRate ? 1 - v : v);
+  return { diagonal: flip(parent.diagonal), squeeze: flip(parent.squeeze), leap: flip(parent.leap) };
 }
 
 /** Energy spent per tick just staying alive, including the upkeep of body traits. */
@@ -32,7 +57,10 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
   return (
     config.tickMetabolismCost +
     config.carryUpkeep * organism.carryCapacity +
-    // The leap ability only costs anything in worlds where leaping exists.
-    (config.leapEnabled ? config.leapUpkeep * organism.canLeap : 0)
+    // An ability only costs anything in worlds where it is enabled.
+    config.abilityUpkeep *
+      ((config.diagonalMoves ? organism.abilities.diagonal : 0) +
+        (config.squeezeEnabled ? organism.abilities.squeeze : 0) +
+        (config.leapEnabled ? organism.abilities.leap : 0))
   );
 }

@@ -142,7 +142,7 @@ export function getLegalActions(
     { type: 'MOVE_EAST', dx: 1, dy: 0 },
     { type: 'MOVE_WEST', dx: -1, dy: 0 },
   ];
-  if (config.diagonalMoves) {
+  if (config.diagonalMoves && organism.abilities.diagonal === 1) {
     candidateMoves.push(
       { type: 'MOVE_NORTHEAST', dx: 1, dy: -1 },
       { type: 'MOVE_NORTHWEST', dx: -1, dy: -1 },
@@ -162,14 +162,14 @@ export function getLegalActions(
     }
 
     // Into an occupied cell: family trade places at the normal cost; anyone
-    // else can be squeezed past (at extra cost) if squeezing is enabled.
+    // else can be squeezed past (at extra cost) by an organism with that ability.
     const occupant = occupantAt(targetX, targetY);
     const swapRelation =
       occupant?.lineage.parentId === organism.id
         ? 'child'
         : occupant && organism.lineage.parentId === occupant.id
           ? 'parent'
-          : occupant && config.squeezeEnabled
+          : occupant && config.squeezeEnabled && organism.abilities.squeeze === 1
             ? 'squeeze'
             : undefined;
 
@@ -182,9 +182,9 @@ export function getLegalActions(
     });
   }
 
-  // 1b. Leaps: an organism with the canLeap trait can jump over an adjacent
+  // 1b. Leaps: an organism with the leap ability can jump over an adjacent
   // organism (orthogonally) into the free cell beyond it.
-  if (config.leapEnabled && organism.canLeap === 1) {
+  if (config.leapEnabled && organism.abilities.leap === 1) {
     const candidateLeaps: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'LEAP_NORTH', dx: 0, dy: -1 },
       { type: 'LEAP_SOUTH', dx: 0, dy: 1 },

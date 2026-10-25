@@ -38,7 +38,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     policy: { ...NEUTRAL },
     tag: 0,
     carryCapacity: 1,
-    canLeap: 0,
+    abilities: { diagonal: 0, squeeze: 0, leap: 0 },
     brain: createHeadStartBrain(new PRNG(0)),
     lineage: { id: `lin-${id}`, parentId: null, generation: 1, birthTick: 0 },
     age: 0,

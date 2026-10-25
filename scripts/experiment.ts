@@ -20,7 +20,7 @@
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { World } from '../src/sim/world';
-import { POLICY_WEIGHT_KEYS } from '../src/sim/history';
+import { POLICY_WEIGHT_KEYS, abilityShares } from '../src/sim/history';
 import { brainDrift, hiddenStrength } from '../src/sim/brain';
 import { seasonAt } from '../src/sim/seasons';
 import type { SimulationConfig } from '../src/sim/types';
@@ -140,7 +140,9 @@ function runJob(job: Job): RunResult {
     lookAlikeNeighbours: m.tribes.localKinFraction,
     lookAlikeByChance: m.tribes.globalKinFraction,
     carryCapacity: mean((o) => o.carryCapacity),
-    leapers: mean((o) => o.canLeap),
+    ...Object.fromEntries(
+      Object.entries(abilityShares([...world.organisms.values()])).map(([k, v]) => [`ability.${k}`, v])
+    ),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
     ...Object.fromEntries(POLICY_WEIGHT_KEYS.map((k) => [`w.${k}`, mean((o) => o.policy[k])])),
