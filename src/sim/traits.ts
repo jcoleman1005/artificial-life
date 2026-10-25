@@ -32,6 +32,7 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
   return (
     config.tickMetabolismCost +
     config.carryUpkeep * organism.carryCapacity +
-    config.leapUpkeep * organism.canLeap
+    // The leap ability only costs anything in worlds where leaping exists.
+    (config.leapEnabled ? config.leapUpkeep * organism.canLeap : 0)
   );
 }

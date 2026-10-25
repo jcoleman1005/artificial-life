@@ -34,6 +34,9 @@ describe('Carry capacity trait', () => {
     expect(metabolismCost({ carryCapacity: 4, canLeap: 0 } as Organism, config)).toBeCloseTo(0.45);
     // Leap ability adds its own upkeep
     expect(metabolismCost({ carryCapacity: 0, canLeap: 1 } as Organism, { ...config, leapUpkeep: 0.03 })).toBeCloseTo(0.28);
+    expect(
+      metabolismCost({ carryCapacity: 0, canLeap: 1 } as Organism, { ...config, leapUpkeep: 0.03, leapEnabled: false })
+    ).toBeCloseTo(0.25);
 
     const world = new World({
       seed: 1,
