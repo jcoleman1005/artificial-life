@@ -35,7 +35,7 @@ _Last updated: 2026-10-25._
   - **Brain**: a tiny neural network (33 action features → 6 hidden → score, plus direct connections starting as a dial-like head start).
 - UI (redesigned 2026-10-25, "Pebbles" art, always dark):
   - World full-bleed. Organisms are glowing orbs in their tag hue (size = energy), food is berry clusters (count = stock), rocks are rounded blocks, fertile regions are soft glows (amber while lean). At full view organisms are plain dots; action glyphs fade in from about 2× zoom (white strokes; signals are rings in the organism's own hue). Zoom 1–6× (+/− buttons, mouse wheel), drag to pan when zoomed, organisms glide between cells.
-  - Floating playback pill: play/pause, step, speed (tap cycles ¼× ½× 1× 2× 5× 10×), tick.
+  - Floating playback pill: play/pause, step, slower « speed » faster (¼× ½× 1× 2× 5× 10×; keys [ and ] on desktop), tick.
   - Bottom sheet (portrait) peeks with population, season (or which regions are lean, by compass) and a colour-group strip; drag or tap up for Stats (status, metrics, colour groups, legend), Trends (charts, CSV) and Organism (inspector) tabs. Landscape phone / desktop: the sheet is an always-open right-hand panel.
   - Tap an organism (nearest within a finger's reach): zooms to 3×, follows it, and shows a card with its generated name, energy and what it is doing; tap the card for the inspector. Tap empty space to deselect.
   - Generated names (`src/ui/names.ts`): a given name from the organism id plus a family name shared by its lineage. Display only; simulation ids are unchanged.

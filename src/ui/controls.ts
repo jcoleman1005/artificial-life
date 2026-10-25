@@ -47,13 +47,18 @@ const speedLabel = (s: number) => (s === 0.25 ? '¼×' : s === 0.5 ? '½×' : `$
 
 const PLAY_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.2-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z" fill="currentColor"/></svg>';
 const PAUSE_ICON = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/><rect x="13.5" y="5" width="4" height="14" rx="1.2" fill="currentColor"/></svg>';
+const SLOWER_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M11.5 7 6.5 12l5 5M17.5 7l-5 5 5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const FASTER_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12.5 7l5 5-5 5M6.5 7l5 5-5 5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const STEP_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6.5v11a1 1 0 0 0 1.55.83l8-5.5a1 1 0 0 0 0-1.66l-8-5.5A1 1 0 0 0 6 6.5z" fill="currentColor"/><rect x="16.5" y="5.5" width="2.5" height="13" rx="1" fill="currentColor"/></svg>';
 
-/** The floating playback pill over the world: play/pause, step, speed, tick. */
+/** The floating playback pill over the world: play/pause, step, slower / speed / faster, tick. */
 export class PlaybackPill {
   private readonly playBtn: HTMLButtonElement;
   private readonly stepBtn: HTMLButtonElement;
-  private readonly speedBtn: HTMLButtonElement;
+  private readonly speedEl: HTMLElement;
+  private readonly slowerBtn: HTMLButtonElement;
+  private readonly fasterBtn: HTMLButtonElement;
+  private readonly onSpeedChange: (speedMultiplier: number) => void;
   private readonly tickEl: HTMLElement;
   private speedIndex = SPEEDS.indexOf(1);
 
@@ -61,26 +66,42 @@ export class PlaybackPill {
     container.innerHTML = `
       <button type="button" class="pill-btn pill-play" aria-label="Play">${PLAY_ICON}</button>
       <button type="button" class="pill-btn pill-step" aria-label="Step one tick">${STEP_ICON}</button>
-      <button type="button" class="pill-btn pill-speed" aria-label="Speed 1×, tap to change">1×</button>
+      <span class="pill-speed-group" role="group" aria-label="Speed">
+        <button type="button" class="pill-btn pill-slower" aria-label="Slower">${SLOWER_ICON}</button>
+        <span class="pill-speed" aria-live="polite">1×</span>
+        <button type="button" class="pill-btn pill-faster" aria-label="Faster">${FASTER_ICON}</button>
+      </span>
       <span class="pill-tick" aria-live="off">t 0</span>
     `;
     this.playBtn = container.querySelector('.pill-play')!;
     this.stepBtn = container.querySelector('.pill-step')!;
-    this.speedBtn = container.querySelector('.pill-speed')!;
+    this.speedEl = container.querySelector('.pill-speed')!;
+    this.slowerBtn = container.querySelector('.pill-slower')!;
+    this.fasterBtn = container.querySelector('.pill-faster')!;
     this.tickEl = container.querySelector('.pill-tick')!;
+    this.onSpeedChange = callbacks.onSpeedChange;
     this.playBtn.addEventListener('click', () => callbacks.onPlayPause());
     this.stepBtn.addEventListener('click', () => callbacks.onStep());
-    this.speedBtn.addEventListener('click', () => {
-      this.speedIndex = (this.speedIndex + 1) % SPEEDS.length;
-      this.showSpeed();
-      callbacks.onSpeedChange(SPEEDS[this.speedIndex]);
-    });
+    this.slowerBtn.addEventListener('click', () => this.changeSpeed(-1));
+    this.fasterBtn.addEventListener('click', () => this.changeSpeed(1));
+    this.showSpeed();
+  }
+
+  /** One speed step slower (-1) or faster (+1), stopping at ¼× and 10×. */
+  public changeSpeed(direction: 1 | -1): void {
+    const next = Math.max(0, Math.min(SPEEDS.length - 1, this.speedIndex + direction));
+    if (next === this.speedIndex) return;
+    this.speedIndex = next;
+    this.showSpeed();
+    this.onSpeedChange(SPEEDS[this.speedIndex]);
   }
 
   private showSpeed(): void {
     const label = speedLabel(SPEEDS[this.speedIndex]);
-    this.speedBtn.textContent = label;
-    this.speedBtn.setAttribute('aria-label', `Speed ${label}, tap to change`);
+    this.speedEl.textContent = label;
+    this.speedEl.setAttribute('aria-label', `Speed ${label}`);
+    this.slowerBtn.disabled = this.speedIndex === 0;
+    this.fasterBtn.disabled = this.speedIndex === SPEEDS.length - 1;
   }
 
   public setRunning(running: boolean): void {

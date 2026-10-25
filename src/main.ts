@@ -530,7 +530,7 @@ settingsButton.addEventListener('click', () => {
 $('.settings-close').addEventListener('click', () => setSettingsOpen(false));
 $('.settings-backdrop').addEventListener('click', () => setSettingsOpen(false));
 
-// Keyboard: Escape closes, space plays/pauses, "." steps (desktop).
+// Keyboard: Escape closes, space plays/pauses, "." steps, "[" / "]" (or - / +) slow down / speed up (desktop).
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !layerMenu.hidden) {
     setLayerMenuOpen(false);
@@ -547,6 +547,10 @@ document.addEventListener('keydown', (e) => {
     $<HTMLButtonElement>('.pill-play').click();
   } else if (e.key === '.' && !isRunning) {
     $<HTMLButtonElement>('.pill-step').click();
+  } else if (e.key === '[' || e.key === '-') {
+    pill.changeSpeed(-1);
+  } else if (e.key === ']' || e.key === '=' || e.key === '+') {
+    pill.changeSpeed(1);
   }
 });
 

@@ -166,8 +166,21 @@ button {
   cursor: default;
 }
 
+.pill-speed-group {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pill-slower,
+.pill-faster {
+  min-width: 40px;
+  padding: 0 6px;
+}
+
 .pill-speed {
-  min-width: 52px;
+  min-width: 36px;
+  text-align: center;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
