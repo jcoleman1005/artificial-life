@@ -1,3 +1,0 @@
-16 runs (8 seeds × 2 variants of immigrationCount), 10000 ticks each, 3 workers, with {"plantsEnabled":true,"initialOrganisms":0}
-  done: seed 1, immigrationCount=0 (1/16)
-  done: seed 2, immigrationCount=0 (2/16)

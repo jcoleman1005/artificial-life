@@ -225,27 +225,28 @@ export class World {
   }
 
   /**
-   * Places food regions as discs at random centres, kept apart where
-   * possible. Each gets an evenly spaced season phase, used when seasons are
-   * staggered. Draws nothing from the PRNG when regions are off.
+   * Places food regions as discs spread over the world: each centre is the
+   * one of 30 random candidates farthest from the regions already placed,
+   * and centres keep a radius (at most a quarter of the world) from the edge
+   * so no region is cut off. Each gets an evenly spaced season phase, used
+   * when seasons are staggered. Draws nothing from the PRNG when regions are off.
    */
   private createFoodRegions(): void {
     const { foodRegionCount: count, foodRegionRadius: radius, gridWidth, gridHeight } = this.config;
+    const marginX = Math.floor(Math.min(radius, gridWidth / 4));
+    const marginY = Math.floor(Math.min(radius, gridHeight / 4));
     for (let i = 0; i < count; i++) {
       let best: { x: number; y: number } | null = null;
       let bestGap = -Infinity;
-      // Up to 20 tries for a centre at least 1.5 radii from the others;
-      // otherwise the try farthest from its nearest neighbour.
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const x = this.prng.nextInt(0, gridWidth - 1);
-        const y = this.prng.nextInt(0, gridHeight - 1);
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const x = this.prng.nextInt(marginX, gridWidth - 1 - marginX);
+        const y = this.prng.nextInt(marginY, gridHeight - 1 - marginY);
         let gap = Infinity;
         for (const r of this.foodRegions) gap = Math.min(gap, Math.hypot(r.x - x, r.y - y));
         if (gap > bestGap) {
           best = { x, y };
           bestGap = gap;
         }
-        if (gap >= radius * 1.5) break;
       }
       this.foodRegions.push({ ...best!, radius, seasonPhase: i / count });
     }

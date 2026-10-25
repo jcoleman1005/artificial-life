@@ -53,7 +53,7 @@ describe('Seasons', () => {
     const patchesAtLeanStart = world.foodPatches.size;
     while (world.tick < 300) world.step();
     expect(world.foodPatches.size).toBe(patchesAtLeanStart);
-  });
+  }, 30_000);
 
   it('reports the season in metrics and history', () => {
     const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: false });

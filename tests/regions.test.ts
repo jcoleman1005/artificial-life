@@ -29,6 +29,22 @@ describe('Food regions', () => {
     }
   });
 
+  it('spreads regions out and keeps them inside the world', () => {
+    for (const seed of [1, 2, 3, 42]) {
+      const world = new World({ seed, initialOrganisms: 0 });
+      const { gridWidth, gridHeight, foodRegionRadius: radius } = world.config;
+      for (const r of world.foodRegions) {
+        expect(r.x).toBeGreaterThanOrEqual(radius);
+        expect(r.y).toBeGreaterThanOrEqual(radius);
+        expect(r.x).toBeLessThanOrEqual(gridWidth - 1 - radius);
+        expect(r.y).toBeLessThanOrEqual(gridHeight - 1 - radius);
+        for (const other of world.foodRegions) {
+          if (other !== r) expect(Math.hypot(r.x - other.x, r.y - other.y)).toBeGreaterThan(radius * 2);
+        }
+      }
+    }
+  });
+
   it('is repeatable with the same seed', () => {
     const a = regionWorld();
     const b = regionWorld();
