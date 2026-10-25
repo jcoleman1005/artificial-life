@@ -13,6 +13,7 @@ function regionWorld(overrides = {}): World {
     foodRegionRadius: 6,
     seasonLength: 400,
     leanFraction: 0.5,
+    windfallsEnabled: false, // windfalls land anywhere
     ...overrides,
   });
 }

@@ -28,7 +28,7 @@ _Last updated: 2026-10-25._
 
 - 60×60 grid world (the old 30×30 world is a preset) with obstacles, food patches, lean/plenty seasons (800-tick cycle, last 40% lean), and immigration (1 founder every 25 ticks).
 - Food grows only in 4 fertile regions (radius 8). By default their seasons are staggered by a quarter cycle each, so a lean season sweeps from region to region.
-- Movement abilities (from `feature/mobility`), each an inherited body trait: diagonal steps (1.4× cost), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour (2.5× cost; off by default since 2026-10-25, see findings). By default each founder gets one ability or none (`founderAbilities: 'one'`), abilities flip at birth with `abilityMutationRate` (0.02), and each held ability costs `abilityUpkeep` (0.03) per tick, so selection can show which pays. Without an ability, movement is classic 4-way. Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
+- Movement abilities (from `feature/mobility`), each an inherited body trait: diagonal steps (1.4× cost), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour (2.5× cost). By default each founder gets one ability or none (`founderAbilities: 'one'`), abilities flip at birth with `abilityMutationRate` (0.02), and each held ability costs `abilityUpkeep` (0.03) per tick, so selection can show which pays. Without an ability, movement is classic 4-way. Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
 - Organisms: energy, inherited tag (tribe colour), inherited carry capacity (with upkeep), food carrying and giving (need-aware, graded by tag similarity), parental care, childhood parent-following, family pass-through, and signals (a SIGNAL action others within 8 cells sense the next tick; meaning left to evolution).
 - Two inherited controllers, switchable live in the app. **The brain is the default**; the dials are the readable reference.
   - **Dials**: 20 interpretable weights, including `restDrive` (resting used to be fixed at 0). Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule. Under the brain, the inspector's dial weights and the dial trend charts start collapsed and are labelled inactive.
@@ -104,20 +104,20 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 
 ## Roadmap (agreed 2026-10-25; build in this order)
 
-Rules: one new loop at a time, 8 seeds each against a control, before adding the next. Don't stack plants, pathogen and bite in one run. Compare every new loop against a frozen baseline preset (e.g. `baseline-2026-10`). Give each loop a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
+There is no target outcome: new features go in on by default and the world is left to see what happens over time. Measuring a feature against a control is optional. Give each feature a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
 
 **Phase 0: finish what's in flight, then foundations**
 1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
-2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Leaping is now off by default.
+2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Leaping stays on (all features are on by default).
 3. ~~Event log and overlay layers.~~ Done 2026-10-25 (world events only; overlays one at a time).
 4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files, and `npm run experiment -- --from saved.json` (every variant run from the same evolved state). Split-screen skipped for now.
 
 **Phase 1: cheap, high payoff**
-5. ~~Dispersal gene.~~ Built and measured 2026-10-25 (see findings): a small benefit; stays on.
-6. ~~Windfalls.~~ Built and measured 2026-10-25 (see findings): organisms find ~70% of windfall food without signals, so signals still have nothing to say; stays off. Possible follow-up: make windfalls harder to find (shorter-lived, landing outside fertile regions) and run 50,000 ticks.
+5. ~~Dispersal gene.~~ Built and measured 2026-10-25 (see findings): a small benefit. On by default.
+6. ~~Windfalls.~~ Built and measured 2026-10-25 (see findings): organisms find ~70% of windfall food without signals, so signals still have nothing to say. On by default. Possible follow-up: make windfalls harder to find (shorter-lived, landing outside fertile regions) and run 50,000 ticks.
 
 **Phase 2: first new loops**
-7. Memory registers (built, off until measured). First check in a long run whether the hidden layer stays idle.
+7. ~~Memory registers.~~ Built; on by default. Optional: First check in a long run whether the hidden layer stays idle.
 8. Typed food and carrion (`carrionEff` gene). Generalise abilities here, once there are two non-movement examples. Optionally move a simple bite (energy comparison) up to here if predation is wanted sooner.
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
@@ -150,5 +150,5 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 - UI: no pinch-to-zoom yet (use the +/− buttons or the mouse wheel). Colour groups are fixed 30° hue buckets, so one family drifting across a bucket edge shows as two groups. Several lean regions are shown as compass codes (e.g. "Lean: NW, SW") to fit the peek strip. In landscape on a phone the world at 1× is small (the side panel takes ~40% of the width).
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
-- Fingerprints changed with the mobility merge, the new dial weight and leaping off by default; record new ones (`npm run fingerprint`) before the next engine optimisation.
+- Fingerprints changed with the mobility merge, the new dial weight, and windfalls and memory on by default; record new ones (`npm run fingerprint`) before the next engine optimisation.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

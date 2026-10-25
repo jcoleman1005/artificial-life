@@ -17,7 +17,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   foodSpawnInterval: 12,
   foodSpawnCount: 4,
   maxFoodPatches: 72,
-  windfallsEnabled: false, // off until measured against a control
+  windfallsEnabled: true,
   windfallInterval: 150,
   windfallUnits: 40,
   windfallPatches: 5,
@@ -46,7 +46,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dispersalEnabled: true,
   maxDispersal: 8,
   dispersalCost: 1.0, // the same as one move
-  memoryEnabled: false, // off until measured against a control
+  memoryEnabled: true,
   maxMemorySpan: 100,
   memorySpanStep: 5,
   memoryUpkeep: 0.001, // a 50-tick memory costs 0.05 per tick (a fifth of base metabolism)
@@ -55,7 +55,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   diagonalMoveCost: 1.4,
   squeezeEnabled: true,
   squeezeCostMultiplier: 2,
-  leapEnabled: false, // selected against and slightly costly on the default world (docs/experiments/mobility-leapEnabled.txt)
+  leapEnabled: true,
   leapCostMultiplier: 2.5,
   abilityUpkeep: 0.03,
   founderAbilities: 'one',
