@@ -8,7 +8,7 @@ _Last updated: 2026-10-25._
 ## Branches
 
 - `main`: everything to date (layout fix, trend charts, tribes, sharing, seasons, traits, brains, engine speed-up). Start new work from here.
-- `fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`: older branches, fully merged into `main`; safe to delete.
+- `fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`, `feature/slower-speeds`: older branches, fully merged into `main`; safe to delete.
 - Each session works on its own branch off `main`; merge it once checked on the phone.
 
 ## Running it
@@ -30,7 +30,7 @@ _Last updated: 2026-10-25._
 - Two inherited controllers, switchable live in the app:
   - **Dials**: 14 interpretable weights. Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule.
   - **Brain**: a tiny neural network (25 action features → 6 hidden → score, plus direct connections starting as a dial-like head start).
-- UI: action glyphs and a legend, an inspector with per-input score breakdowns, trend charts (population, tribes and sharing, body traits, brains, weights) with lean seasons shaded, and CSV export.
+- UI: speeds from ¼× (1.5 ticks/s) to 10×; organisms glide smoothly between cells (drawing only); action glyphs and a legend, an inspector with per-input score breakdowns, trend charts (population, tribes and sharing, body traits, brains, weights) with lean seasons shaded, and CSV export.
 - 72 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
@@ -50,7 +50,7 @@ _Last updated: 2026-10-25._
 
 - About 16 µs per organism per tick (dials 3.6 ms/tick, brain 4.0 ms/tick on seed 42). A 60×60 world peaks around 1,500 organisms at about 20 ms/tick.
 - Memory: about 5 MB for the world at 30×30, about 14 MB at 60×60. A persistent server needs about 512 MB RAM and 1 core.
-- The simulation still runs on the page's main thread; 10× can fall behind during booms.
+- The simulation still runs on the page's main thread, and the canvas now redraws every frame while running (for smooth movement); 10× can fall behind during booms.
 
 ## Next steps (suggested order)
 
