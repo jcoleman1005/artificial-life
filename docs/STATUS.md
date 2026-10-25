@@ -17,18 +17,18 @@ _Last updated: 2026-10-25._
 |---|---|
 | Phone/desktop app (Fedora, view at `http://<ip>:5173`) | `npm run dev` |
 | Checks after any change | `npm run check && npm test && npm run build` |
-| Compare variants across seeds (headless) | `npm run experiment -- --compare key=a,b [--set k=v] [--seeds 1-8] [--ticks 10000]` |
+| Compare variants across seeds (headless) | `npm run experiment -- --compare key=a,b [--set k=v] [--seeds 1-8] [--ticks 10000] [--from saved.json]` |
 | Prove an engine change alters no outcome | `npm run fingerprint` before and after; output must match |
 | Engine speed | `npm run perf` |
 | Check a Proxmox host's capacity (read-only) | `git show origin/main:scripts/proxmox-scout.sh \| ssh root@HOST 'bash -s'` |
 
-`--compare` and `--set` take any `SimulationConfig` key (see `src/sim/config.ts`), e.g. `controller=dials,brain`, `sharingEnabled=false,true`, `seasonLength=0,800`.
+`--from` starts every run from a saved world (a file saved from the app), reseeded per seed, so variants are compared from the same evolved state. `--compare` and `--set` take any `SimulationConfig` key (see `src/sim/config.ts`), e.g. `controller=dials,brain`, `sharingEnabled=false,true`, `seasonLength=0,800`.
 
 ## What exists
 
 - 60×60 grid world (the old 30×30 world is a preset) with obstacles, food patches, lean/plenty seasons (800-tick cycle, last 40% lean), and immigration (1 founder every 25 ticks).
 - Food grows only in 4 fertile regions (radius 8). By default their seasons are staggered by a quarter cycle each, so a lean season sweeps from region to region.
-- Movement abilities (from `feature/mobility`), each an inherited body trait: diagonal steps (1.4× cost), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour (2.5× cost). By default each founder gets one ability or none (`founderAbilities: 'one'`), abilities flip at birth with `abilityMutationRate` (0.02), and each held ability costs `abilityUpkeep` (0.03) per tick, so selection can show which pays. Without an ability, movement is classic 4-way. Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
+- Movement abilities (from `feature/mobility`), each an inherited body trait: diagonal steps (1.4× cost), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour (2.5× cost; off by default since 2026-10-25, see findings). By default each founder gets one ability or none (`founderAbilities: 'one'`), abilities flip at birth with `abilityMutationRate` (0.02), and each held ability costs `abilityUpkeep` (0.03) per tick, so selection can show which pays. Without an ability, movement is classic 4-way. Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
 - Organisms: energy, inherited tag (tribe colour), inherited carry capacity (with upkeep), food carrying and giving (need-aware, graded by tag similarity), parental care, childhood parent-following, family pass-through, and signals (a SIGNAL action others within 8 cells sense the next tick; meaning left to evolution).
 - Two inherited controllers, switchable live in the app. **The brain is the default**; the dials are the readable reference.
   - **Dials**: 20 interpretable weights, including `restDrive` (resting used to be fixed at 0). Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule. Under the brain, the inspector's dial weights and the dial trend charts start collapsed and are labelled inactive.
@@ -44,7 +44,7 @@ _Last updated: 2026-10-25._
 - World events feed (seasons per region, colour groups rising / dying out / taking the lead, population records and crashes, extinction, generation milestones): latest event under the peek strip, recent events in the Stats tab.
 - Layers button over the world (one at a time): Family (lineage lit, others dimmed, lines to parent and children), Senses & signals (sight square, signal reach, signal ripples), Trails, and Crowding / Deaths / Feeding heatmaps (counted in the worker every tick, fading with a ~140-tick half-life).
 - Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
-- 124 deterministic tests.
+- 145 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -67,6 +67,8 @@ _Last updated: 2026-10-25._
 | **Mobility on vs off** (brain, 30×30, before regions; diagonals + squeeze + leap, all organisms) | **Trapping solved, at a cost.** Blocked moves 49% → 8%; average population 258 → 390 (8/8); lean low 77 → 100 (7/8). But resting rose 27% → 76%, births roughly halved, one look-alike group took over (largest 152 → 445), and carrying and gifts nearly vanished (carry capacity 1.43 → 0.29). Leaps were 0.06% of actions. |
 | **Which movement ability wins?** (30×30, before regions; each founder gets one of diagonal, squeeze, leap or none, 25% each) | **Squeezing, in 8/8 seeds under both controllers** (89% of dials, 99% of brain organisms at 10,000 ticks). Diagonals stay at ~27% under dials but reach 82% under the brain (probably riding along with squeezer lineages; unchecked). Leaping falls to 4–7%, near what immigrants bring in; organisms with no ability die out. Not yet rerun on the 60×60 region world. |
 | **Each ability on vs off on the merged world** (60×60, 4 staggered regions, brain, signals on; one switch off at a time, the others on; `docs/experiments/mobility-*.txt`) | **Squeezing is what matters.** Squeeze off → on: blocked moves 49.5% → 5.1%, average population 405 → 608 and lean low 340 → 524 (both 8/8); the ability spreads to 99% and resting rises 16% → 62%. Diagonals spread (69% vs 23% drift) but cost a little (avg pop 649 → 608, lower in 6/8). Leaping is selected against (8% vs 25% drift), used in 0.02% of actions, and costs a little too (627 → 608, lower in 7/8). |
+| **Dispersal on vs off** (default world, brain, leap off; `docs/experiments/dispersal.txt`) | **A small benefit; crowding and clustering unchanged.** Children are born 1.75 cells away on average (1.03 with it off, 8/8). Blocked moves stay at 5.0% (squeezing already solved crowding) and look-alike neighbours are unchanged (0.85 vs 0.84), so family clustering is not set by birth distance. Lean low +12 (548 vs 535, 6/8), births +3% (6/8), moves between regions +21% (420 vs 346, 7/8). Evolved dispersal distance settles slightly below its neutral drift (2.1 vs 2.4): long throws are not favoured. |
+| **Windfalls on vs off, signals on and off** (`docs/experiments/windfalls-signals-on.txt`, `-off.txt`) | **Windfalls don't give signals a job yet.** Organisms eat ~70% of windfall food whether or not signals exist (67% with, 70% without), so a call has little to add. No effect on population (avg pop −1 with signals, +8 without, 4/8 each); births +2–3%. Organisms standing on windfall food signal at 4.3% vs 2.0% overall, but receivers move toward signals at chance (47.6%) and the brain's signal connections stay within the drift seen with signals off (all within ±0.12). Still no communication. |
 
 ## Engine
 
@@ -106,16 +108,16 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 
 **Phase 0: finish what's in flight, then foundations**
 1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
-2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Possible follow-up: turn leaping off by default.
+2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Leaping is now off by default.
 3. ~~Event log and overlay layers.~~ Done 2026-10-25 (world events only; overlays one at a time).
-4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files. Not yet: `npm run experiment -- --from saved.json` (every variant run from the same evolved state); split-screen, if at all.
+4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files, and `npm run experiment -- --from saved.json` (every variant run from the same evolved state). Split-screen skipped for now.
 
 **Phase 1: cheap, high payoff**
-5. Dispersal gene (changes the "born adjacent" rule; record it in `AGENTS.md`). Measure blocked-move share and kin clustering against dispersal off.
-6. Windfalls: short-lived food bursts beyond sight, so signals have something to say. Test with signals on and off; track the brain's own signal connections.
+5. ~~Dispersal gene.~~ Built and measured 2026-10-25 (see findings): a small benefit; stays on.
+6. ~~Windfalls.~~ Built and measured 2026-10-25 (see findings): organisms find ~70% of windfall food without signals, so signals still have nothing to say; stays off. Possible follow-up: make windfalls harder to find (shorter-lived, landing outside fertile regions) and run 50,000 ticks.
 
 **Phase 2: first new loops**
-7. Memory registers. First check in a long run whether the hidden layer stays idle.
+7. Memory registers (built, off until measured). First check in a long run whether the hidden layer stays idle.
 8. Typed food and carrion (`carrionEff` gene). Generalise abilities here, once there are two non-movement examples. Optionally move a simple bite (energy comparison) up to here if predation is wanted sooner.
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
@@ -148,5 +150,5 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 - UI: no pinch-to-zoom yet (use the +/− buttons or the mouse wheel). Colour groups are fixed 30° hue buckets, so one family drifting across a bucket edge shows as two groups. Several lean regions are shown as compass codes (e.g. "Lean: NW, SW") to fit the peek strip. In landscape on a phone the world at 1× is small (the side panel takes ~40% of the width).
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
-- Fingerprints changed with the mobility merge and the new dial weight; record new ones (`npm run fingerprint`) before the next engine optimisation.
-- Mobility has its own branch's experiments; none were rerun after merging with regions, signals and the brain default.
+- Fingerprints changed with the mobility merge, the new dial weight and leaping off by default; record new ones (`npm run fingerprint`) before the next engine optimisation.
+- The S21 check (roadmap item 1) is still to do on the phone itself.
