@@ -94,15 +94,38 @@ S21 setup (once the server exists):
 
 If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 1 core, `cpuunits` 50 (yields under load), 512 MB RAM / 256 MB swap, 4 GB disk, `vmbr0`, Tailscale inside, a 30×30 world at about 5 ticks/s. Note the default world is now 60×60 (~2× the work of the old default); the 30×30 preset still exists for a slow host.
 
-## Next steps (suggested order)
+## Roadmap (agreed 2026-10-25; build in this order)
 
-1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker).
-2. Signals: give listeners a reason to respond (e.g. `sensingRadius` 2 so a signal reveals unseen food, or sparser, richer patches) and track the brain's own signal connections. Compare against `signalsEnabled=false` every time.
-3. Mobility experiments were run in the mobility session but their results are not in the repo yet; add them to the findings table. Then check the abilities on the merged 60×60 region world with the brain default: which abilities spread, blocked-move share, lean lows.
-4. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
-5. Snapshots and resume, then the always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above.
-6. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
-7. More openings for emergence: sexual breeding (planned; the UI should name colour groups in a way that scales to it), predation and conflict between groups (nothing is deferred any more; see `AGENTS.md` → Scope).
+Rules: one new loop at a time, 8 seeds each against a control, before adding the next. Don't stack plants, pathogen and bite in one run. Compare every new loop against a frozen baseline preset (e.g. `baseline-2026-10`). Give each loop a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
+
+**Phase 0: finish what's in flight, then foundations**
+1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
+2. Mobility check: add the mobility session's results to the findings table, then check the abilities on the merged 60×60 region world with the brain default (which abilities spread, blocked-move share, lean lows).
+3. Event log (a fixed-size buffer in the simulation, sent to the page in batches) and overlay layers. The tap-to-follow card already exists.
+4. Snapshots and resume, including the PRNG state, then fork (a null fork must reproduce exactly). Split-screen comes later, if at all; `npm run experiment` already does paired A/B runs.
+
+**Phase 1: cheap, high payoff**
+5. Dispersal gene (changes the "born adjacent" rule; record it in `AGENTS.md`). Measure blocked-move share and kin clustering against dispersal off.
+6. Windfalls: short-lived food bursts beyond sight, so signals have something to say. Test with signals on and off; track the brain's own signal connections.
+
+**Phase 2: first new loops**
+7. Memory registers. First check in a long run whether the hidden layer stays idle.
+8. Typed food and carrion (`carrionEff` gene). Generalise abilities here, once there are two non-movement examples. Optionally move a simple bite (energy comparison) up to here if predation is wanted sooner.
+9. Evolving pathogen (density-dependent mortality, visible waves).
+
+**Phase 3: big coevolution (long runs; needs the server)**
+10. Evolving plants (carrion becomes another food type).
+11. Growth and size, then bite.
+12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
+
+**Phase 4: slow burners on the always-on server**
+13. The always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above. Long brain runs (100k+ ticks).
+14. Sexual reproduction and mate preference (visible species splitting by colour; name colour groups in a way that scales to it).
+15. Pheromone trails, then individual recognition, then lifetime plasticity.
+
+**Phase 5: polish for the phone**
+16. "While you were away" digest (in the app; no push notifications).
+17. Ethogram, live phylogeny tree, replay scrubber.
 
 ## Known issues
 
