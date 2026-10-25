@@ -21,6 +21,10 @@ export class CanvasRenderer {
   private cellSize = 12;
   private canvasSize = 360;
   private colorMode: ColorMode = 'tag';
+  // Smooth movement: where each organism was before the latest tick, and how
+  // far (0..1) the current frame is through that tick.
+  private previousPositions = new Map<string, { x: number; y: number }>();
+  private progress = 1;
 
   constructor(canvas: HTMLCanvasElement, world: World) {
     this.canvas = canvas;
@@ -39,6 +43,35 @@ export class CanvasRenderer {
 
   public setColorMode(mode: ColorMode): void {
     this.colorMode = mode;
+  }
+
+  /** Call just before each world step, so moves can be drawn as glides. */
+  public rememberPositions(): void {
+    this.previousPositions.clear();
+    for (const org of this.world.organisms.values()) {
+      this.previousPositions.set(org.id, { x: org.x, y: org.y });
+    }
+  }
+
+  /** Forget remembered positions (after a reset, ids restart from 1). */
+  public clearMotion(): void {
+    this.previousPositions.clear();
+    this.progress = 1;
+  }
+
+  /** Pixel centre of an organism, part-way along its latest move. */
+  private displayCentre(org: Organism): [number, number] {
+    const { cellSize } = this;
+    let gx = org.x;
+    let gy = org.y;
+    const prev = this.previousPositions.get(org.id);
+    if (prev && this.progress < 1) {
+      const p = this.progress;
+      const t = p * p * (3 - 2 * p); // ease in and out
+      gx = prev.x + (org.x - prev.x) * t;
+      gy = prev.y + (org.y - prev.y) * t;
+    }
+    return [(gx + 0.5) * cellSize, (gy + 0.5) * cellSize];
   }
 
   public resize(): void {
@@ -86,7 +119,9 @@ export class CanvasRenderer {
   /**
    * Renders the complete simulation frame.
    */
-  public render(): void {
+  /** Draws the world; `progress` (0..1) is how far through the latest tick to show movement. */
+  public render(progress = 1): void {
+    this.progress = Math.max(0, Math.min(1, progress));
     const { ctx, cellSize, canvasSize } = this;
     const { gridWidth, gridHeight } = this.world.config;
     const selectedOrg = this.world.getSelectedOrganism();
@@ -170,8 +205,8 @@ export class CanvasRenderer {
       if (type.startsWith('GIVE_') && last.chosenAction.recipientId) {
         const recipient = this.world.organisms.get(last.chosenAction.recipientId);
         if (!recipient) continue;
-        const [x1, y1] = centre(org);
-        const [x2, y2] = centre(recipient);
+        const [x1, y1] = this.displayCentre(org);
+        const [x2, y2] = this.displayCentre(recipient);
         const len = Math.hypot(x2 - x1, y2 - y1) || 1;
         const [ux, uy] = [(x2 - x1) / len, (y2 - y1) / len];
         const head = Math.max(3, cellSize * 0.28);
@@ -197,7 +232,7 @@ export class CanvasRenderer {
         ctx.arc(x2, y2, cellSize * 0.47, 0, Math.PI * 2);
         ctx.stroke();
       } else if (type.startsWith('REPRODUCE_') && last.chosenAction.target) {
-        const [x1, y1] = centre(org);
+        const [x1, y1] = this.displayCentre(org);
         const [x2, y2] = centre(last.chosenAction.target);
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
         ctx.lineWidth = 1;
@@ -237,8 +272,7 @@ export class CanvasRenderer {
 
   private drawOrganism(org: Organism, isSelected: boolean): void {
     const { ctx, cellSize } = this;
-    const cx = (org.x + 0.5) * cellSize;
-    const cy = (org.y + 0.5) * cellSize;
+    const [cx, cy] = this.displayCentre(org);
     const maxEnergy = this.world.config.maxEnergy;
     const energyRatio = Math.max(0.1, Math.min(1, org.energy / maxEnergy));
     const baseRadius = cellSize * 0.42;

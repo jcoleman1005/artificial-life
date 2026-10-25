@@ -110,6 +110,10 @@ const BASE_TICKS_PER_SECOND = 6;
 let lastTimestamp = performance.now();
 let tickAccumulator = 0;
 
+// Smooth movement for single steps while paused.
+const STEP_ANIMATION_MS = 250;
+let stepAnimationStart: number | null = null;
+
 // The text panels are rebuilt from HTML, so while running they refresh at a
 // modest rate; the canvas still redraws every frame that a tick happened.
 const PANEL_REFRESH_MS = 200;
@@ -165,6 +169,7 @@ function refreshPanels(): void {
 }
 
 function stepSimulation(): void {
+  renderer.rememberPositions();
   world.step();
   recentTickTimes.push(performance.now());
 }
@@ -185,11 +190,12 @@ const controlsView = new ControlsView(
     tickAccumulator = 0;
     recentTickTimes.length = 0;
     refreshPanels();
+    renderer.render(); // settle mid-glide positions when pausing
   },
   onStep: () => {
     stepSimulation();
     refreshPanels();
-    renderer.render();
+    stepAnimationStart = performance.now(); // the loop draws the glide
   },
   onSpeedChange: (speed) => {
     speedMultiplier = speed;
@@ -200,6 +206,7 @@ const controlsView = new ControlsView(
     isRunning = false;
     controlsView.resetState();
     world.reset(seed);
+    renderer.clearMotion();
     world.selectOrganism(null);
     lastSelectedId = null;
     lastSelectedOrganismSnapshot = null;
@@ -234,6 +241,7 @@ const controlsView = new ControlsView(
     const newSeed = Math.floor(Math.random() * 900000 + 100000);
     controlsView.setSeed(newSeed);
     world.reset(newSeed);
+    renderer.clearMotion();
     world.selectOrganism(null);
     lastSelectedId = null;
     lastSelectedOrganismSnapshot = null;
@@ -257,19 +265,21 @@ function loop(timestamp: number): void {
     const intervalMs = 1000 / targetTps;
 
     tickAccumulator += Math.min(elapsedMs, 250); // cap to avoid spiral on tab switch
-    let stepped = false;
     while (tickAccumulator >= intervalMs) {
       stepSimulation();
       tickAccumulator -= intervalMs;
-      stepped = true;
     }
 
-    if (stepped) {
-      renderer.render();
-    }
+    // Draw every frame, part-way through the current tick, so moves glide.
+    renderer.render(tickAccumulator / intervalMs);
     if (timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) {
       refreshPanels();
     }
+  } else if (stepAnimationStart !== null) {
+    // A single Step glides over STEP_ANIMATION_MS.
+    const progress = (timestamp - stepAnimationStart) / STEP_ANIMATION_MS;
+    renderer.render(progress);
+    if (progress >= 1) stepAnimationStart = null;
   }
 
   requestAnimationFrame(loop);
