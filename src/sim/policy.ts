@@ -14,11 +14,16 @@ export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
 
 /**
- * Food is the top motivation. When hungry (below half energy), moving toward
- * known food gets this much per unit of alignment, more than all other
- * movement pulls can add up to, so hunger steers regardless of evolved weights.
+ * Scales for the evolved "head start" weights. With their starting values
+ * (about 1.5-2) they reproduce the old fixed rules: food first, hunger steers
+ * toward food over every other pull, and young children seek a food-carrying
+ * parent. Evolution can weaken, drop, or reverse each of them.
  */
-export const HUNGER_FOOD_PRIORITY = 20;
+// Must exceed the largest movement score (hunger urgency up to 20 plus the
+// other pulls), or a hungry organism walks off food it could be eating.
+export const EAT_PRIORITY_SCALE = 20;
+export const HUNGER_URGENCY_SCALE = 10;
+export const PARENT_PULL_SCALE = 3;
 
 /**
  * Creates a randomized initial policy for pioneer organisms.
@@ -39,6 +44,10 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     // Parents start out caring; evolution can weaken or strengthen it.
     careForChildren: Number(prng.nextFloat(1.0, 2.0).toFixed(3)),
     forageDrive: Number(prng.nextFloat(-0.5, 1.0).toFixed(3)),
+    // Head starts that reproduce the old fixed rules; free to evolve.
+    eatPriority: Number(prng.nextFloat(1.5, 2.0).toFixed(3)),
+    hungerUrgency: Number(prng.nextFloat(1.5, 2.0).toFixed(3)),
+    followFoodParent: Number(prng.nextFloat(0.5, 1.5).toFixed(3)),
   };
 }
 
@@ -73,6 +82,9 @@ export function mutatePolicy(
     shareWithStrangers: mutateWeight(parentPolicy.shareWithStrangers),
     careForChildren: mutateWeight(parentPolicy.careForChildren),
     forageDrive: mutateWeight(parentPolicy.forageDrive),
+    eatPriority: mutateWeight(parentPolicy.eatPriority),
+    hungerUrgency: mutateWeight(parentPolicy.hungerUrgency),
+    followFoodParent: mutateWeight(parentPolicy.followFoodParent),
   };
 }
 
@@ -322,12 +334,23 @@ export function scoreAction(
         components['foodPull'] = Number(foodComp.toFixed(3));
         totalScore += foodComp;
 
-        // Hungry: heading toward food outranks every other movement pull.
+        // Hungry: an evolved urge to head for food, strong enough at its
+        // starting value to outweigh every other movement pull.
         if (sensed.energyRatio < 0.5) {
-          const hungerComp = HUNGER_FOOD_PRIORITY * dotProduct;
-          components['hungerPriority'] = Number(hungerComp.toFixed(3));
+          const hungerComp = policy.hungerUrgency * HUNGER_URGENCY_SCALE * dotProduct;
+          components['hungerUrgency'] = Number(hungerComp.toFixed(3));
           totalScore += hungerComp;
         }
+      }
+
+      // In childhood: pull toward a parent that is carrying food
+      if (sensed.parentWithFood) {
+        const { dx: pdx, dy: pdy } = sensed.parentWithFood;
+        const norm = Math.hypot(pdx, pdy) || 1;
+        const dot = dx * (pdx / norm) + dy * (pdy / norm);
+        const parentComp = policy.followFoodParent * PARENT_PULL_SCALE * dot;
+        components['parentPull'] = Number(parentComp.toFixed(3));
+        totalScore += parentComp;
       }
 
       // 2. Obstacle avoidance component
@@ -409,28 +432,28 @@ export function evaluatePolicy(
     };
   }
 
-  const scores = legalActions.map((action) =>
+  const rawScores = legalActions.map((action) =>
     scoreAction(action, organism, sensed, config, prng)
   );
 
-  // Food is the top motivation: whenever eating is possible it outranks every
-  // other action, except feeding one's own hungry child, which still competes
-  // with eating on the evolved weights. Outranked actions keep their scores
-  // for the inspector and are marked.
-  const canEatNow = scores.some((s) => s.action.type === 'EAT');
-  const eligible = canEatNow
-    ? scores.filter((s) => s.action.type === 'EAT' || s.action.recipientIsChild)
-    : scores;
-  if (canEatNow) {
-    for (const s of scores) {
-      if (!eligible.includes(s)) s.components['outrankedByEating'] = 0;
-    }
-  }
+  // Eat priority: when eating is possible, every other action except feeding
+  // one's own hungry child is pushed down by the evolved eatPriority weight.
+  // At its starting value this makes food come first; evolution can change it.
+  const canEatNow = rawScores.some((s) => s.action.type === 'EAT');
+  const eatPush = organism.policy.eatPriority * EAT_PRIORITY_SCALE;
+  const scores = rawScores.map((s): ActionScore => {
+    if (!canEatNow || s.action.type === 'EAT' || s.action.recipientIsChild) return s;
+    return {
+      ...s,
+      totalScore: Number((s.totalScore - eatPush).toFixed(3)),
+      components: { ...s.components, eatPriority: Number((-eatPush).toFixed(3)) },
+    };
+  });
 
   let bestScore = -Infinity;
   let bestCandidates: ActionScore[] = [];
 
-  for (const s of eligible) {
+  for (const s of scores) {
     if (s.totalScore > bestScore + 1e-6) {
       bestScore = s.totalScore;
       bestCandidates = [s];

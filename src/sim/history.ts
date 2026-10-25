@@ -12,6 +12,9 @@ export const POLICY_WEIGHT_KEYS = [
   'shareWithStrangers',
   'careForChildren',
   'forageDrive',
+  'eatPriority',
+  'hungerUrgency',
+  'followFoodParent',
 ] as const satisfies readonly (keyof PolicyWeights)[];
 
 export type PolicyWeightKey = (typeof POLICY_WEIGHT_KEYS)[number];

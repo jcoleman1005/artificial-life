@@ -19,6 +19,9 @@ const NEUTRAL: PolicyWeights = {
   shareWithStrangers: 0,
   careForChildren: 0,
   forageDrive: 0,
+  eatPriority: 0,
+  hungerUrgency: 0,
+  followFoodParent: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -435,18 +438,9 @@ describe('Passing through children', () => {
 });
 
 describe('Childhood', () => {
-  /** What a child at (2, 5) senses as its nearest food, with its parent at (5, 5). */
-  function childSensesFood(opts: {
-    childAge?: number;
-    parentCarries?: number;
-    related?: boolean;
-    patchAt?: [number, number];
-  }) {
+  /** What a child at (2, 5) senses about its parent at (5, 5). */
+  function childSensesParent(opts: { childAge?: number; parentCarries?: number; related?: boolean }) {
     const world = emptyWorld({ childhoodTicks: 800 });
-    if (opts.patchAt) {
-      const [px, py] = opts.patchAt;
-      world.foodPatches.set(`${px},${py}`, { x: px, y: py, stock: 3, capacity: 3 });
-    }
     const parent = makeOrganism('parent', 5, 5, { carriedFood: opts.parentCarries ?? 1 });
     const child = makeOrganism('child', 2, 5, {
       age: opts.childAge ?? 10,
@@ -454,27 +448,22 @@ describe('Childhood', () => {
     });
     world.organisms.set(parent.id, parent);
     world.organisms.set(child.id, child);
-    return senseEnvironment(child, world.getSnapshot(), world.config).nearestFood;
+    return senseEnvironment(child, world.getSnapshot(), world.config);
   }
 
-  it('senses a food-carrying parent as a food source', () => {
-    const food = childSensesFood({});
-    expect(food).toMatchObject({ x: 5, y: 5, distance: 3, isParent: true, value: 1 });
+  it('senses its food-carrying parent separately from real food', () => {
+    const sensed = childSensesParent({});
+    expect(sensed.parentWithFood).toMatchObject({ x: 5, y: 5, distance: 3, value: 1 });
+    expect(sensed.nearestFood).toBeNull();
   });
 
   it('ignores the parent when it carries nothing, after childhood, or if it is not the parent', () => {
-    expect(childSensesFood({ parentCarries: 0 })).toBeNull();
-    expect(childSensesFood({ childAge: 800 })).toBeNull();
-    expect(childSensesFood({ related: false })).toBeNull();
+    expect(childSensesParent({ parentCarries: 0 }).parentWithFood).toBeNull();
+    expect(childSensesParent({ childAge: 800 }).parentWithFood).toBeNull();
+    expect(childSensesParent({ related: false }).parentWithFood).toBeNull();
   });
 
-  it('prefers a real patch that is as near or nearer', () => {
-    expect(childSensesFood({ patchAt: [2, 3] })).toMatchObject({ x: 2, y: 3, distance: 2 });
-    expect(childSensesFood({ patchAt: [2, 2] })?.isParent).toBeUndefined(); // tie at distance 3
-    expect(childSensesFood({ patchAt: [2, 1] })?.isParent).toBe(true); // patch farther
-  });
-
-  it('draws a hungry child toward its parent, who then feeds it', () => {
+  it('with a positive followFoodParent, a child walks to its parent and is fed', () => {
     const world = emptyWorld();
     // The parent is walled in on three sides and leans away from its child,
     // so it waits in place; only the child's approach brings them together.
@@ -486,7 +475,7 @@ describe('Childhood', () => {
     });
     const child = makeOrganism('child', 2, 5, {
       energy: 20,
-      policy: { ...NEUTRAL, foodAttraction: 2 },
+      policy: { ...NEUTRAL, followFoodParent: 1 },
       lineage: { id: 'lin', parentId: 'parent', generation: 2, birthTick: 0 },
     });
     world.organisms.set(parent.id, parent);
@@ -504,7 +493,7 @@ describe('Childhood', () => {
   });
 });
 
-describe('Food as the top motivation', () => {
+describe('Food-first head starts (evolvable)', () => {
   function decide(org: Organism, setup?: (world: World) => void) {
     const world = emptyWorld();
     setup?.(world);
@@ -512,12 +501,13 @@ describe('Food as the top motivation', () => {
     world.step();
     return org.recentHistory[0];
   }
+  const foodFirst = { eatPriority: 2, hungerUrgency: 2 };
 
-  it('eats whenever it can, over reproducing, picking up and moving', () => {
+  it('with a high eat priority, eats over reproducing, picking up and moving', () => {
     const d = decide(
       makeOrganism('o', 5, 5, {
         energy: 70,
-        policy: { ...NEUTRAL, reproduceDrive: 2, forageDrive: 2, foodAttraction: 2, exploreTendency: 2 },
+        policy: { ...NEUTRAL, ...foodFirst, reproduceDrive: 2, forageDrive: 2, foodAttraction: 2, exploreTendency: 2 },
       }),
       (w) => {
         w.config.reproductionThreshold = 60;
@@ -526,11 +516,33 @@ describe('Food as the top motivation', () => {
       }
     );
     expect(d.chosenAction.type).toBe('EAT');
-    // Reproducing scored higher but was outranked.
     const repro = d.scores.find((s) => s.action.type.startsWith('REPRODUCE_'))!;
-    const eat = d.scores.find((s) => s.action.type === 'EAT')!;
-    expect(repro.totalScore).toBeGreaterThan(eat.totalScore);
-    expect('outrankedByEating' in repro.components).toBe(true);
+    expect(repro.components.eatPriority).toBe(-40); // pushed down by 2 × 20
+  });
+
+  it('with a high eat priority, eats food underfoot rather than walking to other food', () => {
+    const d = decide(
+      makeOrganism('o', 5, 5, { energy: 20, policy: { ...NEUTRAL, ...foodFirst, eatDrive: 0.5 } }),
+      (w) => {
+        w.foodPatches.set('5,5', { x: 5, y: 5, stock: 3, capacity: 3 });
+        w.foodPatches.set('7,5', { x: 7, y: 5, stock: 3, capacity: 3 });
+      }
+    );
+    expect(d.chosenAction.type).toBe('EAT');
+  });
+
+  it('with a negative eat priority, may skip a meal for something else', () => {
+    const d = decide(
+      makeOrganism('o', 5, 5, {
+        energy: 70,
+        policy: { ...NEUTRAL, eatPriority: -2, reproduceDrive: 2 },
+      }),
+      (w) => {
+        w.config.reproductionThreshold = 60;
+        w.foodPatches.set('5,5', { x: 5, y: 5, stock: 3, capacity: 3 });
+      }
+    );
+    expect(d.chosenAction.type.startsWith('REPRODUCE_')).toBe(true);
   });
 
   it('only eats with room for a full meal', () => {
@@ -540,12 +552,12 @@ describe('Food as the top motivation', () => {
     expect(fullish.scores.some((s) => s.action.type === 'EAT')).toBe(false);
   });
 
-  it('still lets a caring parent feed its hungry child instead of eating', () => {
+  it('never pushes down feeding one’s own hungry child', () => {
     const world = emptyWorld();
     const parent = makeOrganism('parent', 5, 5, {
       energy: 30,
       carriedFood: 1,
-      policy: { ...NEUTRAL, careForChildren: 2, eatDrive: 0.5, shareWithKin: 2 },
+      policy: { ...NEUTRAL, ...foodFirst, careForChildren: 2, eatDrive: 0.5, shareWithKin: 2 },
     });
     const child = makeOrganism('child', 6, 5, {
       energy: 5,
@@ -554,23 +566,26 @@ describe('Food as the top motivation', () => {
     const stranger = makeOrganism('stranger', 4, 5, { energy: 5 });
     for (const o of [parent, child, stranger]) world.organisms.set(o.id, o);
     world.step();
-    expect(parent.recentHistory[0].chosenAction.type).toBe('GIVE_EAST');
-    // Giving to a non-child was outranked by eating.
-    const toStranger = parent.recentHistory[0].scores.find((s) => s.action.type === 'GIVE_WEST')!;
-    expect('outrankedByEating' in toStranger.components).toBe(true);
+    const d = parent.recentHistory[0];
+    expect(d.chosenAction.type).toBe('GIVE_EAST');
+    const toChild = d.scores.find((s) => s.action.type === 'GIVE_EAST')!;
+    const toStranger = d.scores.find((s) => s.action.type === 'GIVE_WEST')!;
+    expect('eatPriority' in toChild.components).toBe(false);
+    expect(toStranger.components.eatPriority).toBe(-40);
   });
 
-  it('heads for food when hungry, even against its own evolved aversion to food', () => {
-    const atFood = (energy: number) =>
+  it('hunger urgency steers a hungry organism to food against its own aversion', () => {
+    const choice = (energy: number, hungerUrgency: number) =>
       decide(
         makeOrganism('o', 3, 5, {
           energy,
-          policy: { ...NEUTRAL, foodAttraction: -2, crowdingAvoidance: 2 },
+          policy: { ...NEUTRAL, foodAttraction: -2, crowdingAvoidance: 2, hungerUrgency },
         }),
         (w) => w.foodPatches.set('5,5', { x: 5, y: 5, stock: 3, capacity: 3 })
       ).chosenAction.type;
-    expect(atFood(30)).toBe('MOVE_EAST'); // hungry: hunger wins
-    expect(atFood(70)).not.toBe('MOVE_EAST'); // fed: its aversion wins
+    expect(choice(30, 2)).toBe('MOVE_EAST'); // hungry and urgent: goes for food
+    expect(choice(70, 2)).not.toBe('MOVE_EAST'); // fed: urgency does not apply
+    expect(choice(30, 0)).not.toBe('MOVE_EAST'); // no urgency evolved: aversion wins
   });
 });
 

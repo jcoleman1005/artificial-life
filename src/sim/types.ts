@@ -86,6 +86,15 @@ export interface PolicyWeights {
   careForChildren: number;
   /** Drive to pick up food and carry it for later or for others ([-2, 2]). */
   forageDrive: number;
+  /**
+   * How strongly a chance to eat pushes every other action down (except
+   * feeding one's own hungry child). Starts high: food first ([-2, 2]).
+   */
+  eatPriority: number;
+  /** How hard hunger (below half energy) pulls toward known food ([-2, 2]). */
+  hungerUrgency: number;
+  /** In childhood, pull toward one's parent while it carries food ([-2, 2]). */
+  followFoodParent: number;
 }
 
 export interface SensedEntity {
@@ -95,8 +104,6 @@ export interface SensedEntity {
   readonly dx: number;
   readonly dy: number;
   readonly value?: number;
-  /** Food only: this "food source" is the organism's parent, carrying food. */
-  readonly isParent?: boolean;
 }
 
 export interface SensedInputs {
@@ -118,6 +125,8 @@ export interface SensedInputs {
    * dissimilar ones, graded by similarity (null when none are in range).
    */
   readonly kinPull: { readonly dx: number; readonly dy: number } | null;
+  /** In childhood: one's parent, if in range and carrying food (value = units carried). */
+  readonly parentWithFood: SensedEntity | null;
   readonly canReproduce: boolean;
   /** Food available to eat here or in hand, and room for energy. */
   readonly canEat: boolean;

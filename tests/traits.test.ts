@@ -74,7 +74,7 @@ describe('Carry capacity trait', () => {
         policy: {
           foodAttraction: 0, obstacleAvoidance: 0, crowdingAvoidance: 0, exploreTendency: 0,
           eatDrive: 0, reproduceDrive: 0, kinAffinity: 0, shareWithKin: 0, shareWithStrangers: 0,
-          careForChildren: 0, forageDrive: 2,
+          careForChildren: 0, forageDrive: 2, eatPriority: 0, hungerUrgency: 0, followFoodParent: 0,
         },
         tag: 0,
         carryCapacity: capacity,

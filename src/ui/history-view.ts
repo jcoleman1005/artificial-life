@@ -22,6 +22,9 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   shareWithStrangers: 'Share with strangers',
   careForChildren: 'Care for children',
   forageDrive: 'Forage drive',
+  eatPriority: 'Eat priority',
+  hungerUrgency: 'Hunger urgency',
+  followFoodParent: 'Follow food parent',
 };
 
 const REFERENCE = '#64748b';
