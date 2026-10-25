@@ -1,12 +1,12 @@
-import type { FoodPatch } from '../sim/types';
+import type { CarrionPatch, FoodPatch } from '../sim/types';
 import type { OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
 
-/** What an organism's colour shows: its visible tag, or its founding family. */
-export type ColorMode = 'tag' | 'lineage';
+/** What an organism's colour shows: its visible tag, its founding family, or its diet (green plants to red meat). */
+export type ColorMode = 'tag' | 'lineage' | 'diet';
 
 /**
  * One optional layer over the world (one at a time):
@@ -48,6 +48,8 @@ const GLYPH = 'rgba(255, 255, 255, 0.88)';
 const BERRY = '#86efac';
 const GIFT = '#fcd877';
 const STARVING = 'rgba(248, 113, 113, 0.92)';
+const BONE = '#e9dcc6';
+const BITE = '#f43f5e';
 const ZOOM_ANIMATION_MS = 320;
 
 /** Lineage colour: a hash of the founding ancestor's id, so a family shares a hue. */
@@ -125,6 +127,7 @@ export class CanvasRenderer {
   }
 
   public hueOf(org: OrganismView): number {
+    if (this.colorMode === 'diet') return 120 - 120 * org.carnivory;
     return this.colorMode === 'tag' ? org.tag : lineageHue(org.lineage.id);
   }
 
@@ -385,6 +388,11 @@ export class CanvasRenderer {
       if (patch.stock <= 0 || !inView(patch.x, patch.y)) continue;
       this.drawFoodPatch(patch, detail);
     }
+    // Carrion: pale bones on a dark red stain
+    for (const c of this.world.carrion.values()) {
+      if (c.stock <= 0 || !inView(c.x, c.y)) continue;
+      this.drawCarrion(c, detail);
+    }
 
     // Overlays drawn under the organisms
     if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
@@ -545,8 +553,27 @@ export class CanvasRenderer {
 
     for (const org of this.world.organisms.values()) {
       const last = org.recentHistory[0];
-      if (!last || last.outcome !== 'success') continue;
+      if (!last) continue;
       const type = last.chosenAction.type;
+
+      // An attack: a red slash across the prey's cell (bold if it killed)
+      if (type.startsWith('ATTACK_') && last.chosenAction.target) {
+        const killed = last.outcome === 'success';
+        const [tx, ty] = centre(last.chosenAction.target);
+        const s = cellSize * 0.3;
+        ctx.strokeStyle = BITE;
+        ctx.globalAlpha *= killed ? 1 : 0.5;
+        ctx.lineWidth = Math.max(1.2, cellSize * (killed ? 0.1 : 0.06));
+        ctx.beginPath();
+        for (const off of [-0.35, 0, 0.35]) {
+          ctx.moveTo(tx - s + off * s, ty - s - off * s);
+          ctx.lineTo(tx + s + off * s, ty + s - off * s);
+        }
+        ctx.stroke();
+        ctx.globalAlpha /= killed ? 1 : 0.5;
+        continue;
+      }
+      if (last.outcome !== 'success') continue;
 
       if (type.startsWith('GIVE_') && last.chosenAction.recipientId) {
         const recipient = this.world.organisms.get(last.chosenAction.recipientId);
@@ -592,6 +619,44 @@ export class CanvasRenderer {
       }
     }
     ctx.lineCap = 'butt';
+  }
+
+  private drawCarrion(c: CarrionPatch, detail: number): void {
+    const { ctx, cellSize } = this;
+    const cx = (c.x + 0.5) * cellSize;
+    const cy = (c.y + 0.5) * cellSize;
+    const size = Math.min(1, 0.5 + c.stock / 100); // by the energy left in it
+    ctx.fillStyle = 'rgba(190, 18, 60, 0.22)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, cellSize * 0.42 * size, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = BONE;
+    ctx.strokeStyle = BONE;
+    if (detail < 0.5) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(0.7, cellSize * 0.1 * size), 0, TAU);
+      ctx.fill();
+      return;
+    }
+    // A small bone: a bar with a knob at each end
+    const half = cellSize * 0.2 * size;
+    const knob = cellSize * 0.06;
+    ctx.lineWidth = Math.max(1, cellSize * 0.07);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - half, cy + half * 0.6);
+    ctx.lineTo(cx + half, cy - half * 0.6);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    for (const [bx, by] of [
+      [cx - half, cy + half * 0.6],
+      [cx + half, cy - half * 0.6],
+    ] as const) {
+      ctx.moveTo(bx + knob, by);
+      ctx.arc(bx, by, knob, 0, TAU);
+    }
+    ctx.fill();
   }
 
   private drawFoodPatch(patch: FoodPatch, detail: number): void {
@@ -687,7 +752,7 @@ export class CanvasRenderer {
     gradient.addColorStop(1, `hsl(${hue}, 70%, ${38 + 17 * energyRatio}%)`);
     ctx.fillStyle = gradient;
     ctx.beginPath();
-    if (type === 'EAT' && succeeded) {
+    if ((type === 'EAT' || type === 'EAT_CARRION') && succeeded) {
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, r, Math.PI * 0.2, Math.PI * 1.8);
       ctx.closePath();
@@ -733,7 +798,7 @@ export class CanvasRenderer {
       ctx.beginPath();
       ctx.roundRect(cx - half, cy - half * 0.8, half * 2, half * 1.8, half * 0.5);
       ctx.stroke();
-    } else if (type !== 'EAT' || !succeeded) {
+    } else if ((type !== 'EAT' && type !== 'EAT_CARRION') || !succeeded) {
       // Resting or anything else: a soft white core
       ctx.globalAlpha = detail * 0.7;
       ctx.beginPath();

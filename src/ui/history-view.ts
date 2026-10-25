@@ -67,6 +67,14 @@ function ratePer100(total: (s: HistorySample) => number) {
 const sharesPer100Ticks = ratePer100((s) => s.sharesTotal - s.parentalSharesTotal);
 const parentalSharesPer100Ticks = ratePer100((s) => s.parentalSharesTotal);
 const signalsPer100Ticks = ratePer100((s) => s.signalsTotal);
+const killsPer100Ticks = ratePer100((s) => s.killsTotal ?? 0);
+
+/** Share of kills, between two samples, where the prey looked like a stranger (a different colour). */
+function strangerKillShare(s: HistorySample, prev?: HistorySample): number {
+  if (!prev) return 0;
+  const kills = (s.killsTotal ?? 0) - (prev.killsTotal ?? 0);
+  return kills > 0 ? ((s.killsOfStrangersTotal ?? 0) - (prev.killsOfStrangersTotal ?? 0)) / kills : 0;
+}
 
 /** Share of signals sent while standing on food, between two samples. */
 function signalsOnFoodShare(s: HistorySample, prev?: HistorySample): number {
@@ -175,6 +183,30 @@ export class HistoryView {
         fixedRange: [0, 1],
         value: signalsOnFoodShare,
         format: (s, prev) => pct(signalsOnFoodShare(s, prev)),
+        axisLabel: pct,
+      },
+      {
+        section: 'Diet & hunting',
+        label: 'Meat in the diet',
+        fixedRange: [0, 1],
+        value: (s) => s.carnivory?.mean ?? 0,
+        spread: (s) => s.carnivory?.sd ?? 0,
+        format: (s) => `${pct(s.carnivory?.mean ?? 0)} ± ${pct(s.carnivory?.sd ?? 0)}`,
+        axisLabel: pct,
+      },
+      {
+        section: 'Diet & hunting',
+        label: 'Kills',
+        fixedRange: null,
+        value: killsPer100Ticks,
+        format: (s, prev) => `${killsPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      {
+        section: 'Diet & hunting',
+        label: 'Kills of a different colour',
+        fixedRange: [0, 1],
+        value: strangerKillShare,
+        format: (s, prev) => pct(strangerKillShare(s, prev)),
         axisLabel: pct,
       },
       {

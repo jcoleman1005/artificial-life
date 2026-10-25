@@ -37,6 +37,21 @@ export function describeEvent(e: WorldEvent, regions: readonly FoodRegion[], con
       return { text: 'Everyone has died', colour: MOOD.bad };
     case 'generation':
       return { text: `Generation ${e.generation} is born`, colour: MOOD.neutral };
+    case 'firstKill': {
+      const killer = e.killerGroup !== null ? GROUP_NAMES[e.killerGroup] : null;
+      const prey = e.preyGroup !== null ? GROUP_NAMES[e.preyGroup] : null;
+      const text =
+        killer && prey
+          ? killer === prey
+            ? `First kill: one of the ${killer} killed one of its own colour`
+            : `First kill: one of the ${killer} killed one of the ${prey}`
+          : 'The first kill';
+      return { text, colour: MOOD.bad };
+    }
+    case 'groupDiet':
+      return e.diet === 'meat'
+        ? { text: `${GROUP_NAMES[e.group]} have turned to meat`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` }
+        : { text: `${GROUP_NAMES[e.group]} have gone back to plants`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` };
   }
 }
 

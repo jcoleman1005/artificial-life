@@ -1,5 +1,6 @@
 import type { PRNG } from './prng';
 import { isDiagonalMove, isLeapAction, isMoveAction, unitDirectionOf } from './directions';
+import { carrionYield } from './traits';
 import type {
   ActionScore,
   LegalAction,
@@ -61,6 +62,16 @@ export const BRAIN_INPUTS = [
   'register0',
   'register1',
   'register2',
+  // Carrion and predation. New inputs always go at the end, so brains in
+  // older saves can be upgraded (see upgradeBrain).
+  'isEatCarrion',
+  'eatCarrionHunger',
+  'moveCarrion',
+  'isAttack',
+  'attackKillChance',
+  'attackAlike',
+  'attackFamily',
+  'attackHunger',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -96,6 +107,18 @@ const HEAD_START: Readonly<Partial<Record<BrainInput, number>>> = {
   pushedByEating: -35,
   isSignal: -0.1, // signals start meaningless: only a small cost
   moveOccupied: -2.25, // like the avoidOccupied dial's head start
+  // Carrion is eaten like food and sought like food, in proportion to how
+  // much the diet gets from it.
+  isEatCarrion: 0.5,
+  eatCarrionHunger: 3,
+  moveCarrion: 1.5,
+  // Attacks start uncommon: a cost, eased for hungry meat eaters and good
+  // odds. Which prey (by look) is left to evolve; family starts protected,
+  // as parents start caring, and that can evolve away too.
+  isAttack: -0.5,
+  attackKillChance: 1,
+  attackFamily: -2,
+  attackHunger: 2,
 };
 
 export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEAD_START[name] ?? 0);
@@ -109,6 +132,23 @@ export function createHeadStartBrain(prng: PRNG): Brain {
     out: Array.from({ length: BRAIN_HIDDEN }, small),
     outBias: 0,
   };
+}
+
+/**
+ * A brain from a save made before the newest inputs existed. Inputs are only
+ * ever appended, so the old ones keep their place: new direct connections get
+ * the head start, and new hidden-layer connections start at zero (so the
+ * hidden layer behaves exactly as before).
+ */
+export function upgradeBrain(brain: Brain): Brain {
+  const old = brain.skip.length;
+  if (old >= BRAIN_INPUT_COUNT) return brain;
+  const added = BRAIN_INPUT_COUNT - old;
+  const hidden: number[] = [];
+  for (let h = 0; h < BRAIN_HIDDEN; h++) {
+    hidden.push(...brain.hidden.slice(h * old, (h + 1) * old), ...new Array<number>(added).fill(0));
+  }
+  return { ...brain, skip: [...brain.skip, ...HEAD_START_SKIP.slice(old)], hidden };
 }
 
 /** A child's brain: each weight mutates with probability brainMutationRate. */
@@ -150,6 +190,7 @@ export function brainFeatures(
   const isGive = type.startsWith('GIVE_');
   const isReproduce = type.startsWith('REPRODUCE_');
   const isSignal = type === 'SIGNAL';
+  const isAttack = type.startsWith('ATTACK_');
   const hunger = 1 - sensed.energyRatio;
   const hungry = sensed.energyRatio < 0.5;
   const need = action.recipientNeed ?? 0;
@@ -203,6 +244,14 @@ export function brainFeatures(
     sensed.registers[0] ?? 0, // register0
     sensed.registers[1] ?? 0, // register1
     sensed.registers[2] ?? 0, // register2
+    type === 'EAT_CARRION' ? 1 : 0, // isEatCarrion
+    type === 'EAT_CARRION' ? hunger * (carrionYield(organism, config) / config.foodEnergyYield) : 0, // eatCarrionHunger
+    isMove ? aligned(dx, dy, sensed.nearestCarrion, 0.25) * organism.carnivory : 0, // moveCarrion
+    isAttack ? 1 : 0, // isAttack
+    isAttack ? (action.preyKillChance ?? 0) : 0, // attackKillChance
+    isAttack ? (action.preySimilarity ?? 0) : 0, // attackAlike
+    isAttack && action.preyIsFamily ? 1 : 0, // attackFamily
+    isAttack ? hunger * organism.carnivory : 0, // attackHunger
   ];
 }
 

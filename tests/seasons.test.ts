@@ -48,7 +48,7 @@ describe('Seasons', () => {
     expect(plenty).toBe(32); // every 4 ticks
     expect(lean).toBe(4); // every 32 ticks
 
-    const world = new World({ seed: 2, seasonLength: 320, leanFraction: 0.5, immigrationInterval: 0, staggeredSeasons: false });
+    const world = new World({ seed: 2, seasonLength: 320, leanFraction: 0.5, immigrationInterval: 0, staggeredSeasons: false, windfallsEnabled: false });
     while (world.tick < 160) world.step();
     const patchesAtLeanStart = world.foodPatches.size;
     while (world.tick < 300) world.step();

@@ -1,7 +1,13 @@
 import type { Organism, PolicyWeights, SimulationConfig } from '../sim/types';
 import { setHTMLPreservingDetails } from './dom';
 import { givenName, organismName } from './names';
+import { carrionYield, plantYield } from '../sim/traits';
 import { describeDoing } from './organism-card';
+
+/** A diet in words, from carnivory (0 plants … 1 meat). */
+export function dietLabel(carnivory: number): string {
+  return carnivory < 0.25 ? 'Plant eater' : carnivory < 0.5 ? 'Mostly plants' : carnivory < 0.75 ? 'Mostly meat' : 'Meat eater';
+}
 
 /** The organism's movement abilities, e.g. "Diagonal, Leap", or "None". */
 function abilityList(organism: Readonly<Organism>): string {
@@ -257,6 +263,18 @@ export class InspectorView {
           <div class="summary-pill">
             <span class="pill-title">Abilities</span>
             <span class="pill-value">${abilityList(organism)}</span>
+          </div>
+          <div class="summary-pill">
+            <span class="pill-title">Diet</span>
+            <span class="pill-value">${dietLabel(organism.carnivory)} · ${Math.round(organism.carnivory * 100)}% meat</span>
+          </div>
+          <div class="summary-pill">
+            <span class="pill-title">Energy per plant / carrion meal</span>
+            <span class="pill-value">${plantYield(organism, config).toFixed(0)} / ${carrionYield(organism, config).toFixed(0)}</span>
+          </div>
+          <div class="summary-pill">
+            <span class="pill-title">Kills</span>
+            <span class="pill-value">${organism.kills ?? 0}</span>
           </div>
           <div class="summary-pill">
             <span class="pill-title">Given / Got</span>

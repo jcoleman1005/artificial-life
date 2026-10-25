@@ -7,6 +7,7 @@ import type {
 } from './types';
 import { tagSimilarity } from './tags';
 import { recall } from './memory';
+import { carrionYield, plantYield } from './traits';
 
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
@@ -23,9 +24,12 @@ export function senseEnvironment(
 
   // Current cell food (grids are indexed y * width + x)
   const currentCellFood = snapshot.foodGrid[y * width + x];
+  const currentCellCarrion = snapshot.carrionGrid[y * width + x];
 
   let nearestFood: SensedEntity | null = null;
   let minFoodDist = Infinity;
+  let nearestCarrion: SensedEntity | null = null;
+  let minCarrionDist = Infinity;
 
   let nearestObstacle: SensedEntity | null = null;
   let minObstacleDist = Infinity;
@@ -104,6 +108,12 @@ export function senseEnvironment(
             value: stock,
           };
         }
+      }
+
+      const carrion = snapshot.carrionGrid[cell];
+      if (carrion > 0 && manhattanDist < minCarrionDist) {
+        minCarrionDist = manhattanDist;
+        nearestCarrion = { x: targetX, y: targetY, distance: manhattanDist, dx, dy, value: carrion };
       }
     }
   }
@@ -188,7 +198,10 @@ export function senseEnvironment(
   // nearly full organism never spends a whole food unit on a few points.
   const canEat =
     (currentCellFood > 0 || carriedFood > 0) &&
-    energy <= config.maxEnergy - config.foodEnergyYield;
+    energy <= config.maxEnergy - plantYield(organism, config);
+  // The same for carrion, for a diet that gets at least one energy point from it.
+  const meatYield = carrionYield(organism, config);
+  const canEatCarrion = currentCellCarrion > 0 && meatYield >= 1 && energy <= config.maxEnergy - meatYield;
   const canPickUp = currentCellFood > 0 && carriedFood < organism.carryCapacity;
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
@@ -237,6 +250,9 @@ export function senseEnvironment(
         : null,
     parentWithFood,
     nearestSignal,
+    currentCellCarrion,
+    nearestCarrion,
+    canEatCarrion,
     canEat,
     canPickUp,
     canReproduce,

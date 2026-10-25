@@ -171,7 +171,7 @@ export class SettingsView {
       </section>
       <section class="settings-group">
         <h3>Display</h3>
-        ${segmented('Colour by', 'color', [['tag', 'Tag'], ['lineage', 'Family']], 'tag')}
+        ${segmented('Colour by', 'color', [['tag', 'Tag'], ['lineage', 'Family'], ['diet', 'Diet']], 'tag')}
       </section>
       <section class="settings-group">
         <h3>Run</h3>

@@ -67,6 +67,18 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   signalsEnabled: true,
   signalCost: 0.2,
   signalRadius: 8, // Signals carry well beyond sight (sensingRadius)
+  carrionEnabled: true,
+  // Bodies never hold more than they cost: eating one's own child (or
+  // anyone) returns less than the energy put into it.
+  carrionBodyEnergy: 10,
+  carrionEfficiency: 0.7,
+  carrionBite: 30,
+  carrionLifetime: 200,
+  dietTradeoff: 0.6, // a full meat eater gets 40% of a plant's energy
+  carnivoryMutationStdDev: 0.08,
+  predationEnabled: true,
+  attackCost: 2,
+  bitePowerMin: 0.2,
   immigrationInterval: 25,
   immigrationCount: 1,
   seasonLength: 800,

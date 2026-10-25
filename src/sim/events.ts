@@ -24,13 +24,20 @@ export type WorldEventBody =
   /** No organisms are left. */
   | { readonly kind: 'extinction' }
   /** The deepest lineage reached a milestone generation. */
-  | { readonly kind: 'generation'; readonly generation: number };
+  | { readonly kind: 'generation'; readonly generation: number }
+  /** The first kill of the run (killer and prey colour groups). */
+  | { readonly kind: 'firstKill'; readonly killerGroup: number | null; readonly preyGroup: number | null }
+  /** An established colour group now eats mostly meat (mean carnivory >= MEAT_GROUP), or went back to plants. */
+  | { readonly kind: 'groupDiet'; readonly group: number; readonly diet: 'meat' | 'plants' };
 
 export type WorldEvent = WorldEventBody & { readonly seq: number; readonly tick: number };
 
 export const GROUP_ESTABLISHED = 10;
 export const POPULATION_STEP = 100;
 export const GENERATION_STEP = 25;
+/** A group's mean carnivory at which it counts as meat eaters; it goes back to plants below MEAT_GROUP_EXIT. */
+export const MEAT_GROUP = 0.5;
+const MEAT_GROUP_EXIT = 0.4;
 /** A crash compares the population with its peak over this many ticks. */
 export const CRASH_WINDOW = 400;
 /** A new leader must be this much larger than the old one, so close races don't flicker. */
@@ -50,6 +57,8 @@ export class WorldEventDetector {
   private readonly recent: { tick: number; population: number }[] = [];
   private crashed = false;
   private extinct = false;
+  private sawKill = false;
+  private readonly meatGroups = new Set<number>();
 
   /**
    * Starts watching a world mid-run (e.g. a resumed save) without
@@ -83,9 +92,11 @@ export class WorldEventDetector {
 
     // Colour groups
     const counts = new Array<number>(GROUP_NAMES.length).fill(0);
+    const carnivory = new Array<number>(GROUP_NAMES.length).fill(0);
     let maxGeneration = 1;
     for (const o of world.organisms.values()) {
       counts[groupIndexOf(o.tag)]++;
+      carnivory[groupIndexOf(o.tag)] += o.carnivory;
       if (o.lineage.generation > maxGeneration) maxGeneration = o.lineage.generation;
     }
     counts.forEach((count, group) => {
@@ -107,6 +118,29 @@ export class WorldEventDetector {
     ) {
       if (this.leader !== null) found.push({ kind: 'groupLeads', group: largest, count: counts[largest] });
       this.leader = largest;
+    }
+
+    // Diets: established groups turning to meat (or back to plants)
+    counts.forEach((count, group) => {
+      const mean = count > 0 ? carnivory[group] / count : 0;
+      if (count >= GROUP_ESTABLISHED && mean >= MEAT_GROUP && !this.meatGroups.has(group)) {
+        this.meatGroups.add(group);
+        found.push({ kind: 'groupDiet', group, diet: 'meat' });
+      } else if (this.meatGroups.has(group) && (count === 0 || mean < MEAT_GROUP_EXIT)) {
+        this.meatGroups.delete(group);
+        if (count > 0) found.push({ kind: 'groupDiet', group, diet: 'plants' });
+      }
+    });
+
+    // The first kill (a resumed world that already had kills reports none)
+    if (!this.sawKill && world.killsTotal > 0) {
+      this.sawKill = true;
+      const kill = world.lastKill;
+      found.push({
+        kind: 'firstKill',
+        killerGroup: kill ? groupIndexOf(kill.killerTag) : null,
+        preyGroup: kill ? groupIndexOf(kill.preyTag) : null,
+      });
     }
 
     // Population: records, crashes and extinction

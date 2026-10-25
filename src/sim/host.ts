@@ -265,6 +265,7 @@ export class SimulationHost {
       tick: world.tick,
       organisms: Array.from(world.organisms.values(), toOrganismView),
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
+      carrion: Array.from(world.carrion.values(), (c) => ({ ...c })),
       ticksPerSecond: this.tickTimes.length,
       running: this.running,
       targetTicksPerSecond: this.ticksPerSecond,

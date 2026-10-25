@@ -46,6 +46,8 @@ interface Job {
 
 /** The brain's direct connections reported after each run: the signal ones. */
 const SIGNAL_INPUTS = ['isSignal', 'signalOnFood', 'signalHunger', 'moveSignal', 'moveSignalAlike'] as const;
+/** ...and the hunting ones. */
+const HUNTING_INPUTS = ['isAttack', 'attackKillChance', 'attackAlike', 'attackFamily', 'attackHunger', 'moveCarrion'] as const;
 
 /** Reads a SavedWorld file (or a bare WorldState) and returns the world state. */
 function readWorldState(path: string): WorldState {
@@ -179,6 +181,12 @@ function runJob(job: Job): RunResult {
     deaths: m.deathsTotal - start.deathsTotal,
     giftsToOthers: m.sharesTotal - m.parentalSharesTotal - (start.sharesTotal - start.parentalSharesTotal),
     giftsToChildren: m.parentalSharesTotal - start.parentalSharesTotal,
+    kills: m.killsTotal - start.killsTotal,
+    'killsOfStrangers%': (100 * (m.killsOfStrangersTotal - start.killsOfStrangersTotal)) / Math.max(1, m.killsTotal - start.killsTotal),
+    'killsOfKin%': (100 * (m.killsOfKinTotal - start.killsOfKinTotal)) / Math.max(1, m.killsTotal - start.killsTotal),
+    carrionEaten: m.carrionEatenTotal - start.carrionEatenTotal,
+    carnivory: m.averageCarnivory,
+    meatEaters: m.meatEaters,
     largestGroup: m.tribes.largestTribe,
     lookAlikeNeighbours: m.tribes.localKinFraction,
     lookAlikeByChance: m.tribes.globalKinFraction,
@@ -205,7 +213,9 @@ function runJob(job: Job): RunResult {
     ),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
-    ...Object.fromEntries(SIGNAL_INPUTS.map((k) => [`b.${k}`, mean((o) => o.brain.skip[BRAIN_INPUTS.indexOf(k)])])),
+    ...Object.fromEntries(
+      [...SIGNAL_INPUTS, ...HUNTING_INPUTS].map((k) => [`b.${k}`, mean((o) => o.brain.skip[BRAIN_INPUTS.indexOf(k)])])
+    ),
     ...Object.fromEntries(POLICY_WEIGHT_KEYS.map((k) => [`w.${k}`, mean((o) => o.policy[k])])),
     ...Object.fromEntries(Object.entries(actions).map(([k, v]) => [`act.${k}%`, (100 * v) / actionTotal])),
   };

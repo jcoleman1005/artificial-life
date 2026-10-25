@@ -66,6 +66,11 @@ export interface HistorySample {
   /** Brains: how far direct connections moved from the head start, and hidden-layer strength. */
   readonly brainDrift: WeightStat;
   readonly hiddenStrength: WeightStat;
+  /** Diet (absent in samples saved before carrion). */
+  readonly carnivory?: WeightStat;
+  /** Kills so far, and how many of the prey looked like strangers to their killer. */
+  readonly killsTotal?: number;
+  readonly killsOfStrangersTotal?: number;
 }
 
 /** Share of organisms holding each movement ability, and holding none. */
@@ -182,6 +187,9 @@ export class MetricsHistory {
       abilities: abilityShares(organisms),
       brainDrift: meanAndSd(organisms.map((o) => brainDrift(o.brain))),
       hiddenStrength: meanAndSd(organisms.map((o) => hiddenStrength(o.brain))),
+      carnivory: meanAndSd(organisms.map((o) => o.carnivory)),
+      killsTotal: metrics.killsTotal,
+      killsOfStrangersTotal: metrics.killsOfStrangersTotal,
     });
 
     if (this.samples.length > this.capacity) {
@@ -224,6 +232,10 @@ export class MetricsHistory {
       'no_ability_fraction',
       'brain_drift_mean',
       'brain_hidden_strength_mean',
+      'carnivory_mean',
+      'carnivory_sd',
+      'kills_total',
+      'kills_of_strangers_total',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
     ];
     const rows = this.samples.map((s) =>
@@ -259,6 +271,10 @@ export class MetricsHistory {
         s.abilities.none.toFixed(4),
         s.brainDrift.mean.toFixed(4),
         s.hiddenStrength.mean.toFixed(4),
+        (s.carnivory?.mean ?? 0).toFixed(4),
+        (s.carnivory?.sd ?? 0).toFixed(4),
+        s.killsTotal ?? 0,
+        s.killsOfStrangersTotal ?? 0,
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

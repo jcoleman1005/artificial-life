@@ -48,6 +48,11 @@ export type ActionType =
   | 'GIVE_EAST'
   | 'GIVE_WEST'
   | 'SIGNAL'
+  | 'EAT_CARRION'
+  | 'ATTACK_NORTH'
+  | 'ATTACK_SOUTH'
+  | 'ATTACK_EAST'
+  | 'ATTACK_WEST'
   | 'REST';
 
 export interface LegalAction {
@@ -75,6 +80,14 @@ export interface LegalAction {
   readonly recipientNeed?: number;
   /** GIVE only: the recipient is the donor's own child (parental care). */
   readonly recipientIsChild?: boolean;
+  /** ATTACK only: the adjacent organism bitten. */
+  readonly preyId?: string;
+  /** ATTACK only: how alike the prey's tag looks (0..1). */
+  readonly preySimilarity?: number;
+  /** ATTACK only: the chance the bite kills, if the prey is still adjacent after moves. */
+  readonly preyKillChance?: number;
+  /** ATTACK only: the prey is the attacker's own child or parent. */
+  readonly preyIsFamily?: boolean;
 }
 
 export interface PolicyWeights {
@@ -158,6 +171,12 @@ export interface SensedInputs {
    * (value = how alike its tag looks, 0..1). Null when none.
    */
   readonly nearestSignal: SensedEntity | null;
+  /** Carrion energy in this cell. */
+  readonly currentCellCarrion: number;
+  /** The nearest carrion within sensing radius (value = energy in it). Null when none. */
+  readonly nearestCarrion: SensedEntity | null;
+  /** Carrion here, a diet that gets something from it, and room for a full meal of it. */
+  readonly canEatCarrion: boolean;
   readonly canReproduce: boolean;
   /** Food available to eat here or in hand, and room for energy. */
   readonly canEat: boolean;
@@ -187,7 +206,9 @@ export type DecisionOutcome =
   | 'conflict_lost'
   | 'no_food'
   | 'energy_too_low'
-  | 'rested';
+  | 'rested'
+  /** An attack that did not kill (missed, or the prey got away). */
+  | 'missed';
 
 export interface DecisionRecord {
   readonly tick: number;
@@ -240,6 +261,15 @@ export interface Organism {
   memory: MemoryState;
   /** Inherited movement abilities (body traits); see Abilities. */
   readonly abilities: Abilities;
+  /**
+   * Inherited diet, 0..1: the share of a carrion meal's energy it gets
+   * (carnivory × carrionBite at most), at the price of plant food
+   * (foodEnergyYield × (1 − dietTradeoff × carnivory)), and how hard it bites.
+   * 0 is a pure plant eater.
+   */
+  readonly carnivory: number;
+  /** Organisms this one has killed. */
+  kills: number;
   /** Inherited neural controller, used when config.controller is 'brain'. */
   readonly brain: Brain;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
@@ -277,6 +307,16 @@ export interface FoodPatch {
   readonly region?: number;
   /** Windfalls only: the tick it rots away. Windfall patches never regrow. */
   readonly expiresAt?: number;
+}
+
+/** What a dead organism leaves behind: food only meat eaters get much from. Never regrows. */
+export interface CarrionPatch {
+  readonly x: number;
+  readonly y: number;
+  /** Energy left in it. A meal takes up to carrionBite; the eater gets its carnivory share. */
+  stock: number;
+  /** The tick it rots away (renewed when another body lands on it). */
+  expiresAt: number;
 }
 
 /** A fertile disc where food patches grow. Each may run its own season clock. */
@@ -351,6 +391,16 @@ export interface SimulationConfig {
   signalsEnabled: boolean; // Experiment switch for the SIGNAL action
   signalCost: number; // Energy spent on one signal
   signalRadius: number; // How far (Manhattan) a signal can be sensed // For this long after birth, a parent carrying food senses as a food source
+  carrionEnabled: boolean; // Dead organisms leave carrion, and diet (carnivory) trades plant food for meat
+  carrionBodyEnergy: number; // Carrion energy any body leaves (a starved one leaves only this)
+  carrionEfficiency: number; // Plus this share of the energy the body still held (a killed one usually holds some)
+  carrionBite: number; // Carrion energy one meal takes; the eater gains carnivory × that
+  carrionLifetime: number; // Ticks before carrion rots away
+  dietTradeoff: number; // Plant food yields foodEnergyYield × (1 − dietTradeoff × carnivory)
+  carnivoryMutationStdDev: number; // How far a child's carnivory shifts when it mutates (with traitMutationRate)
+  predationEnabled: boolean; // Allow ATTACK (brain only): a kill turns the prey into carrion
+  attackCost: number; // Energy spent on one attack, hit or miss
+  bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
   seasonLength: number; // Ticks per plenty + lean cycle (0 = no seasons)
@@ -401,6 +451,16 @@ export interface WorldMetrics {
   signalsTotal: number;
   /** Signals sent while standing on food. */
   signalsOnFoodTotal: number;
+  /** Kills so far, and how many of the prey looked like strangers / kin to their killer. */
+  killsTotal: number;
+  killsOfStrangersTotal: number;
+  killsOfKinTotal: number;
+  /** Carrion meals eaten so far, and carrion energy lying in the world now. */
+  carrionEatenTotal: number;
+  carrionStock: number;
+  /** Mean carnivory now, and how many organisms are mostly meat eaters (carnivory >= 0.5). */
+  averageCarnivory: number;
+  meatEaters: number;
   /** Current season, or null when seasons are off. */
   season: 'plenty' | 'lean' | null;
 }
@@ -418,6 +478,8 @@ export interface WorldSnapshot {
   readonly obstacleGrid: Uint8Array;
   /** Food stock in each cell (0 when no patch or empty). */
   readonly foodGrid: Int32Array;
+  /** Carrion energy in each cell (0 when none). */
+  readonly carrionGrid: Float32Array;
   /** Index into `organisms` of the organism in each cell, or -1. */
   readonly organismGrid: Int32Array;
   /** Indices into `organisms` of those that signalled last tick. */

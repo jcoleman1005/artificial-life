@@ -145,7 +145,7 @@ describe('Memory: in a running world', () => {
     memory.food = { x: 14, y: 10, tick: 0 }; // 9 cells east: far out of sight
     const org: Organism = {
       id: 'a', x: 5, y: 10, energy: 80, policy: { ...NEUTRAL }, tag: 0, carryCapacity: 0, dispersal: 1,
-      memorySpan: 60, memoryWeights: new Array<number>(MEMORY_WEIGHT_COUNT).fill(0), memory,
+      memorySpan: 60, memoryWeights: new Array<number>(MEMORY_WEIGHT_COUNT).fill(0), memory, carnivory: 0, kills: 0,
       abilities: { diagonal: 0, squeeze: 0, leap: 0 }, brain: singleInputBrain('moveRememberedFood', 5),
       lineage: { id: 'l', parentId: null, generation: 1, birthTick: 0 }, age: 0, offspringCount: 0,
       foodEatenCount: 0, carriedFood: 0, foodGiven: 0, foodReceived: 0, signalTick: -1, recentHistory: [],

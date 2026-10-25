@@ -173,6 +173,19 @@ export function computePolicyDiversity(organisms: readonly Organism[]): PolicyDi
   };
 }
 
+/** Metrics the World fills in from its own counters and state. */
+export type WorldCountedMetric =
+  | 'season'
+  | 'signalsTotal'
+  | 'signalsOnFoodTotal'
+  | 'killsTotal'
+  | 'killsOfStrangersTotal'
+  | 'killsOfKinTotal'
+  | 'carrionEatenTotal'
+  | 'carrionStock'
+  | 'averageCarnivory'
+  | 'meatEaters';
+
 export function computeWorldMetrics(
   tick: number,
   organisms: readonly Organism[],
@@ -186,7 +199,7 @@ export function computeWorldMetrics(
   parentalSharesTotal: number,
   immigrantsTotal: number,
   config: Readonly<SimulationConfig>
-): Omit<WorldMetrics, 'season' | 'signalsTotal' | 'signalsOnFoodTotal'> {
+): Omit<WorldMetrics, WorldCountedMetric> {
   const population = organisms.length;
 
   let maxGeneration = 1;

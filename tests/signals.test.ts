@@ -40,6 +40,8 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     carryCapacity: 1,
     dispersal: 1,
     memorySpan: 0,
+    carnivory: 0,
+    kills: 0,
     memoryWeights: [],
     memory: { food: null, signal: null, home: { x: 0, y: 0 }, registers: [0, 0, 0] },
     abilities: { diagonal: 0, squeeze: 0, leap: 0 },

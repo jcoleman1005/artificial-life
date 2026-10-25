@@ -11,6 +11,7 @@ import type { HistorySample } from './history';
 import type { WorldEvent } from './events';
 import type { HeatmapKind } from './activity';
 import type {
+  CarrionPatch,
   DecisionOutcome,
   FoodPatch,
   FoodRegion,
@@ -23,7 +24,7 @@ import type { WorldState } from './world';
 
 /** What an organism did on its latest tick, as much as drawing needs. */
 export interface ActionView {
-  readonly chosenAction: Pick<LegalAction, 'type' | 'target' | 'recipientId' | 'swapWithId' | 'swapRelation'>;
+  readonly chosenAction: Pick<LegalAction, 'type' | 'target' | 'recipientId' | 'swapWithId' | 'swapRelation' | 'preyId'>;
   readonly outcome: DecisionOutcome;
 }
 
@@ -37,6 +38,8 @@ export interface OrganismView {
   readonly lineage: { readonly id: string; readonly parentId: string | null; readonly generation: number };
   readonly age: number;
   readonly carriedFood: number;
+  /** Diet, 0 (plants) to 1 (meat). */
+  readonly carnivory: number;
   /** Only the latest decision (or none). */
   readonly recentHistory: readonly ActionView[];
 }
@@ -47,6 +50,7 @@ export interface WorldView {
   readonly tick: number;
   readonly organisms: ReadonlyMap<string, OrganismView>;
   readonly foodPatches: ReadonlyMap<string, FoodPatch>;
+  readonly carrion: ReadonlyMap<string, CarrionPatch>;
   readonly foodRegions: readonly FoodRegion[];
   readonly obstacles: ReadonlySet<string>;
   getSelectedOrganism(): OrganismView | undefined;
@@ -63,6 +67,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     lineage: { id: org.lineage.id, parentId: org.lineage.parentId, generation: org.lineage.generation },
     age: org.age,
     carriedFood: org.carriedFood,
+    carnivory: org.carnivory,
     recentHistory: last
       ? [
           {
@@ -72,6 +77,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
               recipientId: last.chosenAction.recipientId,
               swapWithId: last.chosenAction.swapWithId,
               swapRelation: last.chosenAction.swapRelation,
+              preyId: last.chosenAction.preyId,
             },
             outcome: last.outcome,
           },
@@ -133,6 +139,7 @@ export type FromWorker =
       readonly tick: number;
       readonly organisms: readonly OrganismView[];
       readonly foodPatches: readonly FoodPatch[];
+      readonly carrion: readonly CarrionPatch[];
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
       /** Whether the world is playing, and at what speed (another viewer may have changed them). */

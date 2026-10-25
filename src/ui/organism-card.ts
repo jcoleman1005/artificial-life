@@ -23,9 +23,15 @@ export function describeDoing(org: OrganismView, nameOf: (id: string) => string 
     return ok ? `Giving food${to ? ` to ${to}` : ''}` : 'Tried to give food';
   }
   if (type.startsWith('REPRODUCE_')) return ok ? 'Had a baby' : 'Tried to have a baby';
+  if (type.startsWith('ATTACK_')) {
+    const prey = last.chosenAction.preyId ? nameOf(last.chosenAction.preyId) : 'a neighbour';
+    return ok ? `Killed ${prey}` : `Attacked ${prey} (missed)`;
+  }
   switch (type) {
     case 'EAT':
       return ok ? 'Eating' : 'Looking for a meal';
+    case 'EAT_CARRION':
+      return ok ? 'Eating carrion' : 'Looking for carrion';
     case 'PICK_UP':
       return ok ? 'Picking up food' : 'Reaching for food';
     case 'SIGNAL':

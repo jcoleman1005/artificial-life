@@ -10,7 +10,7 @@ import type {
   ToWorker,
   WorldView,
 } from '../sim/protocol';
-import type { FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
+import type { CarrionPatch, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
 
 export interface ClientEvents {
   /** A new frame arrived. Called before it is applied, so positions can be remembered for glides. */
@@ -76,6 +76,7 @@ export class SimulationClient implements WorldView {
   public tick = 0;
   public organisms = new Map<string, OrganismView>();
   public foodPatches = new Map<string, FoodPatch>();
+  public carrion = new Map<string, CarrionPatch>();
   public foodRegions: readonly FoodRegion[] = [];
   public obstacles: ReadonlySet<string> = new Set();
   /** Ticks per second the worker actually ran over the last second. */
@@ -187,6 +188,7 @@ export class SimulationClient implements WorldView {
         this.tick = message.tick;
         this.organisms = new Map(message.organisms.map((o) => [o.id, o]));
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
+        this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));
         this.ticksPerSecond = message.ticksPerSecond;
         this.running = message.running;
         this.targetTicksPerSecond = message.targetTicksPerSecond;

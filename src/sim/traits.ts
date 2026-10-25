@@ -77,3 +77,47 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
         (config.leapEnabled ? organism.abilities.leap : 0))
   );
 }
+
+/** A founder's diet: mostly a plant eater (carnivory 0–0.2), so any taste for meat has to evolve. */
+export function founderCarnivory(prng: PRNG): number {
+  return Number(prng.nextFloat(0, 0.2).toFixed(3));
+}
+
+/** A child's diet: usually the parent's, occasionally shifted a little (kept in 0..1). */
+export function inheritCarnivory(parent: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
+  if (prng.next() >= config.traitMutationRate) return parent;
+  const next = parent + prng.nextGaussian(0, config.carnivoryMutationStdDev);
+  return Number(Math.max(0, Math.min(1, next)).toFixed(3));
+}
+
+/** Energy from one unit of plant food: less for meat eaters, when carrion is on. */
+export function plantYield(organism: Readonly<Pick<Organism, 'carnivory'>>, config: Readonly<SimulationConfig>): number {
+  if (!config.carrionEnabled) return config.foodEnergyYield;
+  return config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory);
+}
+
+/** Energy from a full carrion meal (carrionBite of carrion energy); 0 when carrion is off. */
+export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory'>>, config: Readonly<SimulationConfig>): number {
+  return config.carrionEnabled ? config.carrionBite * organism.carnivory : 0;
+}
+
+/** Carrion energy a body leaves: a fixed amount plus a share of what it still held. Never more than the body cost. */
+export function carrionFromBody(bodyEnergy: number, config: Readonly<SimulationConfig>): number {
+  return config.carrionBodyEnergy + config.carrionEfficiency * Math.max(0, bodyEnergy);
+}
+
+/**
+ * The chance an attack kills: the attacker's share of the two energies,
+ * scaled by bite strength (bitePowerMin for a plant eater up to 1 for a full
+ * meat eater). Prey that moves out of reach that tick escapes regardless.
+ */
+export function killChance(
+  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory'>>,
+  prey: Readonly<Pick<Organism, 'energy'>>,
+  config: Readonly<SimulationConfig>
+): number {
+  const total = attacker.energy + prey.energy;
+  const share = total > 0 ? attacker.energy / total : 0;
+  const bite = config.bitePowerMin + (1 - config.bitePowerMin) * attacker.carnivory;
+  return share * bite;
+}

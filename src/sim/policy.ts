@@ -10,6 +10,7 @@ import type {
 import { PRNG } from './prng';
 import { isKin, shareWeightFor, tagSimilarity } from './tags';
 import { isLeapAction, unitDirectionOf } from './directions';
+import { carrionYield, killChance } from './traits';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -285,6 +286,35 @@ export function getLegalActions(
     }
   }
 
+  // 5b. Eat carrion underfoot (only worth anything to a diet with some meat in it)
+  if (sensed.canEatCarrion) {
+    actions.push({ type: 'EAT_CARRION', target: { x, y } });
+  }
+
+  // 5c. Attack an orthogonally adjacent organism (brain only: the dials have
+  // no weight for it and stay the no-predation reference). A kill leaves the
+  // prey as carrion; the attacker still has to eat it.
+  if (config.predationEnabled && config.controller === 'brain') {
+    const candidateAttacks: { type: LegalAction['type']; dx: number; dy: number }[] = [
+      { type: 'ATTACK_NORTH', dx: 0, dy: -1 },
+      { type: 'ATTACK_SOUTH', dx: 0, dy: 1 },
+      { type: 'ATTACK_EAST', dx: 1, dy: 0 },
+      { type: 'ATTACK_WEST', dx: -1, dy: 0 },
+    ];
+    for (const attack of candidateAttacks) {
+      const prey = occupantAt(x + attack.dx, y + attack.dy);
+      if (!prey) continue;
+      actions.push({
+        type: attack.type,
+        target: { x: prey.x, y: prey.y },
+        preyId: prey.id,
+        preySimilarity: Number(tagSimilarity(organism.tag, prey.tag).toFixed(3)),
+        preyKillChance: Number(killChance(organism, prey, config).toFixed(3)),
+        preyIsFamily: prey.lineage.parentId === organism.id || organism.lineage.parentId === prey.id,
+      });
+    }
+  }
+
   // 6. Signal: stay put and be noticed by others within signalRadius next tick
   if (sensed.canSignal) {
     actions.push({ type: 'SIGNAL', target: { x, y } });
@@ -319,6 +349,16 @@ export function scoreAction(
       const hunger = 1.0 - sensed.energyRatio;
       const eatComponent = policy.eatDrive * hunger * 3.0 + 0.5;
       components['hungerDrive'] = Number(eatComponent.toFixed(3));
+      totalScore = eatComponent;
+      break;
+    }
+
+    case 'EAT_CARRION': {
+      // Like eating, scaled by how much this diet gets from carrion compared with plants.
+      const hunger = 1.0 - sensed.energyRatio;
+      const worth = carrionYield(organism, config) / config.foodEnergyYield;
+      const eatComponent = (policy.eatDrive * hunger * 3.0 + 0.5) * worth;
+      components['carrionDrive'] = Number(eatComponent.toFixed(3));
       totalScore = eatComponent;
       break;
     }

@@ -46,7 +46,8 @@ _Last updated: 2026-10-25._
 - Layers button over the world (one at a time): Family (lineage lit, others dimmed, lines to parent and children), Senses & signals (sight square, signal reach, signal ripples), Trails, and Crowding / Deaths / Feeding heatmaps (counted in the worker every tick, fading with a ~140-tick half-life).
 - Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
 - **Always-on server** (`server/`, `docs/server.md`): one world for every viewer, running whether or not anyone watches; saved to `data/world.json` every 5 minutes, on shutdown and on play/pause/speed changes, with hourly gzip backups (48 kept, plus one before any reset or load); resumes as it was on restart. The page detects it and streams the world (Server-Sent Events, gzip, ~10 frames/s per viewer) instead of running a worker; served from anywhere else it runs its own world as before. Playback and settings changes from one viewer show on all; selection, tabs and overlays are per viewer. Options for port, speed cap, watch-only and more; a Termux:Boot script for the S21.
-- 155 deterministic tests.
+- **Carrion, diet and predation** (2026-10-25): every body leaves carrion (energy, rotting after 200 ticks; drawn as pale bones on a red stain). An inherited diet gene (carnivory 0–1, founders 0–0.2) trades plant energy for carrion energy. Brains can ATTACK an adjacent organism: kill odds from both energies and the attacker's diet, prey that moves away escapes, a kill leaves carrion (no energy changes hands). Which colours to hunt is left to evolve (`attackAlike` starts at 0). Shown in the app: Settings → Display → Colour by Diet (green plants to red meat), red slashes for attacks (zoomed in), Kills / Diet / Carrion in Stats, a "Diet & hunting" section in Trends (meat in the diet, kills per 100 ticks, share of kills of a different colour), and events for the first kill and colour groups turning to meat.
+- 169 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -132,7 +133,7 @@ There is no target outcome: new features go in on by default and the world is le
 
 **Phase 2: first new loops**
 7. ~~Memory registers.~~ Built; on by default. Optional: First check in a long run whether the hidden layer stays idle.
-8. Typed food and carrion (`carrionEff` gene). Generalise abilities here, once there are two non-movement examples. Optionally move a simple bite (energy comparison) up to here if predation is wanted sooner.
+8. ~~Carrion and a simple bite~~ (built 2026-10-25, with a diet gene in place of `carrionEff`). Still to do from this item: a second plant food type (step 1 of the species goal), and generalising abilities.
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
 **Phase 3: big coevolution (long runs; needs the server)**

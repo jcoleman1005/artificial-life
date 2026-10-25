@@ -1,6 +1,7 @@
 import { PRNG } from './prng';
 import type {
   ActionScore,
+  CarrionPatch,
   DecisionOutcome,
   DecisionRecord,
   FoodPatch,
@@ -21,19 +22,23 @@ import {
 } from './policy';
 import { computeWorldMetrics } from './metrics';
 import { MetricsHistory, type HistorySample } from './history';
-import { inheritTag } from './tags';
+import { inheritTag, tagSimilarity } from './tags';
 import { regionSeasonAt, seasonAt } from './seasons';
 import {
+  carrionFromBody,
   founderAbilities,
+  founderCarnivory,
   founderCarryCapacity,
   founderDispersal,
   inheritAbilities,
+  inheritCarnivory,
   inheritCarryCapacity,
   inheritDispersal,
   metabolismCost,
+  plantYield,
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
-import { createHeadStartBrain, evaluateBrain, mutateBrain } from './brain';
+import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -60,6 +65,8 @@ export interface WorldState {
   readonly obstacles: readonly string[];
   readonly foodRegions: readonly FoodRegion[];
   readonly foodPatches: readonly FoodPatch[];
+  /** Absent in saves from before carrion. */
+  readonly carrion?: readonly CarrionPatch[];
   readonly organisms: readonly Organism[];
   readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
 }
@@ -79,6 +86,11 @@ const WORLD_COUNTERS = [
   'windfallsTotal',
   'windfallUnitsPlaced',
   'windfallUnitsRotted',
+  'killsTotal',
+  'killsOfStrangersTotal',
+  'killsOfKinTotal',
+  'carrionEatenTotal',
+  'carrionUnitsRotted',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
@@ -91,6 +103,8 @@ export class World {
 
   public readonly obstacles = new Set<string>(); // "x,y"
   public readonly foodPatches = new Map<string, FoodPatch>(); // "x,y" -> FoodPatch
+  /** What dead organisms left behind, "x,y" -> CarrionPatch (separate from plant food; a cell can hold both). */
+  public readonly carrion = new Map<string, CarrionPatch>();
   /** Fertile regions where food grows (empty: food can grow anywhere). */
   public readonly foodRegions: FoodRegion[] = [];
   public readonly organisms = new Map<string, Organism>(); // id -> Organism
@@ -113,6 +127,14 @@ export class World {
   public windfallsTotal = 0;
   public windfallUnitsPlaced = 0;
   public windfallUnitsRotted = 0;
+  /** Kills so far (and by how the prey looked to its killer), carrion meals eaten and carrion energy that rotted. */
+  public killsTotal = 0;
+  public killsOfStrangersTotal = 0;
+  public killsOfKinTotal = 0;
+  public carrionEatenTotal = 0;
+  public carrionUnitsRotted = 0;
+  /** The latest kill, for observers (not saved). */
+  public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -144,9 +166,16 @@ export class World {
     this.windfallsTotal = 0;
     this.windfallUnitsPlaced = 0;
     this.windfallUnitsRotted = 0;
+    this.killsTotal = 0;
+    this.killsOfStrangersTotal = 0;
+    this.killsOfKinTotal = 0;
+    this.carrionEatenTotal = 0;
+    this.carrionUnitsRotted = 0;
+    this.lastKill = null;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
+    this.carrion.clear();
     this.foodRegions.length = 0;
     this.organisms.clear();
     this.selectedOrganismId = null;
@@ -283,6 +312,7 @@ export class World {
     const dispersal = founderDispersal(this.config, this.prng);
     const memorySpan = founderMemorySpan(this.config, this.prng);
     const memoryWeights = founderMemoryWeights(this.prng);
+    const carnivory = founderCarnivory(this.prng);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
@@ -297,6 +327,8 @@ export class World {
       memoryWeights,
       memory: newMemory(x, y),
       brain,
+      carnivory,
+      kills: 0,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
         parentId: null,
@@ -329,6 +361,7 @@ export class World {
       obstacles: Array.from(this.obstacles),
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => ({ ...p })),
+      carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
       organisms: Array.from(this.organisms.values(), (o) => clone({ ...o, recentHistory: o.recentHistory.slice(0, 1) })),
       history: this.history.exportState(),
     };
@@ -351,10 +384,15 @@ export class World {
     world.foodRegions.push(...state.foodRegions.map((r) => ({ ...r })));
     world.foodPatches.clear();
     for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, { ...p });
+    world.carrion.clear();
+    for (const c of state.carrion ?? []) world.carrion.set(`${c.x},${c.y}`, { ...c });
     world.organisms.clear();
     for (const o of state.organisms) {
       world.organisms.set(o.id, {
         ...clone(o),
+        brain: upgradeBrain(clone(o.brain)),
+        carnivory: o.carnivory ?? 0,
+        kills: o.kills ?? 0,
         dispersal: o.dispersal ?? 1,
         memorySpan: o.memorySpan ?? 0,
         memoryWeights: o.memoryWeights ? [...o.memoryWeights] : new Array<number>(MEMORY_WEIGHT_COUNT).fill(0),
@@ -390,6 +428,8 @@ export class World {
     const { gridWidth, gridHeight } = this.config;
     const obstacleGrid = new Uint8Array(gridWidth * gridHeight);
     const foodGrid = new Int32Array(gridWidth * gridHeight);
+    const carrionGrid = new Float32Array(gridWidth * gridHeight);
+    for (const c of this.carrion.values()) carrionGrid[c.y * gridWidth + c.x] = c.stock;
     const organismGrid = new Int32Array(gridWidth * gridHeight).fill(-1);
     for (const key of this.obstacles) {
       const [ox, oy] = key.split(',').map(Number);
@@ -425,6 +465,7 @@ export class World {
       organismAt,
       obstacleGrid,
       foodGrid,
+      carrionGrid,
       organismGrid,
       signallers,
     };
@@ -658,6 +699,8 @@ export class World {
     // from the cell it stood in. Keyed by the pair, so a mutual swap (both
     // moving into each other) trades places once.
     const pendingSwaps = new Map<string, { mover: Organism; otherId: string }>();
+    // Attacks land after all actions too, so prey that moved away escapes.
+    const pendingAttacks: { attacker: Organism; preyId: string; chance: number }[] = [];
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
@@ -677,7 +720,7 @@ export class World {
           if ((fromPatch || organism.carriedFood > 0) && organism.energy < this.config.maxEnergy) {
             const energyGain = Math.min(
               this.config.maxEnergy - organism.energy,
-              this.config.foodEnergyYield
+              plantYield(organism, this.config)
             );
             organism.energy += energyGain;
             if (fromPatch) patch.stock -= 1;
@@ -688,6 +731,41 @@ export class World {
           } else {
             outcome = 'no_food';
           }
+          break;
+        }
+
+        case 'EAT_CARRION': {
+          // A meal takes up to carrionBite of the carrion's energy; the eater
+          // gets its carnivory share of that (the rest is lost).
+          const patch = this.carrion.get(`${organism.x},${organism.y}`);
+          if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
+            const taken = Math.min(patch.stock, this.config.carrionBite);
+            const energyGain = Math.min(this.config.maxEnergy - organism.energy, taken * organism.carnivory);
+            organism.energy += energyGain;
+            patch.stock -= taken;
+            if (patch.stock <= 1e-9) this.carrion.delete(`${patch.x},${patch.y}`);
+            organism.foodEatenCount++;
+            this.carrionEatenTotal++;
+            energyDelta += energyGain;
+            outcome = 'success';
+          } else {
+            outcome = 'no_food';
+          }
+          break;
+        }
+
+        case 'ATTACK_NORTH':
+        case 'ATTACK_SOUTH':
+        case 'ATTACK_EAST':
+        case 'ATTACK_WEST': {
+          // The bite lands after all actions (below), if the prey is still
+          // within reach; the cost is paid either way.
+          organism.energy -= this.config.attackCost;
+          energyDelta -= this.config.attackCost;
+          if (chosenAction.preyId) {
+            pendingAttacks.push({ attacker: organism, preyId: chosenAction.preyId, chance: chosenAction.preyKillChance ?? 0 });
+          }
+          outcome = 'missed'; // until the bite lands
           break;
         }
 
@@ -771,6 +849,7 @@ export class World {
               const childDispersal = inheritDispersal(organism.dispersal, this.config, this.prng);
               const childMemorySpan = inheritMemorySpan(organism.memorySpan, this.config, this.prng);
               const childMemoryWeights = inheritMemoryWeights(organism.memoryWeights, this.config, this.prng);
+              const childCarnivory = inheritCarnivory(organism.carnivory, this.config, this.prng);
 
               const child: Organism = {
                 id: childId,
@@ -786,6 +865,8 @@ export class World {
                 memoryWeights: childMemoryWeights,
                 memory: newMemory(birth.x, birth.y),
                 brain: childBrain,
+                carnivory: childCarnivory,
+                kills: 0,
                 lineage: {
                   id: organism.lineage.id,
                   parentId: organism.id,
@@ -906,10 +987,34 @@ export class World {
     for (const gift of pendingGifts) {
       const recipient = this.organisms.get(gift.recipientId);
       if (!recipient) continue;
-      const gain = Math.min(this.config.maxEnergy - recipient.energy, this.config.foodEnergyYield);
+      const gain = Math.min(this.config.maxEnergy - recipient.energy, plantYield(recipient, this.config));
       recipient.energy += gain;
       recipient.foodReceived += 1;
       recipient.foodEatenCount++;
+    }
+
+    // Attacks, in a seeded random order: a bite kills with the chance worked
+    // out at decision time, if the prey is still alive and within one cell
+    // (diagonals included) after this tick's moves. The killer's own death
+    // this tick (an earlier bite, or its own spending) stops its bite.
+    const bodies = new Map<string, number>(); // prey id -> energy its body still had
+    for (const attack of this.prng.shuffle(pendingAttacks)) {
+      const { attacker } = attack;
+      const prey = this.organisms.get(attack.preyId);
+      const roll = this.prng.next(); // drawn for every attack, so outcomes don't shift the stream
+      if (!prey || prey.energy <= 0 || attacker.energy <= 0 || bodies.has(attacker.id)) continue;
+      if (Math.max(Math.abs(prey.x - attacker.x), Math.abs(prey.y - attacker.y)) > 1) continue;
+      if (roll >= attack.chance) continue;
+      bodies.set(prey.id, prey.energy);
+      prey.energy = 0;
+      this.lastKill = { tick: this.tick, killerTag: attacker.tag, preyTag: prey.tag };
+      attacker.kills++;
+      this.killsTotal++;
+      const similarity = tagSimilarity(attacker.tag, prey.tag);
+      if (similarity <= this.config.strangerSimilarity) this.killsOfStrangersTotal++;
+      if (similarity >= this.config.kinSimilarity) this.killsOfKinTotal++;
+      const record = attacker.recentHistory[0];
+      if (record && record.tick === this.tick) attacker.recentHistory[0] = { ...record, outcome: 'success' };
     }
 
     // Add newborns to population
@@ -917,13 +1022,19 @@ export class World {
       this.organisms.set(child.id, child);
     }
 
-    // Phase 5: Deaths
+    // Phase 5: Deaths. With carrion on, every body is left where it fell:
+    // carrionBodyEnergy plus carrionEfficiency of the energy it still held (a
+    // starved body holds none; a killed one usually some).
     for (const [id, org] of Array.from(this.organisms.entries())) {
       if (org.energy <= 0) {
         this.deceasedCount++;
         this.deceasedLifespanSum += org.age;
         this.deathsTotal++;
         this.organisms.delete(id);
+        if (this.config.carrionEnabled) {
+          const energy = carrionFromBody(bodies.get(id) ?? 0, this.config);
+          if (energy > 0) this.addCarrion(org.x, org.y, energy);
+        }
       }
     }
 
@@ -935,6 +1046,19 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+  }
+
+  /** Adds carrion energy to a cell (piling onto any already there, which then rots later). */
+  private addCarrion(x: number, y: number, energy: number): void {
+    const key = `${x},${y}`;
+    const expiresAt = this.tick + 1 + this.config.carrionLifetime;
+    const existing = this.carrion.get(key);
+    if (existing) {
+      existing.stock += energy;
+      existing.expiresAt = expiresAt;
+    } else {
+      this.carrion.set(key, { x, y, stock: energy, expiresAt });
+    }
   }
 
   /**
@@ -1045,6 +1169,14 @@ export class World {
       }
     }
 
+    // 0b. Carrion rots away (it never regrows)
+    for (const [key, c] of this.carrion) {
+      if (c.expiresAt <= this.tick) {
+        this.carrionUnitsRotted += c.stock;
+        this.carrion.delete(key);
+      }
+    }
+
     // 1. Food patch stock regeneration (windfalls never regrow)
     // Lean regrowth ticks are a subset of plenty ones (a multiple of the interval).
     if (this.tick > 0 && this.tick % foodRegenInterval === 0) {
@@ -1145,6 +1277,14 @@ export class World {
       ),
       signalsTotal: this.signalsTotal,
       signalsOnFoodTotal: this.signalsOnFoodTotal,
+      killsTotal: this.killsTotal,
+      killsOfStrangersTotal: this.killsOfStrangersTotal,
+      killsOfKinTotal: this.killsOfKinTotal,
+      carrionEatenTotal: this.carrionEatenTotal,
+      carrionStock: Math.round(Array.from(this.carrion.values()).reduce((a, c) => a + c.stock, 0)),
+      averageCarnivory:
+        organisms.length > 0 ? Number((organisms.reduce((a, o) => a + o.carnivory, 0) / organisms.length).toFixed(3)) : 0,
+      meatEaters: organisms.filter((o) => o.carnivory >= 0.5).length,
       season: this.worldSeason(),
     };
   }

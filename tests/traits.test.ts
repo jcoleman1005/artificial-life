@@ -47,6 +47,7 @@ describe('Carry capacity trait', () => {
       tickMetabolismCost: 0.25,
       carryUpkeep: 0.05,
       abilityUpkeep: 0,
+      memoryEnabled: false, // only carry upkeep on top of metabolism
       moveCost: 0,
     });
     const org = Array.from(world.organisms.values())[0];
@@ -89,6 +90,8 @@ describe('Carry capacity trait', () => {
         carryCapacity: capacity,
         dispersal: 1,
         memorySpan: 0,
+        carnivory: 0,
+        kills: 0,
         memoryWeights: [],
         memory: { food: null, signal: null, home: { x: 0, y: 0 }, registers: [0, 0, 0] },
         abilities: { diagonal: 0, squeeze: 0, leap: 0 },
