@@ -68,15 +68,17 @@ section "Guests (VMs and containers)"
 ALLOC_RUNNING_MB=0
 if [ "$IS_ROOT" -eq 1 ] && have qm && have pct; then
   echo "-- VMs --"
-  qm list 2>/dev/null || true
+  timeout 20 qm list 2>/dev/null || true
   echo "-- Containers --"
-  pct list 2>/dev/null || true
-  for id in $(qm list 2>/dev/null | awk 'NR > 1 && $3 == "running" { print $1 }'); do
-    m=$(qm config "$id" 2>/dev/null | awk '/^memory:/ { print $2 }')
+  timeout 20 pct list 2>/dev/null || true
+  # Timeouts so a guest locked by a backup or migration cannot stall the scout.
+  for id in $(timeout 20 qm list 2>/dev/null | awk 'NR > 1 && $3 == "running" { print $1 }'); do
+    m=$(timeout 10 qm config "$id" 2>/dev/null | awk '/^memory:/ { print $2 }')
     ALLOC_RUNNING_MB=$(( ALLOC_RUNNING_MB + ${m:-0} ))
   done
-  for id in $(pct list 2>/dev/null | awk 'NR > 1 && $2 == "running" { print $1 }'); do
-    m=$(pct config "$id" 2>/dev/null | awk '/^memory:/ { print $2 }')
+  for id in $(timeout 20 pct list 2>/dev/null | awk 'NR > 1 && $2 == "running" { print $1 }'); do
+    m=$(timeout 10 pct config "$id" 2>/dev/null | awk '/^memory:/ { print $2 }')
+    [ -n "$m" ] || echo "  (container $id: no answer within 10 s, e.g. locked; not counted)"
     ALLOC_RUNNING_MB=$(( ALLOC_RUNNING_MB + ${m:-0} ))
   done
   echo "RAM allocated to running guests: ${ALLOC_RUNNING_MB} MB of ${MEM_TOTAL_MB} MB host RAM"
@@ -87,7 +89,7 @@ fi
 section "Storage"
 if [ "$IS_ROOT" -eq 1 ] && have pvesm; then
   echo "(Total/Used/Available are in KiB)"
-  pvesm status 2>/dev/null || true
+  timeout 30 pvesm status 2>/dev/null || true
   echo "-- storages that can hold container disks (content includes rootdir) --"
   awk '/^[a-z]+: / { name = $2 } /^[[:space:]]+content/ && /rootdir/ { print "  " name }' \
     /etc/pve/storage.cfg 2>/dev/null || true
@@ -100,12 +102,12 @@ fi
 
 section "Container templates"
 if [ "$IS_ROOT" -eq 1 ] && have pveam; then
-  for s in $(pvesm status --content vztmpl 2>/dev/null | awk 'NR > 1 { print $1 }'); do
+  for s in $(timeout 30 pvesm status --content vztmpl 2>/dev/null | awk 'NR > 1 { print $1 }'); do
     echo "-- on $s --"
-    pveam list "$s" 2>/dev/null | awk 'NR > 1 { print "  " $1 }'
+    timeout 20 pveam list "$s" 2>/dev/null | awk 'NR > 1 { print "  " $1 }'
   done
   echo "-- Debian/Ubuntu templates offered (from the cached index) --"
-  pveam available --section system 2>/dev/null | awk '{ print $2 }' | grep -E 'debian-1[2-9]|ubuntu-2[4-9]' | head -5 || true
+  timeout 20 pveam available --section system 2>/dev/null | awk '{ print $2 }' | grep -E 'debian-1[2-9]|ubuntu-2[4-9]' | head -5 || true
 else
   echo "skipped (needs root and pveam)"
 fi
@@ -135,7 +137,7 @@ else
   verdict "SPEED" "SLOW: ${BENCH_MS} ms benchmark; expect ~$(( BENCH_MS / 60 ))x slower ticks (still fine for an always-on world)"
 fi
 if [ "$IS_ROOT" -eq 1 ] && have pvesm; then
-  BEST=$(pvesm status --content rootdir 2>/dev/null | awk 'NR > 1 && $3 == "active" { if ($6 > m) { m = $6; n = $1 } } END { if (n) printf "%s %d", n, m / 1048576 }')
+  BEST=$(timeout 30 pvesm status --content rootdir 2>/dev/null | awk 'NR > 1 && $3 == "active" { if ($6 > m) { m = $6; n = $1 } } END { if (n) printf "%s %d", n, m / 1048576 }')
   if [ -n "$BEST" ]; then
     set -- $BEST
     if [ "$2" -ge "$NEED_DISK_GB" ]; then
