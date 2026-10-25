@@ -6,6 +6,7 @@ import { regionSeasonAt } from '../src/sim/seasons';
 /** A world with regions but no organisms, so only food changes. */
 function regionWorld(overrides = {}): World {
   return new World({
+    plantsEnabled: false,
     seed: 'regions',
     initialOrganisms: 0,
     immigrationInterval: 0,
@@ -13,6 +14,7 @@ function regionWorld(overrides = {}): World {
     foodRegionRadius: 6,
     seasonLength: 400,
     leanFraction: 0.5,
+    windfallsEnabled: false, // windfalls land anywhere
     ...overrides,
   });
 }

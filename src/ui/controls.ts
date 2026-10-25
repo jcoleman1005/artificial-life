@@ -98,6 +98,17 @@ export class PlaybackPill {
     this.onSpeedChange(SPEEDS[this.speedIndex]);
   }
 
+  /** Shows a speed set elsewhere (e.g. by another viewer of a shared world), without reporting it back. */
+  public setSpeed(multiplier: number): void {
+    let nearest = 0;
+    SPEEDS.forEach((s, i) => {
+      if (Math.abs(s - multiplier) < Math.abs(SPEEDS[nearest] - multiplier)) nearest = i;
+    });
+    if (nearest === this.speedIndex) return;
+    this.speedIndex = nearest;
+    this.showSpeed();
+  }
+
   private showSpeed(): void {
     const label = speedLabel(SPEEDS[this.speedIndex]);
     this.speedEl.textContent = label;

@@ -135,6 +135,9 @@ export type FromWorker =
       readonly foodPatches: readonly FoodPatch[];
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
+      /** Whether the world is playing, and at what speed (another viewer may have changed them). */
+      readonly running: boolean;
+      readonly targetTicksPerSecond: number;
       /** True when the frame comes from a single Step, so the page can glide it. */
       readonly fromStep: boolean;
       /** World events since the previous frame. */
@@ -142,6 +145,8 @@ export type FromWorker =
       /** Present when panels are due (a few times a second, and after a step or selection). */
       readonly panels?: PanelData;
     }
+  /** Settings changed live (perhaps by another viewer). */
+  | { readonly kind: 'config'; readonly config: SimulationConfig }
   | { readonly kind: 'csv'; readonly requestId: number; readonly csv: string }
   | { readonly kind: 'saved'; readonly requestId: number; readonly saved: SavedWorld }
   /** A load failed (bad or incompatible file); the current world is kept. */

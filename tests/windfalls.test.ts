@@ -5,6 +5,7 @@ import type { SimulationConfig } from '../src/sim/types';
 /** An empty world (no organisms, no ordinary food) with windfalls every 50 ticks. */
 function windfallWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    plantsEnabled: false,
     seed: 'windfall',
     gridWidth: 30,
     gridHeight: 30,
@@ -63,12 +64,12 @@ describe('Windfalls', () => {
     expect(ordinary).toHaveLength(3);
   });
 
-  it('is off by default and with the switch off draws nothing', () => {
+  it('is on by default, and with the switch off draws nothing', () => {
     const world = windfallWorld({ windfallsEnabled: false });
     for (let t = 0; t < 200; t++) world.step();
     expect(world.windfallsTotal).toBe(0);
     expect(windfallPatches(world)).toHaveLength(0);
-    expect(new World({ seed: 1 }).config.windfallsEnabled).toBe(false);
+    expect(new World({ seed: 1 }).config.windfallsEnabled).toBe(true);
   });
 
   it('survives a snapshot: windfalls keep their expiry', () => {

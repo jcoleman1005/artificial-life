@@ -21,6 +21,7 @@ describe('Seasons', () => {
   /** Total food regrown over a window of ticks in an empty world with one patch. */
   function regrowth(seasonLength: number, fromTick: number, ticks: number): number {
     const world = new World({
+      plantsEnabled: false,
       seed: 1,
       gridWidth: 10,
       gridHeight: 10,
@@ -48,7 +49,7 @@ describe('Seasons', () => {
     expect(plenty).toBe(32); // every 4 ticks
     expect(lean).toBe(4); // every 32 ticks
 
-    const world = new World({ seed: 2, seasonLength: 320, leanFraction: 0.5, immigrationInterval: 0, staggeredSeasons: false });
+    const world = new World({ plantsEnabled: false, seed: 2, seasonLength: 320, leanFraction: 0.5, immigrationInterval: 0, staggeredSeasons: false });
     while (world.tick < 160) world.step();
     const patchesAtLeanStart = world.foodPatches.size;
     while (world.tick < 300) world.step();

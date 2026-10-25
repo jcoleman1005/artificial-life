@@ -195,7 +195,7 @@ describe('Plants', () => {
   }, 120_000);
 
   it('draw nothing extra from the PRNG when off', () => {
-    const a = new World({ seed: 'plants-off', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
+    const a = new World({ plantsEnabled: false, seed: 'plants-off', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
     for (let t = 0; t < 200; t++) a.step();
     expect(a.getMetrics().plants).toBeNull();
     for (const p of a.foodPatches.values()) expect(p.plant).toBeUndefined();

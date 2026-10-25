@@ -52,6 +52,8 @@ describe('Artificial Life Core Mechanics', () => {
       maxEnergy: 50,
       initialEnergy: 10,
       signalsEnabled: false, // boxed in, resting is its only choice
+      memoryEnabled: false, // no memory upkeep
+      windfallsEnabled: false,
     });
 
     const org = Array.from(world.organisms.values())[0];
@@ -159,6 +161,7 @@ describe('Artificial Life Core Mechanics', () => {
 
   it('4. Finite food consumption and regeneration', () => {
     const world = new World({
+      plantsEnabled: false,
       seed: 99,
       gridWidth: 10,
       gridHeight: 10,

@@ -23,12 +23,53 @@ export interface ClientEvents {
   events(events: readonly WorldEvent[]): void;
   /** Something the user asked for failed (e.g. loading a bad file). */
   error(message: string): void;
+  /** Settings changed live, perhaps by another viewer of a shared world. */
+  config(): void;
+  /** The connection to the server dropped or came back (server mode only). */
+  connection(connected: boolean): void;
+}
+
+/** What the always-on server says about itself at /api/info. */
+export interface ServerInfo {
+  readonly app: 'alife-server';
+  readonly frameIntervalMs: number;
+  readonly maxTicksPerSecond: number;
+  readonly watchOnly: boolean;
+}
+
+/** Asks the page's own origin whether it is the always-on server (a plain static host or Vite answers otherwise). */
+async function probeServer(): Promise<ServerInfo | null> {
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 3000);
+  try {
+    const response = await fetch('api/info', { cache: 'no-store', signal: abort.signal });
+    if (!response.ok || !(response.headers.get('content-type') ?? '').includes('json')) return null;
+    const info = (await response.json()) as Partial<ServerInfo>;
+    return info.app === 'alife-server' ? (info as ServerInfo) : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Heatmaps travel from the server as plain arrays; the renderer wants typed ones. */
+function decodeFromServer(message: FromWorker): FromWorker {
+  if (message.kind === 'frame' && message.panels?.heatmap && Array.isArray(message.panels.heatmap.cells)) {
+    const { kind, cells } = message.panels.heatmap;
+    return { ...message, panels: { ...message.panels, heatmap: { kind, cells: Float32Array.from(cells as ArrayLike<number>) } } };
+  }
+  return message;
 }
 
 /**
  * The page's side of the simulation: sends commands to the worker and keeps
  * a read-only mirror of the world for drawing (WorldView) plus the latest
  * panel data. Nothing here changes simulation outcomes.
+ *
+ * Opened from the always-on server (server/), it watches and steers that
+ * shared world over /api/events and /api/command instead; otherwise the
+ * world runs in a Web Worker in this page. The messages are the same.
  */
 export class SimulationClient implements WorldView {
   public config: SimulationConfig = { ...DEFAULT_CONFIG };
@@ -39,6 +80,16 @@ export class SimulationClient implements WorldView {
   public obstacles: ReadonlySet<string> = new Set();
   /** Ticks per second the worker actually ran over the last second. */
   public ticksPerSecond = 0;
+  /** Whether the world is playing, and at what speed, as of the latest frame. */
+  public running = false;
+  public targetTicksPerSecond = 0;
+  /** Where the world runs: in this page, or on the always-on server (null until known). */
+  public mode: 'worker' | 'server' | null = null;
+  public serverInfo: ServerInfo | null = null;
+  /** False while the connection to the server is down (it reconnects by itself). */
+  public connected = true;
+  /** Resolves once the world's location is known and commands can flow. */
+  public readonly ready: Promise<void>;
 
   private selectedId: string | null = null;
   private metrics: WorldMetrics | null = null;
@@ -52,17 +103,73 @@ export class SimulationClient implements WorldView {
   private nextRequestId = 1;
   private readonly pendingCsv = new Map<number, (csv: string) => void>();
   private readonly pendingSaves = new Map<number, (saved: SavedWorld) => void>();
-  private readonly worker: Worker;
+  private transport: ((message: ToWorker) => void) | null = null;
+  /** Commands sent before the transport is up. */
+  private readonly queue: ToWorker[] = [];
   private readonly events: ClientEvents;
 
   constructor(events: ClientEvents) {
     this.events = events;
-    this.worker = new Worker(new URL('../sim/worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
+    this.ready = probeServer().then((info) => (info ? this.connectServer(info) : this.startWorker()));
+  }
+
+  private startWorker(): void {
+    const worker = new Worker(new URL('../sim/worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
+    this.mode = 'worker';
+    this.transport = (message) => worker.postMessage(message);
+    for (const message of this.queue.splice(0)) this.transport(message);
+  }
+
+  private connectServer(info: ServerInfo): void {
+    this.mode = 'server';
+    this.serverInfo = info;
+    let viewer: number | null = null;
+    const post = (message: ToWorker) => {
+      if (viewer === null) {
+        this.queue.push(message);
+        return;
+      }
+      fetch('api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Viewer': String(viewer) },
+        body: JSON.stringify(message),
+      })
+        .then(async (response) => {
+          if (response.ok) return;
+          const body = (await response.json().catch(() => ({}))) as { error?: string };
+          this.events.error(body.error ?? `The server refused that (${response.status})`);
+        })
+        .catch(() => this.events.error('Could not reach the server'));
+    };
+    this.transport = post;
+    const source = new EventSource('api/events');
+    source.addEventListener('hello', (event) => {
+      viewer = (JSON.parse((event as MessageEvent<string>).data) as { viewer: number }).viewer;
+      // A new connection is a new viewer: tell it what this page is showing.
+      const restore: ToWorker[] = [];
+      if (this.selectedId) restore.push({ kind: 'select', id: this.selectedId });
+      if (this.wantsHistory || this.wantsHeatmap) restore.push({ kind: 'panels', history: this.wantsHistory, heatmap: this.wantsHeatmap });
+      for (const message of [...restore, ...this.queue.splice(0)]) post(message);
+      if (!this.connected) {
+        this.connected = true;
+        this.events.connection(true);
+      }
+    });
+    source.onmessage = (event: MessageEvent<string>) => this.receive(decodeFromServer(JSON.parse(event.data) as FromWorker));
+    source.onerror = () => {
+      // EventSource retries by itself; requests for csv/saves from the old connection are lost.
+      viewer = null;
+      if (this.connected) {
+        this.connected = false;
+        this.events.connection(false);
+      }
+    };
   }
 
   private send(message: ToWorker): void {
-    this.worker.postMessage(message);
+    if (this.transport) this.transport(message);
+    else this.queue.push(message);
   }
 
   private receive(message: FromWorker): void {
@@ -81,6 +188,8 @@ export class SimulationClient implements WorldView {
         this.organisms = new Map(message.organisms.map((o) => [o.id, o]));
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.ticksPerSecond = message.ticksPerSecond;
+        this.running = message.running;
+        this.targetTicksPerSecond = message.targetTicksPerSecond;
         if (message.panels) this.applyPanels(message.panels);
         if (message.events.length > 0) {
           this.worldEvents.push(...message.events);
@@ -90,6 +199,10 @@ export class SimulationClient implements WorldView {
         this.events.frame(message.fromStep);
         break;
       }
+      case 'config':
+        this.config = message.config;
+        this.events.config();
+        break;
       case 'csv':
         this.pendingCsv.get(message.requestId)?.(message.csv);
         this.pendingCsv.delete(message.requestId);

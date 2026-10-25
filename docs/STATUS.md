@@ -17,12 +17,13 @@ _Last updated: 2026-10-25._
 |---|---|
 | Phone/desktop app (Fedora, view at `http://<ip>:5173`) | `npm run dev` |
 | Checks after any change | `npm run check && npm test && npm run build` |
-| Compare variants across seeds (headless) | `npm run experiment -- --compare key=a,b [--set k=v] [--seeds 1-8] [--ticks 10000]` |
+| Compare variants across seeds (headless) | `npm run experiment -- --compare key=a,b [--set k=v] [--seeds 1-8] [--ticks 10000] [--from saved.json]` |
 | Prove an engine change alters no outcome | `npm run fingerprint` before and after; output must match |
+| Always-on server (one shared world, saved to `./data`; see `docs/server.md`) | `npm run server` |
 | Engine speed | `npm run perf` |
 | Check a Proxmox host's capacity (read-only) | `git show origin/main:scripts/proxmox-scout.sh \| ssh root@HOST 'bash -s'` |
 
-`--compare` and `--set` take any `SimulationConfig` key (see `src/sim/config.ts`), e.g. `controller=dials,brain`, `sharingEnabled=false,true`, `seasonLength=0,800`.
+`--from` starts every run from a saved world (a file saved from the app), reseeded per seed, so variants are compared from the same evolved state. `--compare` and `--set` take any `SimulationConfig` key (see `src/sim/config.ts`), e.g. `controller=dials,brain`, `sharingEnabled=false,true`, `seasonLength=0,800`.
 
 ## What exists
 
@@ -44,7 +45,8 @@ _Last updated: 2026-10-25._
 - World events feed (seasons per region, colour groups rising / dying out / taking the lead, population records and crashes, extinction, generation milestones): latest event under the peek strip, recent events in the Stats tab.
 - Layers button over the world (one at a time): Family (lineage lit, others dimmed, lines to parent and children), Senses & signals (sight square, signal reach, signal ripples), Trails, and Crowding / Deaths / Feeding heatmaps (counted in the worker every tick, fading with a ~140-tick half-life).
 - Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
-- **Evolving plants** (`plantsEnabled`, off by default until measured; Settings → World → Plants: Evolving). Food becomes a population of plants with a 7-trait inherited genome (growth rate, maximum size, seed size, seeding threshold, seed dispersal, root share, lean dormancy). They grow by soil, light, shade and size, pay upkeep, store roots, go dormant in lean seasons, set seed, and die when grazed bare, shaded out or starved; seed rain replaces patch spawning. Drawn as leaf rosettes in their strategy's colour (greyed while dormant, dots as seedlings) with berries for edible units; tap a plant for its genome; a Plants section in Trends, CSV columns and experiment metrics. Spec and as-built rules: `docs/specs/plants.md`. Plant updates cost ~0.4 ms/tick for ~1,000 plants.
+- **Evolving plants** (`plantsEnabled`, on by default; Settings → World → Plants: Evolving). Food becomes a population of plants with a 7-trait inherited genome (growth rate, maximum size, seed size, seeding threshold, seed dispersal, root share, lean dormancy). They grow by soil, light, shade and size, pay upkeep, store roots, go dormant in lean seasons, set seed, and die when grazed bare, shaded out or starved; seed rain replaces patch spawning. Drawn as leaf rosettes in their strategy's colour (greyed while dormant, dots as seedlings) with berries for edible units; tap a plant for its genome; a Plants section in Trends, CSV columns and experiment metrics. Spec and as-built rules: `docs/specs/plants.md`. Plant updates cost ~0.4 ms/tick for ~1,000 plants.
+- **Always-on server** (`server/`, `docs/server.md`): one world for every viewer, running whether or not anyone watches; saved to `data/world.json` every 5 minutes, on shutdown and on play/pause/speed changes, with hourly gzip backups (48 kept, plus one before any reset or load); resumes as it was on restart. The page detects it and streams the world (Server-Sent Events, gzip, ~10 frames/s per viewer) instead of running a worker; served from anywhere else it runs its own world as before. Playback and settings changes from one viewer show on all; selection, tabs and overlays are per viewer. Options for port, speed cap, watch-only and more; a Termux:Boot script for the S21.
 - 155 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
@@ -68,6 +70,8 @@ _Last updated: 2026-10-25._
 | **Mobility on vs off** (brain, 30×30, before regions; diagonals + squeeze + leap, all organisms) | **Trapping solved, at a cost.** Blocked moves 49% → 8%; average population 258 → 390 (8/8); lean low 77 → 100 (7/8). But resting rose 27% → 76%, births roughly halved, one look-alike group took over (largest 152 → 445), and carrying and gifts nearly vanished (carry capacity 1.43 → 0.29). Leaps were 0.06% of actions. |
 | **Which movement ability wins?** (30×30, before regions; each founder gets one of diagonal, squeeze, leap or none, 25% each) | **Squeezing, in 8/8 seeds under both controllers** (89% of dials, 99% of brain organisms at 10,000 ticks). Diagonals stay at ~27% under dials but reach 82% under the brain (probably riding along with squeezer lineages; unchecked). Leaping falls to 4–7%, near what immigrants bring in; organisms with no ability die out. Not yet rerun on the 60×60 region world. |
 | **Each ability on vs off on the merged world** (60×60, 4 staggered regions, brain, signals on; one switch off at a time, the others on; `docs/experiments/mobility-*.txt`) | **Squeezing is what matters.** Squeeze off → on: blocked moves 49.5% → 5.1%, average population 405 → 608 and lean low 340 → 524 (both 8/8); the ability spreads to 99% and resting rises 16% → 62%. Diagonals spread (69% vs 23% drift) but cost a little (avg pop 649 → 608, lower in 6/8). Leaping is selected against (8% vs 25% drift), used in 0.02% of actions, and costs a little too (627 → 608, lower in 7/8). |
+| **Dispersal on vs off** (default world, brain, leap off; `docs/experiments/dispersal.txt`) | **A small benefit; crowding and clustering unchanged.** Children are born 1.75 cells away on average (1.03 with it off, 8/8). Blocked moves stay at 5.0% (squeezing already solved crowding) and look-alike neighbours are unchanged (0.85 vs 0.84), so family clustering is not set by birth distance. Lean low +12 (548 vs 535, 6/8), births +3% (6/8), moves between regions +21% (420 vs 346, 7/8). Evolved dispersal distance settles slightly below its neutral drift (2.1 vs 2.4): long throws are not favoured. |
+| **Windfalls on vs off, signals on and off** (`docs/experiments/windfalls-signals-on.txt`, `-off.txt`) | **Windfalls don't give signals a job yet.** Organisms eat ~70% of windfall food whether or not signals exist (67% with, 70% without), so a call has little to add. No effect on population (avg pop −1 with signals, +8 without, 4/8 each); births +2–3%. Organisms standing on windfall food signal at 4.3% vs 2.0% overall, but receivers move toward signals at chance (47.6%) and the brain's signal connections stay within the drift seen with signals off (all within ±0.12). Still no communication. |
 | **Plants vs classic food** (60×60, 4 staggered regions, brain, defaults; `docs/experiments/plants-vs-classic.*`) | **Same population, faster turnover, a lower lean low.** Average population 637 vs 619 (higher in only 4/8), lean low 467 vs 540 (lower in 6/8), births +67% (27k vs 16k, 8/8). Organisms move between regions more (500 vs 374 per 1,000 ticks, 7/8). Movement abilities matter less: squeezers 58% vs 100%, organisms with none 26% vs 0% (8/8), presumably because food is spread over more cells. Gifts to children rise from ~1 to ~49 (8/8) and carry capacity 0.52 → 0.78 (6/8). Plants (~1,100 alive, ~650 edible units, 31 units grown and 13 eaten per tick) evolve from the founder means toward **faster growth (0.23 → 0.60), more roots (0.20 → 0.40), more lean dormancy (0.25 → 0.41), smaller seeds (1.25 → 0.72), earlier seeding and wider dispersal**, in 8/8 seeds. Lean seasons kill most plants (22k deaths vs 2.7k shaded and 110 grazed out): grazing rarely kills a plant. |
 
 ## Engine
@@ -75,11 +79,11 @@ _Last updated: 2026-10-25._
 - About 16–18 µs per organism per tick. Default 60×60 world: dials 6.5 ms/tick, brain 7.5 ms/tick (peak ~490 organisms, ~10 ms). The 30×30 preset is about half that.
 - Memory: about 5 MB for the world at 30×30, about 14 MB at 60×60. A persistent server needs about 512 MB RAM and 1 core.
 - The simulation runs in a **Web Worker** (`src/sim/worker.ts` → `SimulationHost` in `src/sim/host.ts`), which owns the World and the tick timing. The page (`src/ui/simulation-client.ts`) only draws and handles input: each frame carries light organism records and food; metrics, history (only while Trends is open) and the selected organism's full record come at most 5× a second. Messages are defined in `src/sim/protocol.ts`. In desktop Chromium at 10× the page holds 60 fps with the worker at 60/60 ticks/s; if the worker can't keep up during a boom, ticks/s drops but drawing and touch stay smooth.
-- The worker boundary is the same one the always-on server will use: swap the worker for a connection to the server and the page needs no other changes.
+- The always-on server runs the same `SimulationHost` with any number of viewers (`server/app.ts`); the page talks to it with the same messages over SSE and POST (`src/ui/simulation-client.ts`).
 
 ## Hosting plan
 
-**Decision: host the always-on world on the old Galaxy S21 (a dedicated device, used for nothing else), with snapshots backed up to Proxmox.** The server code does not exist yet; the plan is for whichever host runs the same Node.js service.
+**Decision: host the always-on world on the old Galaxy S21 (a dedicated device, used for nothing else), with snapshots backed up to Proxmox.** The server exists (`docs/server.md`, which also has the step-by-step S21 setup); it is not yet running on the phone.
 
 Proxmox scout results (host `pve`, 2026-10-25, `scripts/proxmox-scout.sh`):
 
@@ -93,7 +97,7 @@ Proxmox scout results (host `pve`, 2026-10-25, `scripts/proxmox-scout.sh`):
 
 Why the S21: its CPU is estimated 10–16× faster than `pve`'s, and running there adds no load to the busy Proxmox host. Proxmox remains the fallback host and the backup target.
 
-S21 setup (once the server exists):
+S21 setup (the commands are in `docs/server.md`):
 - Termux and Termux:Boot from F-Droid (not the Play Store); battery optimisation off for both; `termux-wake-lock`; Wi-Fi on during sleep; automatic system updates off.
 - Battery safety: Settings → Battery → Protect battery (charge limit 85%); keep it cool and out of a case; cap the tick rate; check occasionally for swelling.
 - Tailscale on the phone for access from other devices.
@@ -102,22 +106,34 @@ S21 setup (once the server exists):
 
 If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 1 core, `cpuunits` 50 (yields under load), 512 MB RAM / 256 MB swap, 4 GB disk, `vmbr0`, Tailscale inside, a 30×30 world at about 5 ticks/s. Note the default world is now 60×60 (~2× the work of the old default); the 30×30 preset still exists for a slow host.
 
+## Goals (things we'd love to see emerge)
+
+Not targets to hardcode: conditions to build so they *can* happen, then watch.
+
+- **Colour groups becoming separate species** (2026-10-25). Today reproduction is asexual, so a colour group is just a big family and "species" has no meaning yet. Likely recipe, none of it built:
+  1. Different ways to make a living: two food types with a digestion trade-off, so groups in different regions are pushed apart (overlaps roadmap item 8).
+  2. Sexual reproduction: two adjacent organisms mate and the child mixes both parents' genes, colour included (roadmap item 14).
+  3. Who mates with whom: an evolved preference for partners of similar colour, and/or weaker or infertile offspring from parents too far apart genetically. Mixed offspring that are bad at both foods would make choosy mating pay.
+  4. Recognising species: group organisms by who can still interbreed (instead of fixed hue buckets), name them, colour by species, and log "a new species split off" events; later a family tree.
+
+  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Keep asexual reproduction as a setting. The build order is not yet agreed; the roadmap below is unchanged.
+
 ## Roadmap (agreed 2026-10-25; build in this order)
 
-Rules: one new loop at a time, 8 seeds each against a control, before adding the next. Don't stack plants, pathogen and bite in one run. Compare every new loop against a frozen baseline preset (e.g. `baseline-2026-10`). Give each loop a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
+There is no target outcome: new features go in on by default and the world is left to see what happens over time. Measuring a feature against a control is optional. Give each feature a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
 
 **Phase 0: finish what's in flight, then foundations**
 1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
-2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Possible follow-up: turn leaping off by default.
+2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Leaping stays on (all features are on by default).
 3. ~~Event log and overlay layers.~~ Done 2026-10-25 (world events only; overlays one at a time).
-4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files. Not yet: `npm run experiment -- --from saved.json` (every variant run from the same evolved state); split-screen, if at all.
+4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files, and `npm run experiment -- --from saved.json` (every variant run from the same evolved state). Split-screen skipped for now.
 
 **Phase 1: cheap, high payoff**
-5. Dispersal gene (changes the "born adjacent" rule; record it in `AGENTS.md`). Measure blocked-move share and kin clustering against dispersal off.
-6. Windfalls: short-lived food bursts beyond sight, so signals have something to say. Test with signals on and off; track the brain's own signal connections.
+5. ~~Dispersal gene.~~ Built and measured 2026-10-25 (see findings): a small benefit. On by default.
+6. ~~Windfalls.~~ Built and measured 2026-10-25 (see findings): organisms find ~70% of windfall food without signals, so signals still have nothing to say. On by default. Possible follow-up: make windfalls harder to find (shorter-lived, landing outside fertile regions) and run 50,000 ticks.
 
 **Phase 2: first new loops**
-7. Memory registers. First check in a long run whether the hidden layer stays idle.
+7. ~~Memory registers.~~ Built; on by default. Optional: First check in a long run whether the hidden layer stays idle.
 8. Typed food and carrion (`carrionEff` gene). Generalise abilities here, once there are two non-movement examples. Optionally move a simple bite (energy comparison) up to here if predation is wanted sooner.
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
@@ -127,7 +143,7 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
 **Phase 4: slow burners on the always-on server**
-13. The always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above. Long brain runs (100k+ ticks).
+13. ~~The always-on Node.js server.~~ Built 2026-10-25 (moved ahead of Phases 2–3). Next: install it on the S21 (`docs/server.md`), then long brain runs (100k+ ticks).
 14. Sexual reproduction and mate preference (visible species splitting by colour; name colour groups in a way that scales to it).
 15. Pheromone trails, then individual recognition, then lifetime plasticity.
 
@@ -151,5 +167,5 @@ Rules: one new loop at a time, 8 seeds each against a control, before adding the
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
-- Fingerprints changed with the mobility merge and the new dial weight; record new ones (`npm run fingerprint`) before the next engine optimisation.
-- Mobility has its own branch's experiments; none were rerun after merging with regions, signals and the brain default.
+- Fingerprints changed with the mobility merge, the new dial weight, and windfalls and memory on by default; record new ones (`npm run fingerprint`) before the next engine optimisation.
+- The S21 check (roadmap item 1) is still to do on the phone itself.

@@ -12,16 +12,23 @@
 //   --ticks N               ticks per run (default 10000)
 //   --workers N             parallel processes (default 3)
 //   --json path             also save every run's raw results as JSON
+//   --from saved.json       start every run from a saved world (a SavedWorld file
+//                           from the app, or a bare World.exportState()) instead of
+//                           tick 0; each seed reseeds its random stream, and the
+//                           variant and --set values are applied on top. Settings
+//                           that only shape a new world (size, obstacles, regions,
+//                           founders) have no effect on a saved one.
 //
 // Each seed runs once per variant, so variants are compared seed by seed
 // ("paired"): the summary shows each variant's mean and, against the first
 // variant, the mean per-seed difference and in how many seeds it was higher.
 
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { World } from '../src/sim/world';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { World, type WorldState } from '../src/sim/world';
 import { POLICY_WEIGHT_KEYS, abilityShares } from '../src/sim/history';
-import { brainDrift, hiddenStrength } from '../src/sim/brain';
+import { BRAIN_INPUTS, brainDrift, hiddenStrength } from '../src/sim/brain';
+import { unitDirectionOf } from '../src/sim/directions';
 import { seasonAt } from '../src/sim/seasons';
 import { PLANT_TRAIT_KEYS, computePlantMetrics } from '../src/sim/plants';
 import type { SimulationConfig } from '../src/sim/types';
@@ -34,6 +41,25 @@ interface Job {
   variant: string;
   overrides: Overrides;
   ticks: number;
+  /** Path of a saved world to start from (otherwise a new world). */
+  from?: string;
+}
+
+/** The brain's direct connections reported after each run: the signal ones. */
+const SIGNAL_INPUTS = ['isSignal', 'signalOnFood', 'signalHunger', 'moveSignal', 'moveSignalAlike'] as const;
+
+/** Reads a SavedWorld file (or a bare WorldState) and returns the world state. */
+function readWorldState(path: string): WorldState {
+  const data = JSON.parse(readFileSync(path, 'utf8')) as { format?: string; world?: WorldState } & Partial<WorldState>;
+  return (data.format === 'alife-world' ? data.world : data) as WorldState;
+}
+
+/** A world for a job: new, or the saved one reseeded with the job's seed and overrides applied. */
+function makeWorld(job: Job): World {
+  const overrides = { ...(job.overrides as Partial<SimulationConfig>), seed: job.seed };
+  if (!job.from) return new World(overrides);
+  const state = readWorldState(job.from);
+  return World.fromState({ ...state, config: { ...state.config, ...overrides }, prng: { seed: job.seed, state: (job.seed >>> 0) || 1 } }); // a fresh stream, as setSeed gives
 }
 
 type RunResult = { seed: number; variant: string; metrics: Record<string, number> };
@@ -54,7 +80,11 @@ function parseSeeds(spec: string): number[] {
 
 /** Runs one world and returns a fixed set of measurements. */
 function runJob(job: Job): RunResult {
-  const world = new World({ ...(job.overrides as Partial<SimulationConfig>), seed: job.seed });
+  const world = makeWorld(job);
+  // Counters are measured from the start, so runs from a saved world report only their own ticks.
+  const start = world.getMetrics();
+  const startBirthDistance = world.birthDistanceSum;
+  const startWindfall = { placed: world.windfallUnitsPlaced, rotted: world.windfallUnitsRotted };
   const tailStart = Math.floor(job.ticks * 0.8); // action mix over the last 20%
   let popSum = 0;
   let cycleLow = Infinity;
@@ -71,9 +101,17 @@ function runJob(job: Job): RunResult {
   // Plants (when on): standing crop over the run.
   let plantSum = 0;
   let edibleSum = 0;
-  const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, movesWithSignal: 0, movesToward: 0 };
+  // Windfalls: how often organisms standing on windfall food signal.
+  const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, onWindfall: 0, onWindfallSent: 0, movesWithSignal: 0, movesToward: 0 };
+  const onWindfall = new Set<string>();
 
   for (let t = 1; t <= job.ticks; t++) {
+    onWindfall.clear();
+    if (t > tailStart && world.windfallUnitsPlaced > 0) {
+      for (const o of world.organisms.values()) {
+        if (world.foodPatches.get(`${o.x},${o.y}`)?.expiresAt !== undefined) onWindfall.add(o.id);
+      }
+    }
     world.step();
     const n = world.organisms.size;
     popSum += n;
@@ -98,6 +136,7 @@ function runJob(job: Job): RunResult {
     cycleLow = Math.min(cycleLow, n);
     const season = seasonAt(world.tick, world.config);
     if (season && season.season === 'plenty' && season.ticksLeft === Math.round(world.config.seasonLength * (1 - world.config.leanFraction))) {
+      // (From a saved world the first cycle is partial, so it is skipped too.)
       // A new cycle just began: record the previous cycle's low (skip the first).
       if (t > world.config.seasonLength) leanLows.push(cycleLow);
       cycleLow = Infinity;
@@ -116,11 +155,14 @@ function runJob(job: Job): RunResult {
         if (signalled) sig.sent++;
         if (onFood) sig.onFood++;
         if (onFood && signalled) sig.onFoodSent++;
+        if (onWindfall.has(o.id)) {
+          sig.onWindfall++;
+          if (signalled) sig.onWindfallSent++;
+        }
         const s = d.sensed.nearestSignal;
-        if (s && d.chosenAction.type.startsWith('MOVE_') && d.outcome === 'success') {
+        if (s && (d.chosenAction.type.startsWith('MOVE_') || d.chosenAction.type.startsWith('LEAP_')) && d.outcome === 'success') {
           sig.movesWithSignal++;
-          const t = d.chosenAction.type;
-          const [mx, my] = t.endsWith('NORTH') ? [0, -1] : t.endsWith('SOUTH') ? [0, 1] : t.endsWith('EAST') ? [1, 0] : [-1, 0];
+          const [mx, my] = unitDirectionOf(d.chosenAction.type);
           if (mx * s.dx + my * s.dy > 0) sig.movesToward++;
         }
       }
@@ -143,34 +185,39 @@ function runJob(job: Job): RunResult {
     'signal%': (100 * sig.sent) / Math.max(1, sig.decisions),
     'signalOnFood%': (100 * sig.onFoodSent) / Math.max(1, sig.onFood),
     'movesTowardSignal%': (100 * sig.movesToward) / Math.max(1, sig.movesWithSignal),
-    births: m.birthsTotal,
-    deaths: m.deathsTotal,
-    giftsToOthers: m.sharesTotal - m.parentalSharesTotal,
-    giftsToChildren: m.parentalSharesTotal,
+    ...(sig.onWindfall > 0 ? { 'signalOnWindfall%': (100 * sig.onWindfallSent) / sig.onWindfall } : {}),
+    births: m.birthsTotal - start.birthsTotal,
+    deaths: m.deathsTotal - start.deathsTotal,
+    giftsToOthers: m.sharesTotal - m.parentalSharesTotal - (start.sharesTotal - start.parentalSharesTotal),
+    giftsToChildren: m.parentalSharesTotal - start.parentalSharesTotal,
     largestGroup: m.tribes.largestTribe,
     lookAlikeNeighbours: m.tribes.localKinFraction,
     lookAlikeByChance: m.tribes.globalKinFraction,
     carryCapacity: mean((o) => o.carryCapacity),
     dispersal: mean((o) => o.dispersal),
     memorySpan: mean((o) => o.memorySpan),
-    ...(world.windfallUnitsPlaced > 0
+    ...(world.windfallUnitsPlaced > startWindfall.placed
       ? {
           // Windfall food eaten before it rotted (leftovers still on the ground count as uneaten).
           'windfallEaten%':
             (100 *
               (world.windfallUnitsPlaced -
-                world.windfallUnitsRotted -
+                startWindfall.placed -
+                (world.windfallUnitsRotted - startWindfall.rotted) -
                 Array.from(world.foodPatches.values()).reduce((s, p) => s + (p.expiresAt !== undefined ? p.stock : 0), 0))) /
-            world.windfallUnitsPlaced,
+            (world.windfallUnitsPlaced - startWindfall.placed),
         }
       : {}),
-    birthDistance: world.birthDistanceSum / Math.max(1, m.birthsTotal - world.config.initialOrganisms - m.immigrantsTotal),
+    birthDistance:
+      (world.birthDistanceSum - startBirthDistance) /
+      Math.max(1, m.birthsTotal - start.birthsTotal - (job.from ? 0 : world.config.initialOrganisms) - (m.immigrantsTotal - start.immigrantsTotal)),
     ...Object.fromEntries(
       Object.entries(abilityShares([...world.organisms.values()])).map(([k, v]) => [`ability.${k}`, v])
     ),
     ...(world.config.plantsEnabled ? plantResults(world, plantSum / job.ticks, edibleSum / job.ticks, job.ticks) : {}),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
+    ...Object.fromEntries(SIGNAL_INPUTS.map((k) => [`b.${k}`, mean((o) => o.brain.skip[BRAIN_INPUTS.indexOf(k)])])),
     ...Object.fromEntries(POLICY_WEIGHT_KEYS.map((k) => [`w.${k}`, mean((o) => o.policy[k])])),
     ...Object.fromEntries(Object.entries(actions).map(([k, v]) => [`act.${k}%`, (100 * v) / actionTotal])),
   };
@@ -242,7 +289,7 @@ async function main() {
   };
   const compare = get('--compare');
   if (!compare || !compare.includes('=')) {
-    console.error('Usage: npm run experiment -- --compare key=a,b [--set key=value] [--seeds 1-8] [--ticks 10000] [--workers 3] [--json out.json]');
+    console.error('Usage: npm run experiment -- --compare key=a,b [--set key=value] [--seeds 1-8] [--ticks 10000] [--workers 3] [--json out.json] [--from saved.json]');
     process.exit(1);
   }
   const [compareKey, valueList] = compare.split('=');
@@ -257,12 +304,18 @@ async function main() {
   const seeds = parseSeeds(get('--seeds', '1-8')!);
   const ticks = Number(get('--ticks', '10000'));
   const workers = Math.max(1, Number(get('--workers', '3')));
+  const from = get('--from');
+  if (from) {
+    const state = readWorldState(from); // fail early on a bad file
+    console.log(`Starting every run from ${from} (tick ${state.tick}, ${state.organisms.length} organisms)`);
+  }
 
   const jobs: Job[] = seeds.flatMap((seed) =>
     variants.map((variant) => ({
       seed,
       variant,
       ticks,
+      from,
       overrides: { ...fixed, ...Object.fromEntries(compareKey.split('+').map((k) => [k, parseValue(variant)])) },
     }))
   );
@@ -304,7 +357,7 @@ async function main() {
   console.log(summarize(results, variants));
   const jsonPath = get('--json');
   if (jsonPath) {
-    writeFileSync(jsonPath, JSON.stringify({ compareKey, variants, fixed, seeds, ticks, results }, null, 2));
+    writeFileSync(jsonPath, JSON.stringify({ compareKey, variants, fixed, seeds, ticks, from, results }, null, 2));
     console.log(`\nRaw results saved to ${jsonPath}`);
   }
 }

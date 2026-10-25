@@ -24,7 +24,7 @@ describe('Memory: recall and update', () => {
     expect(recall(memory, 20, 4, 4, 20, ON).food).toMatchObject({ dx: 6, dy: 0, distance: 6, freshness: 0.5 });
     expect(recall(memory, 20, 4, 4, 30, ON).food).toBeNull();
     expect(recall(memory, 0, 4, 4, 11, ON).food).toBeNull();
-    const off = recall(memory, 20, 4, 4, 11, DEFAULT_CONFIG);
+    const off = recall(memory, 20, 4, 4, 11, { ...DEFAULT_CONFIG, memoryEnabled: false });
     expect([off.food, off.signal, off.home]).toEqual([null, null, null]);
     expect(off.registers).toEqual(new Array(MEMORY_REGISTERS).fill(0));
   });
