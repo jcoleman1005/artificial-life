@@ -1,10 +1,10 @@
 # Artificial Life Lab — Agent Instructions
 
 ## Goal
-Build a persistent artificial-life simulation, developed on Fedora and primarily viewed on a Samsung Galaxy S21 browser. First deliver a small playable prototype; later deploy a server-side simulation to Proxmox.
+Build a persistent artificial-life simulation, developed on Fedora and primarily viewed on a Samsung Galaxy S21 browser. The first milestone (a playable, mobile-friendly 2D grid simulation) is done; the always-on server is planned (see `docs/STATUS.md`).
 
-## First milestone
-A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox server or always-on persistence yet.
+## Scope
+Nothing is deferred. Any feature is fair game to suggest or build: predation, conflict between groups, sexual breeding and species, age, memory, lifetime learning, richer bodies, the always-on server, persistence, world branching, naturalistic rendering, and anything else. Suggest freely; agree larger changes with the user before building them, and record each decision under "Decisions already made".
 
 ## Decisions already made
 - Visual-first world, with expandable organism inspection, statistics, and experiment controls.
@@ -24,7 +24,7 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 - Energy is bounded by zero and a maximum capacity. At zero, an organism dies.
 - Energy only ever comes from eating food. Organisms never transfer energy to each other: they share food, which the recipient eats. (Energy transfer let a family recycle energy among themselves without finding food.)
 - Reproduction is asexual into an adjacent empty cell. It transfers energy so parent and offspring remain viable. Offspring inherit policy weights with occasional mutations.
-- Physical abilities are fixed in Phase 1, with two deliberate exceptions, the movement abilities (above) and carry capacity. Carry capacity is an inherited body trait (founders 1–3 units; a child shifts by ±1 with probability `traitMutationRate`, bounded by 0 and `maxCarryCapacity`). Each unit costs `carryUpkeep` energy per tick, so capacity only spreads if storing food pays for its upkeep.
+- Evolvable bodies so far: the movement abilities (above) and carry capacity; other physical abilities are fixed for now. Carry capacity is an inherited body trait (founders 1–3 units; a child shifts by ±1 with probability `traitMutationRate`, bounded by 0 and `maxCarryCapacity`). Each unit costs `carryUpkeep` energy per tick, so capacity only spreads if storing food pays for its upkeep.
 - Tribes are never assigned. Each organism carries a visible, inherited tag (a hue) that mutates slowly at birth. Kinship is graded: similarity runs from 1 (same hue) to 0 (opposite hue). The sharing weight applied to a neighbour is `shareWithKin` at or above `kinSimilarity` (0.75), `shareWithStrangers` at or below `strangerSimilarity` (0.25), and a linear blend in between. Only those cut-offs are fixed; both weights, and kin affinity (graded movement toward similar and away from dissimilar organisms), evolve from neutral, identical starting ranges.
 - Giving food is need-aware: it is only offered to an adjacent organism below half energy, and its score scales with that neighbour's hunger times the evolved weight for how alike it looks (or `careForChildren` for one's own child). It competes with eating the same food oneself, so a hungry parent can give away its last unit if its care outweighs its hunger. Gifts are delivered (and eaten) after all actions so decisions stay simultaneous. `sharingEnabled` is an experiment switch; compare runs with it on and off.
 - Childhood: for `childhoodTicks` after birth (default 800, one plenty-to-lean cycle), a child senses its parent (`parentWithFood`) whenever the parent is carrying food. The evolved `followFoodParent` weight (head start 0.5–1.5) pulls it toward that parent. The parent still decides whether to give (via `careForChildren`); children cannot take food.
@@ -40,13 +40,13 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 - Two inherited controllers; `controller` picks which one chooses actions ('dials' or 'brain'). Every organism carries and inherits both, so the switch works mid-run and runs can be compared on the same seed. **The brain is the default and the main controller**; the dials are kept as the interpretable reference and control group.
   - Dials: the interpretable weighted policy (one evolvable weight per tendency, including `restDrive` for resting). New behaviours go into the brain first; add a dial only when an experiment needs a readable baseline for that behaviour. Under the brain the dial weights still inherit and mutate but steer nothing, so they only drift; never read them as evidence of selection in brain runs.
   - Brain: a tiny neural network (33 action features → 6 tanh hidden units → score, plus direct "skip" connections). Founders' skip connections start as a dial-like head start, and the hidden layer starts small and random. Each weight mutates at birth with probability `brainMutationRate`. Legal-action rules, the full-meal rule and family pass-through still apply. The inspector lists each input's direct contribution plus the hidden layer's total.
-- Organisms have no memory in Phase 1.
+- Organisms have no memory (yet).
 - Discrete ticks: every living organism decides once per tick.
 - Simultaneous decisions: all organisms choose actions from the same pre-tick snapshot. Resolve conflicts with a seeded random tie-breaker.
 - Use a dedicated seeded PRNG in simulation code; do not use Math.random() for simulation outcomes.
 - Metrics remain separate: survival, reproductive success, and behavioral diversity.
 - Keep simulation logic independent from Canvas rendering and UI.
-- Eventually support snapshots, resume, speed controls, and branching experiments. Server-side persistence is a later milestone.
+- Planned: snapshots, resume, branching experiments, and server-side persistence.
 
 ## Working notes
 - Read `docs/STATUS.md` at the start of a session and update it at the end: current state, findings, next steps.
@@ -55,7 +55,7 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 ## Engineering rules
 - TypeScript strict mode.
 - Avoid unnecessary dependencies and services.
-- Do not add a database, authentication, cloud inference, or complex backend to the first milestone.
+- Keep the stack small: add a database, authentication, cloud inference or a backend only when a feature needs it, and say why.
 - Write deterministic tests for energy accounting, action legality, conflict resolution, reproduction, inheritance, mutation, and seeded repeatability.
 - Record observable inputs, action scores, decisions, and energy changes.
 - Do not claim organisms learned during life unless lifetime learning is implemented.
@@ -63,7 +63,8 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 - Keep mobile touch targets comfortable and contrast readable.
 - After meaningful changes run: npm run check, npm test, npm run build.
 
-## Suggested implementation order
+## First milestone (done; kept for reference)
+Implementation order used:
 1. Responsive interface and Canvas grid.
 2. Seeded PRNG and deterministic world initialization.
 3. Sensing, policy scoring, legal movement.
@@ -73,7 +74,7 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 7. Pause, single-step, speed, reset/new seed, selection details, metrics.
 8. Tests and build verification.
 
-## First milestone acceptance criteria
+Acceptance criteria (all met; keep them true):
 - npm run dev opens a playable world.
 - Organisms move, sense local resources and obstacles, eat, spend energy, die, and reproduce.
 - Offspring inherit and sometimes mutate policy weights.
@@ -81,6 +82,3 @@ A playable, mobile-friendly 2D grid simulation. Do not implement the Proxmox ser
 - UI has pause/resume, step, speed, reset/new seed, population, food, births/deaths, and selected-organism details.
 - No invalid energy values, illegal overlaps, or runtime errors during extended runs.
 - npm run check, npm test, and npm run build pass.
-
-## Defer
-Always-on server execution, restart persistence, world branching, evolving bodies beyond carry capacity and the movement abilities, age, memory, predation, conflict or theft between tribes, multiple species, and elaborate naturalistic rendering.

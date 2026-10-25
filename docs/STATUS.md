@@ -101,7 +101,7 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 4. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
 5. Snapshots and resume, then the always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above.
 6. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
-7. More openings for emergence: sexual breeding (planned; the UI should name colour groups in a way that scales to it), conflict between groups (deferred in `AGENTS.md`).
+7. More openings for emergence: sexual breeding (planned; the UI should name colour groups in a way that scales to it), predation and conflict between groups (nothing is deferred any more; see `AGENTS.md` → Scope).
 
 ## Known issues
 
