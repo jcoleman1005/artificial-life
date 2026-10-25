@@ -7,8 +7,9 @@ _Last updated: 2026-10-25._
 
 ## Branches
 
-- `main`: the original scaffold only.
-- `feature/tribes`: all current work. It stacks `fix/mobile-layout` → `feature/trend-charts` → `feature/tribes`; merge `feature/tribes` to bring in everything.
+- `main`: everything to date (layout fix, trend charts, tribes, sharing, seasons, traits, brains, engine speed-up). Start new work from here.
+- `fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`: older branches, fully merged into `main`; safe to delete.
+- Each session works on its own branch off `main`; merge it once checked on the phone.
 
 ## Running it
 
@@ -53,12 +54,11 @@ _Last updated: 2026-10-25._
 
 ## Next steps (suggested order)
 
-1. Merge `feature/tribes` into `main`.
-2. Move the simulation into a Web Worker so the UI stays smooth at 10×.
-3. Larger world (e.g. 60×60) to relieve crowding and give room for territories and migration.
-4. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
-5. Snapshots and resume, then an always-on Node server on Proxmox that the phone connects to.
-6. More openings for emergence: signals between organisms, food regions, conflict between groups (deferred in `AGENTS.md`).
+1. Move the simulation into a Web Worker so the UI stays smooth at 10×.
+2. Larger world (e.g. 60×60) to relieve crowding and give room for territories and migration.
+3. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
+4. Snapshots and resume, then an always-on Node server on Proxmox that the phone connects to.
+5. More openings for emergence: signals between organisms, food regions, conflict between groups (deferred in `AGENTS.md`).
 
 ## Known issues
 
