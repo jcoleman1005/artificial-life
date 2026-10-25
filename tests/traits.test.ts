@@ -65,6 +65,7 @@ describe('Carry capacity trait', () => {
         reproductionThreshold: 1000, // no offspring wandering through it
         foodRegenInterval: 9999,
         foodSpawnInterval: 9999,
+        controller: 'dials', // forageDrive is a dial
       });
       world.foodPatches.set('5,5', { x: 5, y: 5, stock: 10, capacity: 10 });
       const forager = Array.from({ length: 1 }, () => ({
@@ -76,7 +77,7 @@ describe('Carry capacity trait', () => {
           foodAttraction: 0, obstacleAvoidance: 0, crowdingAvoidance: 0, exploreTendency: 0,
           eatDrive: 0, reproduceDrive: 0, kinAffinity: 0, shareWithKin: 0, shareWithStrangers: 0,
           careForChildren: 0, forageDrive: 2, eatPriority: 0, hungerUrgency: 0, followFoodParent: 0,
-          signalOnFood: 0, signalWhenHungry: 0, followSignal: 0,
+          signalOnFood: 0, signalWhenHungry: 0, followSignal: 0, restDrive: 0,
         },
         tag: 0,
         carryCapacity: capacity,

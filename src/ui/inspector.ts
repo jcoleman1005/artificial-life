@@ -21,6 +21,7 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['signalOnFood', 'Signal On Food'],
   ['signalWhenHungry', 'Signal When Hungry'],
   ['followSignal', 'Follow Signals'],
+  ['restDrive', 'Rest Drive'],
 ];
 
 export class InspectorView {
@@ -242,8 +243,8 @@ export class InspectorView {
           </div>
         </div>
 
-        <details open class="inspector-section">
-          <summary><strong>Inherited Policy Weights</strong>${
+        <details ${config.controller === 'brain' ? '' : 'open'} class="inspector-section" data-key="dials-${config.controller}">
+          <summary><strong>Inherited Dial Weights</strong>${
             config.controller === 'brain' ? ' <span class="muted">(inactive: Brain controller)</span>' : ''
           }</summary>
           <div class="weights-list">

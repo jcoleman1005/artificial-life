@@ -27,7 +27,8 @@ const NEUTRAL: PolicyWeights = {
   followFoodParent: 0,
   signalOnFood: 0,
   signalWhenHungry: 0,
-  followSignal: 0,
+  followSignal: 0, restDrive: 0,
+  restDrive: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -73,6 +74,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     seasonLength: 0,
     foodSpawnInterval: 9999,
     foodRegionCount: 0,
+    controller: 'dials', // these tests exercise the dial policy
     ...overrides,
   });
 }
@@ -688,4 +690,24 @@ describe('Long run with sharing', () => {
     }
     expect(violations).toEqual([]);
    }, 30_000);
+});
+
+describe('Rest drive (dials)', () => {
+  it('rests with a positive restDrive and moves with a negative one', () => {
+    for (const [restDrive, expected] of [[1, 'REST'], [-1, 'MOVE']] as const) {
+      const world = emptyWorld({ signalsEnabled: false });
+      const org = makeOrganism('a', 5, 5, { policy: { ...NEUTRAL, restDrive } });
+      world.organisms.set(org.id, org);
+      world.step();
+      const chosen = org.recentHistory[0].chosenAction.type;
+      expect(chosen.startsWith(expected)).toBe(true);
+      const rest = org.recentHistory[0].scores.find((s) => s.action.type === 'REST')!;
+      expect(rest.totalScore).toBe(restDrive);
+    }
+  });
+
+  it('makes the brain the default controller, with dials still available', () => {
+    expect(new World({ seed: 1 }).config.controller).toBe('brain');
+    expect(emptyWorld().config.controller).toBe('dials');
+  });
 });

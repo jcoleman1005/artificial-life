@@ -107,6 +107,7 @@ const historyView = new HistoryView($('#history-container'), () => {
   link.click();
   URL.revokeObjectURL(link.href);
 });
+historyView.setController(world.config.controller);
 
 const card = new OrganismCard(
   $('#org-card'),
@@ -262,6 +263,7 @@ const settingsView = new SettingsView(
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
       world.config.controller = controller;
+      historyView.setController(controller);
       refreshPanels();
     },
     onSeasonsChange: (enabled) => {

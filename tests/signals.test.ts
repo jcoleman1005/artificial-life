@@ -23,7 +23,8 @@ const NEUTRAL: PolicyWeights = {
   followFoodParent: 0,
   signalOnFood: 0,
   signalWhenHungry: 0,
-  followSignal: 0,
+  followSignal: 0, restDrive: 0,
+  restDrive: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -59,6 +60,7 @@ function signalWorld(overrides: Partial<SimulationConfig> = {}): World {
     initialFoodPatches: 0,
     obstacleDensity: 0,
     foodRegionCount: 0,
+    controller: 'dials', // these tests exercise the dial policy
     tickMetabolismCost: 0,
     carryUpkeep: 0,
     moveCost: 0,

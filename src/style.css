@@ -1356,6 +1356,18 @@ button {
   margin-top: 4px;
 }
 
+/* Dial-weight charts: collapsible, since they are inactive under the brain. */
+.trends-dials > summary.trends-section {
+  cursor: pointer;
+  padding: 10px 0; /* comfortable touch target */
+}
+
+.trends-dials-note {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
 .trends-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -103,6 +103,8 @@ export interface PolicyWeights {
   signalWhenHungry: number;
   /** Positive: move toward the nearest signal. Negative: away from it ([-2, 2]). */
   followSignal: number;
+  /** Preference for resting (staying put at no extra cost) over other actions ([-2, 2]). */
+  restDrive: number;
 }
 
 export interface SensedEntity {

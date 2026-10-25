@@ -24,6 +24,8 @@ export const WEIGHT_MAX = 2.0;
 export const EAT_PRIORITY_SCALE = 20;
 export const HUNGER_URGENCY_SCALE = 10;
 export const PARENT_PULL_SCALE = 3;
+/** Rest preference: at full weight, about a full-strength food pull. */
+export const REST_SCALE = 1;
 /** Signal weights: about as strong as the food pull at full weight. */
 export const SIGNAL_SCALE = 1.5;
 
@@ -55,6 +57,9 @@ export function createRandomPolicy(prng: PRNG): PolicyWeights {
     signalOnFood: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
     signalWhenHungry: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
     followSignal: Number(prng.nextFloat(-0.5, 0.5).toFixed(3)),
+    // Resting starts close to its old fixed score of 0, so any preference
+    // for resting (or against it) has to evolve.
+    restDrive: Number(prng.nextFloat(-0.25, 0.25).toFixed(3)),
   };
 }
 
@@ -95,6 +100,7 @@ export function mutatePolicy(
     signalOnFood: mutateWeight(parentPolicy.signalOnFood),
     signalWhenHungry: mutateWeight(parentPolicy.signalWhenHungry),
     followSignal: mutateWeight(parentPolicy.followSignal),
+    restDrive: mutateWeight(parentPolicy.restDrive),
   };
 }
 
@@ -343,9 +349,11 @@ export function scoreAction(
     }
 
     case 'REST': {
-      // Resting has neutral baseline score; organisms act if any constructive action has positive score
-      components['baseline'] = 0.0;
-      totalScore = 0.0;
+      // Resting scores the evolved restDrive, so dials can evolve "rest
+      // more, move less" as brains do (it used to be fixed at 0).
+      const restComponent = policy.restDrive * REST_SCALE;
+      components['restDrive'] = Number(restComponent.toFixed(3));
+      totalScore = restComponent;
       break;
     }
 

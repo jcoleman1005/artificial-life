@@ -30,7 +30,8 @@ const ZERO_POLICY: PolicyWeights = {
   followFoodParent: 0,
   signalOnFood: 0,
   signalWhenHungry: 0,
-  followSignal: 0,
+  followSignal: 0, restDrive: 0,
+  restDrive: 0,
 };
 
 function brainWorld(overrides: Partial<SimulationConfig> = {}): World {

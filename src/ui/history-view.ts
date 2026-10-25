@@ -28,7 +28,11 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   signalOnFood: 'Signal on food',
   signalWhenHungry: 'Signal when hungry',
   followSignal: 'Follow signals',
+  restDrive: 'Rest drive',
 };
+
+/** Trend section for the dial weights, collapsed while the brain is in charge. */
+const DIAL_SECTION = 'Inherited weights (dials)';
 
 const REFERENCE = '#64748b';
 const LEAN_WASH = 'rgba(251, 191, 36, 0.09)';
@@ -91,10 +95,12 @@ function niceMax(v: number): number {
 export class HistoryView {
   private readonly panels: Panel[];
   private readonly readout: HTMLElement;
+  private readonly container: HTMLElement;
   private samples: readonly HistorySample[] = [];
   private hoverIndex: number | null = null;
 
   constructor(container: HTMLElement, onDownloadCSV: () => void) {
+    this.container = container;
     this.panels = [
       {
         section: 'Population & food',
@@ -195,7 +201,7 @@ export class HistoryView {
       },
       ...POLICY_WEIGHT_KEYS.map(
         (key): Panel => ({
-          section: 'Inherited weights (dials)',
+          section: DIAL_SECTION,
           label: WEIGHT_LABELS[key],
           fixedRange: [WEIGHT_MIN, WEIGHT_MAX],
           value: (s) => s.weights[key].mean,
@@ -218,20 +224,13 @@ export class HistoryView {
           </div>
           ${[...new Set(this.panels.map((p) => p.section))]
             .map(
-              (section) => `
+              (section) => section === DIAL_SECTION ? `
+          <details class="trends-dials" open>
+          <summary class="trends-section">${section}<span class="trends-dials-note"> · inactive under the Brain controller</span></summary>
+          <div class="trends-grid">${this.panelFigures(section)}</div>
+          </details>` : `
           <h4 class="trends-section">${section}</h4>
-          <div class="trends-grid">
-            ${this.panels
-              .filter((p) => p.section === section)
-              .map(
-                (p) => `
-              <figure class="trend-panel">
-                <figcaption><span class="trend-label">${p.label}</span><span class="trend-value"></span></figcaption>
-                <canvas></canvas>
-              </figure>`
-              )
-              .join('')}
-          </div>`
+          <div class="trends-grid">${this.panelFigures(section)}</div>`
             )
             .join('')}
         </div>
@@ -246,6 +245,8 @@ export class HistoryView {
     });
 
     container.querySelector('.btn-csv')!.addEventListener('click', onDownloadCSV);
+    // Collapsed charts are skipped when drawing; draw them once opened.
+    container.querySelector('.trends-dials')!.addEventListener('toggle', () => this.draw());
 
     // Press-and-drag scrubbing. Horizontal drags scrub; vertical swipes
     // still scroll the page (touch-action: pan-y in CSS).
@@ -273,6 +274,30 @@ export class HistoryView {
     });
 
     new ResizeObserver(() => this.draw()).observe(grid);
+  }
+
+  private panelFigures(section: string): string {
+    return this.panels
+      .filter((p) => p.section === section)
+      .map(
+        (p) => `
+              <figure class="trend-panel">
+                <figcaption><span class="trend-label">${p.label}</span><span class="trend-value"></span></figcaption>
+                <canvas></canvas>
+              </figure>`
+      )
+      .join('');
+  }
+
+  /**
+   * Dial weights steer nothing under the brain (they only drift), so their
+   * charts start collapsed then, with a note; open under the dials.
+   */
+  public setController(controller: 'dials' | 'brain'): void {
+    const dials = this.container.querySelector<HTMLDetailsElement>('.trends-dials');
+    if (!dials) return;
+    dials.open = controller === 'dials';
+    dials.querySelector<HTMLElement>('.trends-dials-note')!.hidden = controller === 'dials';
   }
 
   public render(samples: readonly HistorySample[]): void {

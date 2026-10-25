@@ -19,6 +19,7 @@ export const POLICY_WEIGHT_KEYS = [
   'signalOnFood',
   'signalWhenHungry',
   'followSignal',
+  'restDrive',
 ] as const satisfies readonly (keyof PolicyWeights)[];
 
 export type PolicyWeightKey = (typeof POLICY_WEIGHT_KEYS)[number];
