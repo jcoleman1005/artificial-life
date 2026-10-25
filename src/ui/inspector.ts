@@ -16,6 +16,9 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
   ['eatPriority', 'Eat Priority'],
   ['hungerUrgency', 'Hunger Urgency'],
   ['followFoodParent', 'Follow Food Parent'],
+  ['signalOnFood', 'Signal On Food'],
+  ['signalWhenHungry', 'Signal When Hungry'],
+  ['followSignal', 'Follow Signals'],
 ];
 
 export class InspectorView {
@@ -97,6 +100,10 @@ export class InspectorView {
         ? `dx:${sensed.parentWithFood.dx}, dy:${sensed.parentWithFood.dy} (dist: ${sensed.parentWithFood.distance}, carrying: ${sensed.parentWithFood.value})`
         : 'None';
 
+      const signalSenseStr = sensed.nearestSignal
+        ? `dx:${sensed.nearestSignal.dx}, dy:${sensed.nearestSignal.dy} (dist: ${sensed.nearestSignal.distance}, ${Math.round((sensed.nearestSignal.value ?? 0) * 100)}% alike)`
+        : 'None';
+
       const obsSenseStr = sensed.nearestObstacle
         ? `dx:${sensed.nearestObstacle.dx}, dy:${sensed.nearestObstacle.dy} (dist: ${sensed.nearestObstacle.distance})`
         : 'None in radius';
@@ -126,6 +133,10 @@ export class InspectorView {
           <div class="sense-item">
             <span class="sense-label">Parent With Food</span>
             <span class="sense-val">${parentSenseStr}</span>
+          </div>
+          <div class="sense-item">
+            <span class="sense-label">Nearest Signal (Radius ${config.signalRadius})</span>
+            <span class="sense-val">${signalSenseStr}</span>
           </div>
           <div class="sense-item">
             <span class="sense-label">Current Cell Food</span>

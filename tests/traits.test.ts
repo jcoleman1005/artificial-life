@@ -76,6 +76,7 @@ describe('Carry capacity trait', () => {
           foodAttraction: 0, obstacleAvoidance: 0, crowdingAvoidance: 0, exploreTendency: 0,
           eatDrive: 0, reproduceDrive: 0, kinAffinity: 0, shareWithKin: 0, shareWithStrangers: 0,
           careForChildren: 0, forageDrive: 2, eatPriority: 0, hungerUrgency: 0, followFoodParent: 0,
+          signalOnFood: 0, signalWhenHungry: 0, followSignal: 0,
         },
         tag: 0,
         carryCapacity: capacity,
@@ -87,6 +88,7 @@ describe('Carry capacity trait', () => {
         carriedFood: 0,
         foodGiven: 0,
         foodReceived: 0,
+        signalTick: -1,
         recentHistory: [],
       }))[0] satisfies Organism;
       world.organisms.set(forager.id, forager);

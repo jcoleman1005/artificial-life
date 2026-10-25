@@ -186,7 +186,7 @@ export function computeWorldMetrics(
   parentalSharesTotal: number,
   immigrantsTotal: number,
   config: Readonly<SimulationConfig>
-): Omit<WorldMetrics, 'season'> {
+): Omit<WorldMetrics, 'season' | 'signalsTotal' | 'signalsOnFoodTotal'> {
   const population = organisms.length;
 
   let maxGeneration = 1;

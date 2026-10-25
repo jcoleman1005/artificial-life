@@ -47,6 +47,7 @@ app.innerHTML = `
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="12" r="6" fill="#60a5fa"/><circle cx="7" cy="3.5" r="2" fill="#4ade80"/><circle cx="13" cy="3.5" r="2" fill="#4ade80"/></svg>Carrying food</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="4.5" cy="10" r="4" fill="#60a5fa"/><circle cx="17.5" cy="10" r="3" fill="#60a5fa"/><circle cx="17.5" cy="10" r="4.6" fill="none" stroke="#fbbf24" stroke-width="1.4"/><path d="M7 10 H11.5" stroke="#fbbf24" stroke-width="2"/><path d="M14 10 L10.5 7.5 L10.5 12.5 Z" fill="#fbbf24"/></svg>Giving food</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#60a5fa"/><circle cx="10" cy="10" r="2" fill="#0b1016"/></svg>Resting</li>
+            <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="4.5" fill="#60a5fa"/><circle cx="10" cy="10" r="1.4" fill="#0b1016"/><circle cx="10" cy="10" r="6.6" fill="none" stroke="#67e8f9" stroke-width="1.2"/><circle cx="10" cy="10" r="9" fill="none" stroke="#67e8f9" stroke-opacity="0.45" stroke-width="1.2"/></svg>Signalling</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="7" fill="#60a5fa"/><path d="M13 5.5 V14.5" stroke="#0b1016" stroke-width="2.4" stroke-linecap="round"/></svg>Blocked (bar = side it pushed)</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="5" cy="10" r="4" fill="#60a5fa"/><path d="M5 10 H16" stroke="rgba(255,255,255,0.7)" stroke-width="1"/><circle cx="16" cy="10" r="2.6" fill="#60a5fa"/><circle cx="16" cy="10" r="4" fill="none" stroke="#fff" stroke-width="1"/></svg>Birth (newborn ring)</li>
             <li><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><circle cx="10" cy="10" r="5" fill="#60a5fa"/><circle cx="10" cy="10" r="8" fill="none" stroke="#f87171" stroke-width="1.2" stroke-dasharray="2 2"/></svg>Starving (under 25%)</li>
@@ -188,6 +189,7 @@ const controlsView = new ControlsView(
   initialSeed,
   {
     sharingEnabled: world.config.sharingEnabled,
+    signalsEnabled: world.config.signalsEnabled,
     seasonsEnabled: world.config.seasonLength > 0,
     controller: world.config.controller,
     worldSize: 'large',
@@ -230,6 +232,10 @@ const controlsView = new ControlsView(
   onSharingChange: (enabled) => {
     // Takes effect from the next tick; use Reset to rerun a seed from the start.
     world.config.sharingEnabled = enabled;
+  },
+  onSignalsChange: (enabled) => {
+    // Takes effect from the next tick, like sharing.
+    world.config.signalsEnabled = enabled;
   },
   onControllerChange: (controller) => {
     // Every organism carries both genomes, so this can switch mid-run.

@@ -45,6 +45,11 @@ export const BRAIN_INPUTS = [
   'moveFamilySwap',
   'moveNoise',
   'pushedByEating',
+  'isSignal',
+  'signalOnFood',
+  'signalHunger',
+  'moveSignal',
+  'moveSignalAlike',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -78,6 +83,7 @@ const HEAD_START: Readonly<Partial<Record<BrainInput, number>>> = {
   moveParentFood: 3,
   moveNoise: 0.4,
   pushedByEating: -35,
+  isSignal: -0.1, // signals start meaningless: only a small cost
 };
 
 export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEAD_START[name] ?? 0);
@@ -138,6 +144,7 @@ export function brainFeatures(
   const isMove = type.startsWith('MOVE_');
   const isGive = type.startsWith('GIVE_');
   const isReproduce = type.startsWith('REPRODUCE_');
+  const isSignal = type === 'SIGNAL';
   const hunger = 1 - sensed.energyRatio;
   const hungry = sensed.energyRatio < 0.5;
   const need = action.recipientNeed ?? 0;
@@ -177,6 +184,11 @@ export function brainFeatures(
     isMove && action.swapWithId ? 1 : 0, // moveFamilySwap
     isMove ? prng.nextFloat(-1, 1) : 0, // moveNoise
     canEatNow && type !== 'EAT' && !action.recipientIsChild ? 1 : 0, // pushedByEating
+    isSignal ? 1 : 0, // isSignal
+    isSignal && sensed.currentCellFood > 0 ? 1 : 0, // signalOnFood
+    isSignal ? hunger : 0, // signalHunger
+    isMove ? aligned(dx, dy, sensed.nearestSignal, 0.15) : 0, // moveSignal
+    isMove ? aligned(dx, dy, sensed.nearestSignal, 0.15) * (sensed.nearestSignal?.value ?? 0) : 0, // moveSignalAlike
   ];
 }
 

@@ -438,6 +438,19 @@ export class CanvasRenderer {
       ctx.fill();
     }
 
+    // Signalling: two broadcast rings, so others' view of it reads at a glance
+    if (type === 'SIGNAL' && succeeded) {
+      ctx.strokeStyle = '#67e8f9';
+      ctx.lineWidth = Math.max(1, cellSize * 0.08);
+      for (const [scale, alpha] of [[1.35, 0.9], [1.8, 0.45]] as const) {
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.arc(cx, cy, bodyRadius * scale + 1, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // Newborn: a thin white ring for its first few ticks
     if (org.age < 4) {
       ctx.strokeStyle = '#ffffff';

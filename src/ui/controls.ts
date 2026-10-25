@@ -9,6 +9,7 @@ export interface ControlCallbacks {
   onNewSeed: () => void;
   onColorModeChange: (mode: ColorMode) => void;
   onSharingChange: (enabled: boolean) => void;
+  onSignalsChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -18,6 +19,7 @@ export interface ControlCallbacks {
 
 export interface ExperimentToggles {
   sharingEnabled: boolean;
+  signalsEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
   worldSize: WorldSize;
@@ -154,6 +156,13 @@ export class ControlsView {
             </div>
           </div>
           <div class="toggle-field">
+            <span class="toggle-label">Signals</span>
+            <div class="speed-selector" role="group" aria-label="Signals">
+              <button type="button" class="btn-speed ${this.toggles.signalsEnabled ? 'active' : ''}" data-signals="on">On</button>
+              <button type="button" class="btn-speed ${this.toggles.signalsEnabled ? '' : 'active'}" data-signals="off">Off</button>
+            </div>
+          </div>
+          <div class="toggle-field">
             <span class="toggle-label">Controller</span>
             <div class="speed-selector" role="group" aria-label="Controller">
               <button type="button" class="btn-speed ${this.toggles.controller === 'dials' ? 'active' : ''}" data-controller="dials">Dials</button>
@@ -215,6 +224,14 @@ export class ControlsView {
       btn.addEventListener('click', () => {
         sharingButtons.forEach((b) => b.classList.toggle('active', b === btn));
         this.callbacks.onSharingChange(btn.dataset.sharing === 'on');
+      });
+    });
+
+    const signalButtons = this.container.querySelectorAll<HTMLButtonElement>('[data-signals]');
+    signalButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        signalButtons.forEach((b) => b.classList.toggle('active', b === btn));
+        this.callbacks.onSignalsChange(btn.dataset.signals === 'on');
       });
     });
 

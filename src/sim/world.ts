@@ -44,6 +44,8 @@ export class World {
   public kinSharesTotal = 0;
   public parentalSharesTotal = 0;
   public immigrantsTotal = 0;
+  public signalsTotal = 0;
+  public signalsOnFoodTotal = 0;
   /** Running totals of lifespans at death (a total, not a list, so memory stays flat). */
   public deceasedCount = 0;
   public deceasedLifespanSum = 0;
@@ -70,6 +72,8 @@ export class World {
     this.kinSharesTotal = 0;
     this.parentalSharesTotal = 0;
     this.immigrantsTotal = 0;
+    this.signalsTotal = 0;
+    this.signalsOnFoodTotal = 0;
     this.deceasedCount = 0;
     this.deceasedLifespanSum = 0;
     this.nextOrganismSeq = 0;
@@ -228,6 +232,7 @@ export class World {
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
+      signalTick: -1,
       recentHistory: [],
     };
   }
@@ -266,6 +271,7 @@ export class World {
 
     const orgsList: Organism[] = [];
     const organismAt = new Map<string, Organism>();
+    const signallers: number[] = [];
     for (const org of this.organisms.values()) {
       const copy: Organism = {
         ...org,
@@ -274,6 +280,7 @@ export class World {
         recentHistory: [...org.recentHistory],
       };
       organismGrid[org.y * gridWidth + org.x] = orgsList.length;
+      if (org.signalTick >= 0 && org.signalTick === this.tick - 1) signallers.push(orgsList.length);
       orgsList.push(copy);
       organismAt.set(`${org.x},${org.y}`, copy);
     }
@@ -289,6 +296,7 @@ export class World {
       obstacleGrid,
       foodGrid,
       organismGrid,
+      signallers,
     };
   }
 
@@ -615,6 +623,7 @@ export class World {
                 carriedFood: 0,
                 foodGiven: 0,
                 foodReceived: 0,
+                signalTick: -1,
                 recentHistory: [],
               };
 
@@ -655,6 +664,16 @@ export class World {
           } else {
             outcome = 'no_food';
           }
+          break;
+        }
+
+        case 'SIGNAL': {
+          organism.energy -= this.config.signalCost;
+          energyDelta -= this.config.signalCost;
+          organism.signalTick = this.tick;
+          this.signalsTotal++;
+          if (sensed.currentCellFood > 0) this.signalsOnFoodTotal++;
+          outcome = 'success';
           break;
         }
 
@@ -849,6 +868,8 @@ export class World {
         this.immigrantsTotal,
         this.config
       ),
+      signalsTotal: this.signalsTotal,
+      signalsOnFoodTotal: this.signalsOnFoodTotal,
       season: this.worldSeason(),
     };
   }

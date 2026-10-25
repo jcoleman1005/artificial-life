@@ -16,6 +16,9 @@ export const POLICY_WEIGHT_KEYS = [
   'eatPriority',
   'hungerUrgency',
   'followFoodParent',
+  'signalOnFood',
+  'signalWhenHungry',
+  'followSignal',
 ] as const satisfies readonly (keyof PolicyWeights)[];
 
 export type PolicyWeightKey = (typeof POLICY_WEIGHT_KEYS)[number];
@@ -43,6 +46,8 @@ export interface HistorySample {
   readonly kinSharesTotal: number;
   readonly parentalSharesTotal: number;
   readonly immigrantsTotal: number;
+  readonly signalsTotal: number;
+  readonly signalsOnFoodTotal: number;
   /** Whether this sample fell in a lean season. */
   readonly lean: boolean;
   /** Population mean and standard deviation of each inherited policy weight. */
@@ -134,6 +139,8 @@ export class MetricsHistory {
       kinSharesTotal: metrics.kinSharesTotal,
       parentalSharesTotal: metrics.parentalSharesTotal,
       immigrantsTotal: metrics.immigrantsTotal,
+      signalsTotal: metrics.signalsTotal,
+      signalsOnFoodTotal: metrics.signalsOnFoodTotal,
       lean: metrics.season === 'lean',
       weights: computeWeightStats(organisms),
       carryCapacity: meanAndSd(organisms.map((o) => o.carryCapacity)),
@@ -166,6 +173,8 @@ export class MetricsHistory {
       'kin_shares_total',
       'parental_shares_total',
       'immigrants_total',
+      'signals_total',
+      'signals_on_food_total',
       'lean_season',
       'carry_capacity_mean',
       'carry_capacity_sd',
@@ -191,6 +200,8 @@ export class MetricsHistory {
         s.kinSharesTotal,
         s.parentalSharesTotal,
         s.immigrantsTotal,
+        s.signalsTotal,
+        s.signalsOnFoodTotal,
         s.lean ? 1 : 0,
         s.carryCapacity.mean.toFixed(4),
         s.carryCapacity.sd.toFixed(4),

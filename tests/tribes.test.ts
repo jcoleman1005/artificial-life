@@ -25,6 +25,9 @@ const NEUTRAL: PolicyWeights = {
   eatPriority: 0,
   hungerUrgency: 0,
   followFoodParent: 0,
+  signalOnFood: 0,
+  signalWhenHungry: 0,
+  followSignal: 0,
 };
 
 function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organism> = {}): Organism {
@@ -44,6 +47,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
     carriedFood: 0,
     foodGiven: 0,
     foodReceived: 0,
+    signalTick: -1,
     recentHistory: [],
     ...overrides,
   };

@@ -43,6 +43,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   brainMutationRate: 0.05,
   brainMutationStdDev: 0.3,
   childhoodTicks: 800, // One full plenty-to-lean season cycle
+  signalsEnabled: true,
+  signalCost: 0.2,
+  signalRadius: 8, // Signals carry well beyond sight (sensingRadius)
   immigrationInterval: 25,
   immigrationCount: 1,
   seasonLength: 800,

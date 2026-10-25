@@ -50,6 +50,7 @@ describe('Artificial Life Core Mechanics', () => {
       moveCost: 2.0,
       maxEnergy: 50,
       initialEnergy: 10,
+      signalsEnabled: false, // boxed in, resting is its only choice
     });
 
     const org = Array.from(world.organisms.values())[0];
@@ -107,6 +108,9 @@ describe('Artificial Life Core Mechanics', () => {
         eatPriority: 0,
         hungerUrgency: 0,
         followFoodParent: 0,
+        signalOnFood: 0,
+        signalWhenHungry: 0,
+        followSignal: 0,
       },
       lineage: { id: 'lineage-1', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -118,6 +122,7 @@ describe('Artificial Life Core Mechanics', () => {
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
+      signalTick: -1,
       recentHistory: [],
     };
     world.organisms.set(org.id, org);
@@ -182,6 +187,9 @@ describe('Artificial Life Core Mechanics', () => {
         eatPriority: 0,
         hungerUrgency: 0,
         followFoodParent: 0,
+        signalOnFood: 0,
+        signalWhenHungry: 0,
+        followSignal: 0,
       },
       lineage: { id: 'lineage-1', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -193,6 +201,7 @@ describe('Artificial Life Core Mechanics', () => {
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
+      signalTick: -1,
       recentHistory: [],
     };
     world.organisms.set(org.id, org);
@@ -251,6 +260,9 @@ describe('Artificial Life Core Mechanics', () => {
         eatPriority: 0,
         hungerUrgency: 0,
         followFoodParent: 0,
+        signalOnFood: 0,
+        signalWhenHungry: 0,
+        followSignal: 0,
       },
       lineage: { id: 'lin-A', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -262,6 +274,7 @@ describe('Artificial Life Core Mechanics', () => {
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
+      signalTick: -1,
       recentHistory: [],
     };
 
@@ -285,6 +298,9 @@ describe('Artificial Life Core Mechanics', () => {
         eatPriority: 0,
         hungerUrgency: 0,
         followFoodParent: 0,
+        signalOnFood: 0,
+        signalWhenHungry: 0,
+        followSignal: 0,
       },
       lineage: { id: 'lin-B', parentId: null, generation: 1, birthTick: 0 },
       age: 0,
@@ -296,6 +312,7 @@ describe('Artificial Life Core Mechanics', () => {
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
+      signalTick: -1,
       recentHistory: [],
     };
 
@@ -364,6 +381,9 @@ describe('Artificial Life Core Mechanics', () => {
         eatPriority: 0,
         hungerUrgency: 0,
         followFoodParent: 0,
+        signalOnFood: 0,
+        signalWhenHungry: 0,
+        followSignal: 0,
       },
       lineage: { id: 'clan-alpha', parentId: null, generation: 1, birthTick: 0 },
       age: 5,
@@ -375,6 +395,7 @@ describe('Artificial Life Core Mechanics', () => {
       carriedFood: 0,
       foodGiven: 0,
       foodReceived: 0,
+      signalTick: -1,
       recentHistory: [],
     };
 
@@ -427,6 +448,9 @@ describe('Artificial Life Core Mechanics', () => {
       eatPriority: 0,
       hungerUrgency: 0,
       followFoodParent: 0,
+      signalOnFood: 0,
+      signalWhenHungry: 0,
+      followSignal: 0,
     };
 
     // If mutation rate is 0, offspring policy is strictly identical to parent

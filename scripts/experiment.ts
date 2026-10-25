@@ -63,6 +63,10 @@ function runJob(job: Job): RunResult {
   const lastRegion = new Map<string, number>();
   let regionChanges = 0;
   let inRegionSum = 0;
+  // Signals, over the last 20%: how often organisms on food signal compared
+  // with how often anyone signals (does a signal say "food here"?), and
+  // whether moves made with a signal in range head toward it.
+  const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, movesWithSignal: 0, movesToward: 0 };
 
   for (let t = 1; t <= job.ticks; t++) {
     world.step();
@@ -94,6 +98,19 @@ function runJob(job: Job): RunResult {
         const ok = d.outcome === 'success' || d.outcome === 'rested';
         const key = ok ? base : `${base}Failed`;
         actions[key] = (actions[key] ?? 0) + 1;
+        sig.decisions++;
+        const onFood = d.sensed.currentCellFood > 0;
+        const signalled = d.chosenAction.type === 'SIGNAL';
+        if (signalled) sig.sent++;
+        if (onFood) sig.onFood++;
+        if (onFood && signalled) sig.onFoodSent++;
+        const s = d.sensed.nearestSignal;
+        if (s && d.chosenAction.type.startsWith('MOVE_') && d.outcome === 'success') {
+          sig.movesWithSignal++;
+          const t = d.chosenAction.type;
+          const [mx, my] = t.endsWith('NORTH') ? [0, -1] : t.endsWith('SOUTH') ? [0, 1] : t.endsWith('EAST') ? [1, 0] : [-1, 0];
+          if (mx * s.dx + my * s.dy > 0) sig.movesToward++;
+        }
       }
     }
   }
@@ -111,6 +128,9 @@ function runJob(job: Job): RunResult {
     ...(world.foodRegions.length
       ? { 'inRegion%': (100 * inRegionSum) / Math.max(1, popSum), regionMovesPer1k: (1000 * regionChanges) / job.ticks }
       : {}),
+    'signal%': (100 * sig.sent) / Math.max(1, sig.decisions),
+    'signalOnFood%': (100 * sig.onFoodSent) / Math.max(1, sig.onFood),
+    'movesTowardSignal%': (100 * sig.movesToward) / Math.max(1, sig.movesWithSignal),
     births: m.birthsTotal,
     deaths: m.deathsTotal,
     giftsToOthers: m.sharesTotal - m.parentalSharesTotal,

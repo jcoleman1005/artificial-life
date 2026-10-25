@@ -25,6 +25,9 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   eatPriority: 'Eat priority',
   hungerUrgency: 'Hunger urgency',
   followFoodParent: 'Follow food parent',
+  signalOnFood: 'Signal on food',
+  signalWhenHungry: 'Signal when hungry',
+  followSignal: 'Follow signals',
 };
 
 const REFERENCE = '#64748b';
@@ -57,6 +60,14 @@ function ratePer100(total: (s: HistorySample) => number) {
 // Ordinary gifts exclude parent-to-child care, which has its own chart.
 const sharesPer100Ticks = ratePer100((s) => s.sharesTotal - s.parentalSharesTotal);
 const parentalSharesPer100Ticks = ratePer100((s) => s.parentalSharesTotal);
+const signalsPer100Ticks = ratePer100((s) => s.signalsTotal);
+
+/** Share of signals sent while standing on food, between two samples. */
+function signalsOnFoodShare(s: HistorySample, prev?: HistorySample): number {
+  if (!prev) return 0;
+  const sent = s.signalsTotal - prev.signalsTotal;
+  return sent > 0 ? (s.signalsOnFoodTotal - prev.signalsOnFoodTotal) / sent : 0;
+}
 
 function inGroupBias(s: HistorySample): number {
   return s.weights.shareWithKin.mean - s.weights.shareWithStrangers.mean;
@@ -142,6 +153,21 @@ export class HistoryView {
         fixedRange: [WEIGHT_MIN, WEIGHT_MAX],
         value: inGroupBias,
         format: (s) => `${inGroupBias(s) >= 0 ? '+' : ''}${inGroupBias(s).toFixed(2)}`,
+      },
+      {
+        section: 'Signals',
+        label: 'Signals sent',
+        fixedRange: null,
+        value: signalsPer100Ticks,
+        format: (s, prev) => `${signalsPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      {
+        section: 'Signals',
+        label: 'Signals sent on food',
+        fixedRange: [0, 1],
+        value: signalsOnFoodShare,
+        format: (s, prev) => pct(signalsOnFoodShare(s, prev)),
+        axisLabel: pct,
       },
       {
         section: 'Body traits',
