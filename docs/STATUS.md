@@ -9,7 +9,7 @@ _Last updated: 2026-10-25._
 
 - `main`: everything to date (layout fix, trend charts, tribes, sharing, seasons, traits, brains, engine speed-up). Start new work from here.
 - `fix/mobile-layout`, `feature/trend-charts`, `feature/tribes`, `feature/slower-speeds`, `tools/proxmox-scout`: older branches, fully merged into `main`; safe to delete.
-- `claude/agents-status-docs-idfhjh`: larger world, food regions, staggered seasons, signals, zoom (this session). Merge once checked on the phone.
+- `claude/agents-status-docs-idfhjh`: larger world, food regions, staggered seasons, signals, zoom, and the redesigned UI (this session). Merge once checked on the phone.
 - Each session works on its own branch off `main`; merge it once checked on the phone.
 
 ## Running it
@@ -33,8 +33,15 @@ _Last updated: 2026-10-25._
 - Two inherited controllers, switchable live in the app:
   - **Dials**: 17 interpretable weights. Food first is an evolvable head start (`eatPriority`, `hungerUrgency`), not a fixed rule.
   - **Brain**: a tiny neural network (30 action features → 6 hidden → score, plus direct connections starting as a dial-like head start).
-- UI: zoom 1–4× (follows the selected organism; drag to pan), World / Food / Signals toggles, speeds from ¼× (1.5 ticks/s) to 10×; organisms glide smoothly between cells (drawing only); action glyphs and a legend, an inspector with per-input score breakdowns, trend charts (population, tribes and sharing, body traits, brains, weights) with lean seasons shaded, and CSV export.
-- 83 deterministic tests.
+- UI (redesigned 2026-10-25, "Pebbles" art, always dark):
+  - World full-bleed. Organisms are glowing orbs in their tag hue (size = energy), food is berry clusters (count = stock), rocks are rounded blocks, fertile regions are soft glows (amber while lean). At full view organisms are plain dots; action glyphs fade in from about 2× zoom (white strokes; signals are rings in the organism's own hue). Zoom 1–6× (+/− buttons, mouse wheel), drag to pan when zoomed, organisms glide between cells.
+  - Floating playback pill: play/pause, step, speed (tap cycles ¼× ½× 1× 2× 5× 10×), tick.
+  - Bottom sheet (portrait) peeks with population, season (or which regions are lean, by compass) and a colour-group strip; drag or tap up for Stats (status, metrics, colour groups, legend), Trends (charts, CSV) and Organism (inspector) tabs. Landscape phone / desktop: the sheet is an always-open right-hand panel.
+  - Tap an organism (nearest within a finger's reach): zooms to 3×, follows it, and shows a card with its generated name, energy and what it is doing; tap the card for the inspector. Tap empty space to deselect.
+  - Generated names (`src/ui/names.ts`): a given name from the organism id plus a family name shared by its lineage. Display only; simulation ids are unchanged.
+  - Colour groups (`src/ui/groups.ts`): organisms bucketed into twelve 30° tag-hue groups ("groups", not species). Display only.
+  - Settings sheet (gear in the peek strip): World (size, food layout, seasons), Behaviour (sharing, signals, controller), Display (colour by tag/family), Run (seed, Reset, New seed, status).
+- 88 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -86,27 +93,16 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 
 ## Next steps (suggested order)
 
-1. UI redesign (see the UI plan below), together with moving the simulation into a Web Worker so the UI stays smooth at 10×.
+1. Move the simulation into a Web Worker so the UI stays smooth at 10× (the redesigned UI still runs the loop on the main thread). Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate at 10× with ~400 orbs).
 2. Signals: longer runs (50k+ ticks) and/or a reason to signal (e.g. kin nearby on food) before concluding they can't evolve meaning. Compare against `signalsEnabled=false` every time.
 3. Benchmark the engine on the S21 in Termux (`npm run perf`) to confirm it as the host.
 4. Snapshots and resume, then the always-on Node.js server (runs the world, saves snapshots, serves the app), then the S21 setup above.
 5. Long brain runs (100k+ ticks) to see whether the hidden layer starts doing work. Needs the server.
 6. More openings for emergence: sexual breeding (planned; the UI should name colour groups in a way that scales to it), conflict between groups (deferred in `AGENTS.md`).
 
-## UI plan (agreed 2026-10-25, not built yet)
-
-Mostly for watching on the phone; experiments stay one tap away.
-
-- **World full-bleed**, always dark. Playful, but the art direction is **"Pebbles"**: glowing soft orbs with a gradient, berry-cluster food, rounded rocks, regions as soft glows (amber when lean). At full 60×60 view organisms are simple dots; glyphs and detail fade in from 2× zoom. Keep the action glyphs, restyled to match (e.g. white strokes, soft rings for signals).
-- **Floating playback pill** over the bottom of the world: play/pause, speed, step.
-- **Always visible**: population, season (or which regions are lean), and a **colour strip** of the main colour groups by headcount. Don't call them "species" yet: use a neutral word ("groups") until breeding defines species.
-- **Bottom sheet** that peeks with those numbers and drags up into tabs: Stats, Trends, Organism.
-- **Tap an organism**: camera zooms in and follows it; a small card shows its name, energy and what it's doing; tap the card for the full inspector.
-- **Generated names** (deterministic; a lineage shares a family name) instead of `org-1234`.
-- **Experiment switches** (World, Food, Sharing, Signals, Controller, Seasons, Colour, seed) move into a settings sheet, grouped.
-- **Landscape / desktop**: world on the left, the sheet becomes a right-hand side panel.
-
 ## Known issues
+
+- UI: no pinch-to-zoom yet (use the +/− buttons or the mouse wheel). Colour groups are fixed 30° hue buckets, so one family drifting across a bucket edge shows as two groups. Several lean regions are shown as compass codes (e.g. "Lean: NW, SW") to fit the peek strip. In landscape on a phone the world at 1× is small (the side panel takes ~40% of the width).
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - The inspector's dial weights are shown but inactive under the brain controller (it's labelled).
