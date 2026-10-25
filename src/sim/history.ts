@@ -107,10 +107,15 @@ export class MetricsHistory {
     this.interval = 1;
   }
 
-  public record(metrics: WorldMetrics, organisms: readonly Organism[]): void {
-    if (metrics.tick % this.interval !== 0) return;
+  /** Whether a sample is due at this tick (so callers can skip computing metrics). */
+  public wantsSample(tick: number): boolean {
+    if (tick % this.interval !== 0) return false;
     const last = this.samples[this.samples.length - 1];
-    if (last && last.tick >= metrics.tick) return; // already sampled this tick
+    return !last || last.tick < tick;
+  }
+
+  public record(metrics: WorldMetrics, organisms: readonly Organism[]): void {
+    if (!this.wantsSample(metrics.tick)) return;
 
     this.samples.push({
       tick: metrics.tick,

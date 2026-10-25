@@ -18,11 +18,10 @@ export function senseEnvironment(
 ): SensedInputs {
   const { x, y, energy } = organism;
   const radius = config.sensingRadius;
-  const currentKey = `${x},${y}`;
+  const width = snapshot.gridWidth;
 
-  // Current cell food
-  const currentPatch = snapshot.foodPatches.get(currentKey);
-  const currentCellFood = currentPatch ? currentPatch.stock : 0;
+  // Current cell food (grids are indexed y * width + x)
+  const currentCellFood = snapshot.foodGrid[y * width + x];
 
   let nearestFood: SensedEntity | null = null;
   let minFoodDist = Infinity;
@@ -39,6 +38,9 @@ export function senseEnvironment(
   let kinPullX = 0;
   let kinPullY = 0;
 
+  // Organisms in the window, as indices into snapshot.organisms
+  const nearbyIndices: number[] = [];
+
   // Scan local window [x - radius, x + radius] x [y - radius, y + radius]
   for (let dy = -radius; dy <= radius; dy++) {
     for (let dx = -radius; dx <= radius; dx++) {
@@ -47,7 +49,6 @@ export function senseEnvironment(
       const targetX = x + dx;
       const targetY = y + dy;
       const manhattanDist = Math.abs(dx) + Math.abs(dy);
-      const key = `${targetX},${targetY}`;
 
       // Check boundary as an obstacle
       const isOutOfBounds =
@@ -70,8 +71,12 @@ export function senseEnvironment(
         continue;
       }
 
+      const cell = targetY * width + targetX;
+      const occupant = snapshot.organismGrid[cell];
+      if (occupant >= 0) nearbyIndices.push(occupant);
+
       // Check terrain obstacles
-      if (snapshot.obstacles.has(key)) {
+      if (snapshot.obstacleGrid[cell] === 1) {
         if (manhattanDist < minObstacleDist) {
           minObstacleDist = manhattanDist;
           nearestObstacle = {
@@ -85,8 +90,8 @@ export function senseEnvironment(
       }
 
       // Check food patches
-      const patch = snapshot.foodPatches.get(key);
-      if (patch && patch.stock > 0) {
+      const stock = snapshot.foodGrid[cell];
+      if (stock > 0) {
         if (manhattanDist < minFoodDist) {
           minFoodDist = manhattanDist;
           nearestFood = {
@@ -95,19 +100,22 @@ export function senseEnvironment(
             distance: manhattanDist,
             dx,
             dy,
-            value: patch.stock,
+            value: stock,
           };
         }
       }
     }
   }
 
-  // Sense other organisms within local radius
-  for (const other of snapshot.organisms) {
+  // Sense other organisms within local radius, in snapshot order (the sums
+  // and nearest-neighbour tie-breaks below depend on that order)
+  nearbyIndices.sort((a, b) => a - b);
+  for (const index of nearbyIndices) {
+    const other = snapshot.organisms[index];
     if (other.id === organism.id) continue;
     const dx = other.x - x;
     const dy = other.y - y;
-    if (Math.abs(dx) <= radius && Math.abs(dy) <= radius) {
+    {
       surroundingOrganismCount++;
       const manhattanDist = Math.abs(dx) + Math.abs(dy);
 
@@ -117,7 +125,7 @@ export function senseEnvironment(
       if (similarity >= config.kinSimilarity) nearbyKinCount++;
       if (similarity <= config.strangerSimilarity) nearbyStrangerCount++;
       const sign = similarity * 2 - 1;
-      const norm = Math.hypot(dx, dy);
+      const norm = Math.sqrt(dx * dx + dy * dy);
       const weight = 1 / (1 + 0.3 * manhattanDist);
       kinPullX += (sign * weight * dx) / norm;
       kinPullY += (sign * weight * dy) / norm;
@@ -176,7 +184,7 @@ export function senseEnvironment(
         nb.x < snapshot.gridWidth &&
         nb.y >= 0 &&
         nb.y < snapshot.gridHeight &&
-        !snapshot.obstacles.has(`${nb.x},${nb.y}`)
+        snapshot.obstacleGrid[nb.y * width + nb.x] === 0
       ) {
         hasValidCell = true;
         break;

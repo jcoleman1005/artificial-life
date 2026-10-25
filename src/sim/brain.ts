@@ -120,7 +120,7 @@ function directionOf(type: string): [number, number] {
 /** Alignment of a unit move with an offset, scaled down with distance. */
 function aligned(dx: number, dy: number, target: { dx: number; dy: number; distance: number } | null, falloff: number) {
   if (!target) return 0;
-  const norm = Math.hypot(target.dx, target.dy) || 1;
+  const norm = Math.sqrt(target.dx * target.dx + target.dy * target.dy) || 1;
   const dot = (dx * target.dx + dy * target.dy) / norm;
   return dot / (1 + falloff * target.distance);
 }
@@ -146,43 +146,49 @@ export function brainFeatures(
   let moveKin = 0;
   if (isMove && sensed.kinPull) {
     const { dx: px, dy: py } = sensed.kinPull;
-    moveKin = (dx * px + dy * py) / Math.max(1, Math.hypot(px, py));
+    moveKin = (dx * px + dy * py) / Math.max(1, Math.sqrt(px * px + py * py));
   }
   const headroom = Math.max(1, config.maxEnergy - config.reproductionThreshold);
 
-  const f: Record<BrainInput, number> = {
-    bias: 1,
-    isMove: isMove ? 1 : 0,
-    isEat: type === 'EAT' ? 1 : 0,
-    isPickUp: type === 'PICK_UP' ? 1 : 0,
-    isReproduce: isReproduce ? 1 : 0,
-    isGive: isGive ? 1 : 0,
-    isRest: type === 'REST' ? 1 : 0,
-    energy: sensed.energyRatio,
-    carried: sensed.carriedFood / Math.max(1, organism.carryCapacity),
-    crowding: Math.min(1, sensed.surroundingOrganismCount / 8),
-    eatHunger: type === 'EAT' ? hunger : 0,
-    pickUpRoom: type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity) : 0,
-    reproFullness: isReproduce ? Math.max(0, organism.energy - config.reproductionThreshold) / headroom : 0,
-    giveNeed: isGive && !action.recipientIsChild ? need : 0,
-    giveNeedAlike: isGive && !action.recipientIsChild ? need * (action.recipientSimilarity ?? 0) : 0,
-    giveNeedChild: isGive && action.recipientIsChild ? need : 0,
-    moveFood: isMove ? aligned(dx, dy, sensed.nearestFood, 0.25) : 0,
-    moveFoodHungry: isMove && hungry ? aligned(dx, dy, sensed.nearestFood, 0) : 0,
-    moveObstacle: isMove ? aligned(dx, dy, sensed.nearestObstacle, 0.5) : 0,
-    moveCrowd: isMove ? aligned(dx, dy, sensed.nearestOrganism, 0.3) : 0,
-    moveKin,
-    moveParentFood: isMove ? aligned(dx, dy, sensed.parentWithFood, 0) : 0,
-    moveFamilySwap: isMove && action.swapWithId ? 1 : 0,
-    moveNoise: isMove ? prng.nextFloat(-1, 1) : 0,
-    pushedByEating: canEatNow && type !== 'EAT' && !action.recipientIsChild ? 1 : 0,
-  };
-  return BRAIN_INPUTS.map((name) => f[name]);
+  // Order must match BRAIN_INPUTS (checked by a test).
+  return [
+    1,
+    isMove ? 1 : 0, // isMove
+    type === 'EAT' ? 1 : 0, // isEat
+    type === 'PICK_UP' ? 1 : 0, // isPickUp
+    isReproduce ? 1 : 0, // isReproduce
+    isGive ? 1 : 0, // isGive
+    type === 'REST' ? 1 : 0, // isRest
+    sensed.energyRatio, // energy
+    sensed.carriedFood / Math.max(1, organism.carryCapacity), // carried
+    Math.min(1, sensed.surroundingOrganismCount / 8), // crowding
+    type === 'EAT' ? hunger : 0, // eatHunger
+    type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity) : 0, // pickUpRoom
+    isReproduce ? Math.max(0, organism.energy - config.reproductionThreshold) / headroom : 0, // reproFullness
+    isGive && !action.recipientIsChild ? need : 0, // giveNeed
+    isGive && !action.recipientIsChild ? need * (action.recipientSimilarity ?? 0) : 0, // giveNeedAlike
+    isGive && action.recipientIsChild ? need : 0, // giveNeedChild
+    isMove ? aligned(dx, dy, sensed.nearestFood, 0.25) : 0, // moveFood
+    isMove && hungry ? aligned(dx, dy, sensed.nearestFood, 0) : 0, // moveFoodHungry
+    isMove ? aligned(dx, dy, sensed.nearestObstacle, 0.5) : 0, // moveObstacle
+    isMove ? aligned(dx, dy, sensed.nearestOrganism, 0.3) : 0, // moveCrowd
+    moveKin, // moveKin
+    isMove ? aligned(dx, dy, sensed.parentWithFood, 0) : 0, // moveParentFood
+    isMove && action.swapWithId ? 1 : 0, // moveFamilySwap
+    isMove ? prng.nextFloat(-1, 1) : 0, // moveNoise
+    canEatNow && type !== 'EAT' && !action.recipientIsChild ? 1 : 0, // pushedByEating
+  ];
 }
 
 /** Score for one feature vector, with the per-input direct contributions. */
 export function brainScore(brain: Brain, x: readonly number[]): { score: number; direct: number[]; hidden: number } {
-  const direct = x.map((v, i) => v * brain.skip[i]);
+  const direct = new Array<number>(BRAIN_INPUT_COUNT);
+  let directSum = 0;
+  for (let i = 0; i < BRAIN_INPUT_COUNT; i++) {
+    direct[i] = x[i] * brain.skip[i];
+  }
+  // Summed left to right, like the reduce it replaces, so scores are unchanged.
+  for (let i = 0; i < BRAIN_INPUT_COUNT; i++) directSum += direct[i];
   let hidden = brain.outBias;
   for (let h = 0; h < BRAIN_HIDDEN; h++) {
     let sum = brain.hiddenBias[h];
@@ -190,7 +196,7 @@ export function brainScore(brain: Brain, x: readonly number[]): { score: number;
     for (let i = 0; i < BRAIN_INPUT_COUNT; i++) sum += brain.hidden[row + i] * x[i];
     hidden += brain.out[h] * Math.tanh(sum);
   }
-  const score = direct.reduce((a, v) => a + v, 0) + hidden;
+  const score = directSum + hidden;
   return { score, direct, hidden };
 }
 
@@ -210,11 +216,12 @@ export function evaluateBrain(
   const scores: ActionScore[] = legalActions.map((action) => {
     const x = brainFeatures(action, organism, sensed, config, canEatNow, prng);
     const { score, direct, hidden } = brainScore(organism.brain, x);
+    // Unrounded here (rounding is costly in this hot path); the inspector rounds for display.
     const components: Record<string, number> = {};
-    direct.forEach((v, i) => {
-      if (Math.abs(v) >= 0.001) components[BRAIN_INPUTS[i]] = Number(v.toFixed(3));
-    });
-    components['hiddenLayer'] = Number(hidden.toFixed(3));
+    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) {
+      if (Math.abs(direct[i]) >= 0.001) components[BRAIN_INPUTS[i]] = direct[i];
+    }
+    components['hiddenLayer'] = hidden;
     return { action, totalScore: Number(score.toFixed(3)), components };
   });
 

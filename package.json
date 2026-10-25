@@ -9,7 +9,9 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "tsc -b --pretty"
+    "check": "tsc -b --pretty",
+    "fingerprint": "vite-node scripts/fingerprint.ts",
+    "perf": "vite-node scripts/perf.ts"
   },
   "dependencies": {},
   "devDependencies": {

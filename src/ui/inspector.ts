@@ -139,7 +139,7 @@ export class InspectorView {
         .map((s) => {
           const isChosen = s.action.type === chosenAction.type;
           const compDetails = Object.entries(s.components)
-            .map(([k, v]) => `${k}: ${v >= 0 ? '+' : ''}${v}`)
+            .map(([k, v]) => `${k}: ${v >= 0 ? '+' : ''}${Number(v.toFixed(3))}`)
             .join(', ');
 
           return `

@@ -1,5 +1,6 @@
 import type { FoodPatch, Organism } from '../sim/types';
 import type { World } from '../sim/world';
+import { seasonAt } from '../sim/seasons';
 
 /** What an organism's colour shows: its visible tag, or its founding family. */
 export type ColorMode = 'tag' | 'lineage';
@@ -91,7 +92,8 @@ export class CanvasRenderer {
     const selectedOrg = this.world.getSelectedOrganism();
 
     // 1. Background (warmer and darker in a lean season)
-    ctx.fillStyle = this.world.getMetrics().season === 'lean' ? '#17130c' : '#0f171e';
+    const lean = seasonAt(this.world.tick, this.world.config)?.season === 'lean';
+    ctx.fillStyle = lean ? '#17130c' : '#0f171e';
     ctx.fillRect(0, 0, canvasSize, canvasSize);
 
     // 2. Subtle grid lines

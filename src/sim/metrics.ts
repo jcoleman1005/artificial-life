@@ -180,7 +180,7 @@ export function computeWorldMetrics(
   activePatchCount: number,
   birthsTotal: number,
   deathsTotal: number,
-  deceasedLifespans: readonly number[],
+  deceased: { readonly count: number; readonly lifespanSum: number },
   sharesTotal: number,
   kinSharesTotal: number,
   parentalSharesTotal: number,
@@ -202,13 +202,8 @@ export function computeWorldMetrics(
   }
 
   const averageLifespan =
-    deceasedLifespans.length > 0
-      ? Number(
-          (
-            deceasedLifespans.reduce((a, b) => a + b, 0) /
-            deceasedLifespans.length
-          ).toFixed(1)
-        )
+    deceased.count > 0
+      ? Number((deceased.lifespanSum / deceased.count).toFixed(1))
       : population > 0
       ? Number(
           (organisms.reduce((a, b) => a + b.age, 0) / population).toFixed(1)

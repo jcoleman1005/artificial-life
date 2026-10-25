@@ -123,12 +123,14 @@ export function getLegalActions(
     }
 
     // Obstacle check
-    if (snapshot.obstacles.has(`${targetX},${targetY}`)) {
+    const cell = targetY * snapshot.gridWidth + targetX;
+    if (snapshot.obstacleGrid[cell] === 1) {
       continue;
     }
 
     // Parents and their children may pass through each other by trading places.
-    const occupant = snapshot.organismAt.get(`${targetX},${targetY}`);
+    const occupantIndex = snapshot.organismGrid[cell];
+    const occupant = occupantIndex >= 0 ? snapshot.organisms[occupantIndex] : undefined;
     const swapRelation =
       occupant?.lineage.parentId === organism.id
         ? 'child'
@@ -184,7 +186,7 @@ export function getLegalActions(
       }
 
       // Cannot place child on obstacle
-      if (snapshot.obstacles.has(`${targetX},${targetY}`)) {
+      if (snapshot.obstacleGrid[targetY * snapshot.gridWidth + targetX] === 1) {
         continue;
       }
 
@@ -210,7 +212,11 @@ export function getLegalActions(
     for (const give of candidateGives) {
       const targetX = x + give.dx;
       const targetY = y + give.dy;
-      const recipient = snapshot.organismAt.get(`${targetX},${targetY}`);
+      const recipientIndex =
+        targetX >= 0 && targetX < snapshot.gridWidth && targetY >= 0 && targetY < snapshot.gridHeight
+          ? snapshot.organismGrid[targetY * snapshot.gridWidth + targetX]
+          : -1;
+      const recipient = recipientIndex >= 0 ? snapshot.organisms[recipientIndex] : undefined;
       if (!recipient || recipient.energy >= half) continue;
 
       actions.push({
@@ -327,7 +333,7 @@ export function scoreAction(
       // 1. Food attraction component
       if (sensed.nearestFood) {
         const { dx: foodDx, dy: foodDy, distance } = sensed.nearestFood;
-        const norm = Math.hypot(foodDx, foodDy) || 1;
+        const norm = Math.sqrt(foodDx * foodDx + foodDy * foodDy) || 1;
         const dotProduct = (dx * (foodDx / norm) + dy * (foodDy / norm));
         const distanceFactor = 1 / (1 + 0.25 * distance);
         const foodComp = policy.foodAttraction * dotProduct * distanceFactor * 1.5;
@@ -346,7 +352,7 @@ export function scoreAction(
       // In childhood: pull toward a parent that is carrying food
       if (sensed.parentWithFood) {
         const { dx: pdx, dy: pdy } = sensed.parentWithFood;
-        const norm = Math.hypot(pdx, pdy) || 1;
+        const norm = Math.sqrt(pdx * pdx + pdy * pdy) || 1;
         const dot = dx * (pdx / norm) + dy * (pdy / norm);
         const parentComp = policy.followFoodParent * PARENT_PULL_SCALE * dot;
         components['parentPull'] = Number(parentComp.toFixed(3));
@@ -356,7 +362,7 @@ export function scoreAction(
       // 2. Obstacle avoidance component
       if (sensed.nearestObstacle) {
         const { dx: obsDx, dy: obsDy, distance } = sensed.nearestObstacle;
-        const norm = Math.hypot(obsDx, obsDy) || 1;
+        const norm = Math.sqrt(obsDx * obsDx + obsDy * obsDy) || 1;
         // Repulsion: dot with vector pointing AWAY from obstacle (-obsDx, -obsDy)
         const dotAway = (dx * (-obsDx / norm) + dy * (-obsDy / norm));
         const distanceFactor = 1 / (1 + 0.5 * distance);
@@ -368,7 +374,7 @@ export function scoreAction(
       // 3. Crowding avoidance component
       if (sensed.nearestOrganism) {
         const { dx: orgDx, dy: orgDy, distance } = sensed.nearestOrganism;
-        const norm = Math.hypot(orgDx, orgDy) || 1;
+        const norm = Math.sqrt(orgDx * orgDx + orgDy * orgDy) || 1;
         const dotAway = (dx * (-orgDx / norm) + dy * (-orgDy / norm));
         const distanceFactor = 1 / (1 + 0.3 * distance);
         const crowdComp = policy.crowdingAvoidance * dotAway * distanceFactor;
@@ -379,7 +385,7 @@ export function scoreAction(
       // 4. Kin affinity: toward look-alikes / away from strangers (or the reverse)
       if (sensed.kinPull) {
         const { dx: px, dy: py } = sensed.kinPull;
-        const scale = Math.max(1, Math.hypot(px, py));
+        const scale = Math.max(1, Math.sqrt(px * px + py * py));
         const kinComp = (policy.kinAffinity * (dx * px + dy * py)) / scale;
         components['kinPull'] = Number(kinComp.toFixed(3));
         totalScore += kinComp;

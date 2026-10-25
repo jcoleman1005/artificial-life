@@ -41,10 +41,12 @@ export class World {
   public kinSharesTotal = 0;
   public parentalSharesTotal = 0;
   public immigrantsTotal = 0;
-  public readonly deceasedLifespans: number[] = [];
+  /** Running totals of lifespans at death (a total, not a list, so memory stays flat). */
+  public deceasedCount = 0;
+  public deceasedLifespanSum = 0;
 
   public selectedOrganismId: string | null = null;
-  public metrics!: WorldMetrics;
+  private cachedMetrics: WorldMetrics | null = null;
   /** Sampled metrics over the whole run, for trend charts and export. */
   public readonly history = new MetricsHistory();
 
@@ -65,7 +67,8 @@ export class World {
     this.kinSharesTotal = 0;
     this.parentalSharesTotal = 0;
     this.immigrantsTotal = 0;
-    this.deceasedLifespans.length = 0;
+    this.deceasedCount = 0;
+    this.deceasedLifespanSum = 0;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -192,6 +195,18 @@ export class World {
       foodCopy.set(k, { ...v });
     }
 
+    const { gridWidth, gridHeight } = this.config;
+    const obstacleGrid = new Uint8Array(gridWidth * gridHeight);
+    const foodGrid = new Int32Array(gridWidth * gridHeight);
+    const organismGrid = new Int32Array(gridWidth * gridHeight).fill(-1);
+    for (const key of this.obstacles) {
+      const [ox, oy] = key.split(',').map(Number);
+      obstacleGrid[oy * gridWidth + ox] = 1;
+    }
+    for (const patch of this.foodPatches.values()) {
+      foodGrid[patch.y * gridWidth + patch.x] = patch.stock;
+    }
+
     const orgsList: Organism[] = [];
     const organismAt = new Map<string, Organism>();
     for (const org of this.organisms.values()) {
@@ -201,6 +216,7 @@ export class World {
         lineage: { ...org.lineage },
         recentHistory: [...org.recentHistory],
       };
+      organismGrid[org.y * gridWidth + org.x] = orgsList.length;
       orgsList.push(copy);
       organismAt.set(`${org.x},${org.y}`, copy);
     }
@@ -213,6 +229,9 @@ export class World {
       foodPatches: foodCopy,
       organisms: orgsList,
       organismAt,
+      obstacleGrid,
+      foodGrid,
+      organismGrid,
     };
   }
 
@@ -334,22 +353,22 @@ export class World {
       }
     }
 
-    // 3c. Prevent head-on cell swaps (A moves to B, B moves to A)
+    // 3c. Prevent head-on cell swaps (A moves to B, B moves to A). Each mover
+    // has one target, so only the organism standing there can be its partner.
+    const intentionAt = new Map<string, IntendedActionData>();
+    for (const item of intentions.values()) {
+      intentionAt.set(`${item.organism.x},${item.organism.y}`, item);
+    }
     for (const itemA of intentions.values()) {
-      if (itemA.approved && itemA.moveTargetKey) {
-        for (const itemB of intentions.values()) {
-          if (itemB !== itemA && itemB.approved && itemB.moveTargetKey) {
-            const posA = `${itemA.organism.x},${itemA.organism.y}`;
-            const posB = `${itemB.organism.x},${itemB.organism.y}`;
-            if (itemA.moveTargetKey === posB && itemB.moveTargetKey === posA) {
-              // Mutual swap conflict: neither can pass through
-              itemA.approved = false;
-              itemA.outcome = 'blocked_by_organism';
-              itemB.approved = false;
-              itemB.outcome = 'blocked_by_organism';
-            }
-          }
-        }
+      if (!itemA.approved || !itemA.moveTargetKey) continue;
+      const itemB = intentionAt.get(itemA.moveTargetKey);
+      if (!itemB || itemB === itemA || !itemB.approved || !itemB.moveTargetKey) continue;
+      if (itemB.moveTargetKey === `${itemA.organism.x},${itemA.organism.y}`) {
+        // Mutual swap conflict: neither can pass through
+        itemA.approved = false;
+        itemA.outcome = 'blocked_by_organism';
+        itemB.approved = false;
+        itemB.outcome = 'blocked_by_organism';
       }
     }
 
@@ -603,6 +622,12 @@ export class World {
         energyAfter: Number(organism.energy.toFixed(2)),
       };
 
+      // Only the latest decision keeps its full scoring breakdown (the
+      // inspector shows it); older entries keep the summary, saving memory.
+      const previous = organism.recentHistory[0];
+      if (previous && previous.scores.length > 0) {
+        organism.recentHistory[0] = { ...previous, scores: [] };
+      }
       organism.recentHistory.unshift(decisionRecord);
       if (organism.recentHistory.length > 8) {
         organism.recentHistory.pop();
@@ -639,7 +664,8 @@ export class World {
     // Phase 5: Deaths
     for (const [id, org] of Array.from(this.organisms.entries())) {
       if (org.energy <= 0) {
-        this.deceasedLifespans.push(org.age);
+        this.deceasedCount++;
+        this.deceasedLifespanSum += org.age;
         this.deathsTotal++;
         this.organisms.delete(id);
       }
@@ -734,9 +760,18 @@ export class World {
   }
 
   /**
-   * Recomputes and caches comprehensive world metrics.
+   * Called at the end of every tick. Metrics are computed lazily (they never
+   * affect the simulation), so this only invalidates the cache and computes
+   * them when the history wants a sample this tick.
    */
   public updateMetrics(): void {
+    this.cachedMetrics = null;
+    if (this.history.wantsSample(this.tick)) {
+      this.history.record(this.getMetrics(), Array.from(this.organisms.values()));
+    }
+  }
+
+  private computeMetrics(): WorldMetrics {
     let totalFoodStock = 0;
     let activePatchCount = 0;
 
@@ -748,7 +783,7 @@ export class World {
     }
 
     const organisms = Array.from(this.organisms.values());
-    this.metrics = {
+    return {
       ...computeWorldMetrics(
         this.tick,
         organisms,
@@ -756,7 +791,7 @@ export class World {
         activePatchCount,
         this.birthsTotal,
         this.deathsTotal,
-        this.deceasedLifespans,
+        { count: this.deceasedCount, lifespanSum: this.deceasedLifespanSum },
         this.sharesTotal,
         this.kinSharesTotal,
         this.parentalSharesTotal,
@@ -765,15 +800,20 @@ export class World {
       ),
       season: seasonAt(this.tick, this.config)?.season ?? null,
     };
-    this.history.record(this.metrics, organisms);
   }
 
   public getOrganism(id: string): Organism | undefined {
     return this.organisms.get(id);
   }
 
+  /** Same as getMetrics(). */
+  public get metrics(): WorldMetrics {
+    return this.getMetrics();
+  }
+
   public getMetrics(): WorldMetrics {
-    return this.metrics;
+    this.cachedMetrics ??= this.computeMetrics();
+    return this.cachedMetrics;
   }
 
   public getOrganismAt(x: number, y: number): Organism | undefined {

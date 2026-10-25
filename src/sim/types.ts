@@ -302,4 +302,10 @@ export interface WorldSnapshot {
   readonly organisms: readonly Organism[];
   /** Snapshot organisms keyed by "x,y", for adjacency checks. */
   readonly organismAt: ReadonlyMap<string, Organism>;
+  /** Fast lookups indexed by y * gridWidth + x: 1 where there is an obstacle. */
+  readonly obstacleGrid: Uint8Array;
+  /** Food stock in each cell (0 when no patch or empty). */
+  readonly foodGrid: Int32Array;
+  /** Index into `organisms` of the organism in each cell, or -1. */
+  readonly organismGrid: Int32Array;
 }
