@@ -16,7 +16,9 @@ NEED_RAM_MB=512
 COMFY_RAM_MB=1024
 NEED_DISK_GB=4
 
-section() { printf '\n== %s ==\n' "$1"; }
+section() { printf '\n== %s ==\n' "$1"; progress "$1"; }
+# Progress goes to stderr: visible in the terminal, kept out of the saved output.
+progress() { printf '[scout %s] %s...\n' "$(date +%H:%M:%S)" "$1" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 IS_ROOT=0
 [ "$(id -u)" -eq 0 ] && IS_ROOT=1
@@ -66,50 +68,88 @@ fi
 
 section "Guests (VMs and containers)"
 ALLOC_RUNNING_MB=0
-if [ "$IS_ROOT" -eq 1 ] && have qm && have pct; then
-  echo "-- VMs --"
-  timeout 20 qm list 2>/dev/null || true
-  echo "-- Containers --"
-  timeout 20 pct list 2>/dev/null || true
-  # Timeouts so a guest locked by a backup or migration cannot stall the scout.
-  for id in $(timeout 20 qm list 2>/dev/null | awk 'NR > 1 && $3 == "running" { print $1 }'); do
-    m=$(timeout 10 qm config "$id" 2>/dev/null | awk '/^memory:/ { print $2 }')
+# Read guest configs straight from /etc/pve (instant, no locks) instead of
+# asking qm/pct, which can wait on a guest locked by a backup.
+if [ -d /etc/pve/qemu-server ] || [ -d /etc/pve/lxc ]; then
+  progress "reading guest configs"
+  running_ids() { timeout -k 2 15 "$1" list 2>/dev/null | awk -v col="$2" 'NR > 1 && $col == "running" { print $1 }'; }
+  echo "-- running guests (id, type, RAM MB, cores) --"
+  for id in $(have qm && running_ids qm 3); do
+    f=/etc/pve/qemu-server/$id.conf
+    m=$(awk -F': ' '$1 == "memory" { print $2; exit }' "$f" 2>/dev/null)
+    c=$(awk -F': ' '$1 == "cores" { print $2; exit }' "$f" 2>/dev/null)
+    printf '  %-5s VM  %6s  %s\n' "$id" "${m:-?}" "${c:-?}"
     ALLOC_RUNNING_MB=$(( ALLOC_RUNNING_MB + ${m:-0} ))
   done
-  for id in $(timeout 20 pct list 2>/dev/null | awk 'NR > 1 && $2 == "running" { print $1 }'); do
-    m=$(timeout 10 pct config "$id" 2>/dev/null | awk '/^memory:/ { print $2 }')
-    [ -n "$m" ] || echo "  (container $id: no answer within 10 s, e.g. locked; not counted)"
-    ALLOC_RUNNING_MB=$(( ALLOC_RUNNING_MB + ${m:-0} ))
+  for id in $(have pct && running_ids pct 2); do
+    f=/etc/pve/lxc/$id.conf
+    m=$(awk -F': ' '$1 == "memory" { print $2; exit }' "$f" 2>/dev/null)
+    c=$(awk -F': ' '$1 == "cores" { print $2; exit }' "$f" 2>/dev/null)
+    printf '  %-5s CT  %6s  %s\n' "$id" "${m:-512}" "${c:-all}"
+    ALLOC_RUNNING_MB=$(( ALLOC_RUNNING_MB + ${m:-512} ))
   done
   echo "RAM allocated to running guests: ${ALLOC_RUNNING_MB} MB of ${MEM_TOTAL_MB} MB host RAM"
 else
-  echo "skipped (needs root and the qm/pct tools)"
+  echo "skipped (no /etc/pve; not a Proxmox host or not root)"
 fi
 
 section "Storage"
-if [ "$IS_ROOT" -eq 1 ] && have pvesm; then
-  echo "(Total/Used/Available are in KiB)"
-  timeout 30 pvesm status 2>/dev/null || true
-  echo "-- storages that can hold container disks (content includes rootdir) --"
-  awk '/^[a-z]+: / { name = $2 } /^[[:space:]]+content/ && /rootdir/ { print "  " name }' \
-    /etc/pve/storage.cfg 2>/dev/null || true
-fi
-df -h / /var/lib/vz 2>/dev/null | awk 'NR == 1 || !seen[$0]++'
-if have lvs && [ "$IS_ROOT" -eq 1 ]; then
-  echo "-- LVM thin pools --"
-  lvs --noheadings -o vg_name,lv_name,lv_size,data_percent,segtype 2>/dev/null | awk '$5 == "thin-pool"' || true
+# Only local storage is measured. Network storage (NFS, SMB, PBS, ...) is
+# listed but never contacted: a slow or offline share can hang any query.
+BEST_NAME=""
+BEST_GB=0
+consider() { # name, free GiB, can hold container disks (1/0)
+  [ "$3" -eq 1 ] && [ "$2" -gt "$BEST_GB" ] && { BEST_GB=$2; BEST_NAME=$1; }
+  return 0
+}
+if [ -r /etc/pve/storage.cfg ]; then
+  progress "checking local storage"
+  # One line per storage: type name path pool thinpool vgname content
+  awk '
+    function flush() { if (name) print type, name, (path ? path : "-"), (pool ? pool : "-"), (thin ? thin : "-"), (vg ? vg : "-"), (content ? content : "-") }
+    /^[a-z]+: / { flush(); type = substr($1, 1, length($1) - 1); name = $2; path = pool = thin = vg = content = ""; next }
+    $1 == "path" { path = $2 } $1 == "pool" { pool = $2 } $1 == "thinpool" { thin = $2 }
+    $1 == "vgname" { vg = $2 } $1 == "content" { content = $2 }
+    END { flush() }' /etc/pve/storage.cfg > /tmp/scout-storages.$$
+  while read -r type name path pool thin vg content; do
+    ct=0; case "$content" in *rootdir*) ct=1 ;; esac
+    label="for container disks: $([ "$ct" -eq 1 ] && echo yes || echo no)"
+    case "$type" in
+      lvmthin)
+        line=$(timeout -k 2 10 lvs --noheadings --units g --nosuffix -o lv_size,data_percent "$vg/$thin" 2>/dev/null)
+        if [ -n "$line" ]; then
+          free=$(echo "$line" | awk '{ printf "%d", $1 * (100 - $2) / 100 }')
+          echo "  $name (LVM thin $vg/$thin): ~${free} GiB free; $label"
+          consider "$name" "$free" "$ct"
+        else
+          echo "  $name (LVM thin): could not read"
+        fi ;;
+      zfspool)
+        free=$(timeout -k 2 10 zfs list -Hp -o avail "$pool" 2>/dev/null | awk '{ printf "%d", $1 / 1073741824 }')
+        echo "  $name (ZFS $pool): ~${free:-?} GiB free; $label"
+        [ -n "$free" ] && consider "$name" "$free" "$ct" ;;
+      dir)
+        case "$path" in
+          /mnt/pve/*) echo "  $name (folder on a mounted share, $path): not checked" ;;
+          *)
+            free=$(timeout -k 2 10 df -Pk "$path" 2>/dev/null | awk 'NR == 2 { printf "%d", $4 / 1048576 }')
+            echo "  $name (folder $path): ~${free:-?} GiB free; $label"
+            [ -n "$free" ] && consider "$name" "$free" "$ct" ;;
+        esac ;;
+      *)
+        echo "  $name ($type, network or special storage): not checked; $label" ;;
+    esac
+  done < /tmp/scout-storages.$$
+  rm -f /tmp/scout-storages.$$
+else
+  echo "skipped (no /etc/pve/storage.cfg)"
 fi
 
 section "Container templates"
-if [ "$IS_ROOT" -eq 1 ] && have pveam; then
-  for s in $(timeout 30 pvesm status --content vztmpl 2>/dev/null | awk 'NR > 1 { print $1 }'); do
-    echo "-- on $s --"
-    timeout 20 pveam list "$s" 2>/dev/null | awk 'NR > 1 { print "  " $1 }'
-  done
-  echo "-- Debian/Ubuntu templates offered (from the cached index) --"
-  timeout 20 pveam available --section system 2>/dev/null | awk '{ print $2 }' | grep -E 'debian-1[2-9]|ubuntu-2[4-9]' | head -5 || true
+if [ -d /var/lib/vz/template/cache ]; then
+  ls -1 /var/lib/vz/template/cache 2>/dev/null | sed 's/^/  /' | grep . || echo "  (none downloaded on 'local')"
 else
-  echo "skipped (needs root and pveam)"
+  echo "skipped (no local template folder)"
 fi
 
 section "Network"
@@ -136,20 +176,14 @@ if [ "$BENCH_MS" -le 120 ]; then
 else
   verdict "SPEED" "SLOW: ${BENCH_MS} ms benchmark; expect ~$(( BENCH_MS / 60 ))x slower ticks (still fine for an always-on world)"
 fi
-if [ "$IS_ROOT" -eq 1 ] && have pvesm; then
-  BEST=$(timeout 30 pvesm status --content rootdir 2>/dev/null | awk 'NR > 1 && $3 == "active" { if ($6 > m) { m = $6; n = $1 } } END { if (n) printf "%s %d", n, m / 1048576 }')
-  if [ -n "$BEST" ]; then
-    set -- $BEST
-    if [ "$2" -ge "$NEED_DISK_GB" ]; then
-      verdict "DISK" "OK: storage '$1' has ~$2 GiB free for container disks (need ~${NEED_DISK_GB} GiB)"
-    else
-      verdict "DISK" "LOW: best container storage '$1' has ~$2 GiB free (need ~${NEED_DISK_GB} GiB)"
-    fi
+if [ -n "$BEST_NAME" ]; then
+  if [ "$BEST_GB" -ge "$NEED_DISK_GB" ]; then
+    verdict "DISK" "OK: local storage '$BEST_NAME' has ~${BEST_GB} GiB free for container disks (need ~${NEED_DISK_GB} GiB)"
   else
-    verdict "DISK" "UNKNOWN: no active storage for container disks found"
+    verdict "DISK" "LOW: best local container storage '$BEST_NAME' has ~${BEST_GB} GiB free (need ~${NEED_DISK_GB} GiB)"
   fi
 else
-  verdict "DISK" "UNKNOWN: run as root for storage details"
+  verdict "DISK" "UNKNOWN: no local storage for container disks found (see Storage above)"
 fi
 echo
 echo "Done. Nothing was changed. Paste this output back to Claude."
