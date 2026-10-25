@@ -35,7 +35,7 @@ describe('Carry capacity trait', () => {
     expect(metabolismCost({ carryCapacity: 4, abilities: none } as Organism, config)).toBeCloseTo(0.45);
     // Each movement ability adds its own upkeep, but only where it is enabled
     const two = { carryCapacity: 0, abilities: { diagonal: 1, squeeze: 0, leap: 1 } } as Organism;
-    expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03 })).toBeCloseTo(0.31);
+    expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03, leapEnabled: true })).toBeCloseTo(0.31);
     expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03, leapEnabled: false })).toBeCloseTo(0.28);
 
     const world = new World({

@@ -55,7 +55,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   diagonalMoveCost: 1.4,
   squeezeEnabled: true,
   squeezeCostMultiplier: 2,
-  leapEnabled: true,
+  leapEnabled: false, // selected against and slightly costly on the default world (docs/experiments/mobility-leapEnabled.txt)
   leapCostMultiplier: 2.5,
   abilityUpkeep: 0.03,
   founderAbilities: 'one',

@@ -1,0 +1,5 @@
+
+> artificial-life@0.1.0 experiment
+> vite-node scripts/experiment.ts -- --compare dispersalEnabled=false,true --workers 4 --json docs/experiments/dispersal.json
+
+16 runs (8 seeds × 2 variants of dispersalEnabled), 10000 ticks each, 4 workers

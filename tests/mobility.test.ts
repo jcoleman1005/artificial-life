@@ -279,8 +279,9 @@ describe('Abilities are per organism', () => {
   it("gives each founder exactly one enabled ability or none, in 'one' mode", () => {
     const prng = new PRNG(5);
     const seen = new Set<string>();
+    const allOn = { ...DEFAULT_CONFIG, diagonalMoves: true, squeezeEnabled: true, leapEnabled: true };
     for (let i = 0; i < 400; i++) {
-      const a = founderAbilities(DEFAULT_CONFIG, prng);
+      const a = founderAbilities(allOn, prng);
       expect(a.diagonal + a.squeeze + a.leap).toBeLessThanOrEqual(1);
       seen.add(JSON.stringify(a));
     }
@@ -289,7 +290,7 @@ describe('Abilities are per organism', () => {
     for (let i = 0; i < 100; i++) {
       expect(founderAbilities({ ...DEFAULT_CONFIG, leapEnabled: false }, prng).leap).toBe(0);
     }
-    expect(founderAbilities({ ...DEFAULT_CONFIG, founderAbilities: 'all', squeezeEnabled: false }, prng)).toEqual({
+    expect(founderAbilities({ ...allOn, founderAbilities: 'all', squeezeEnabled: false }, prng)).toEqual({
       diagonal: 1,
       squeeze: 0,
       leap: 1,
@@ -312,7 +313,7 @@ describe('All mobility options together', () => {
   it('keeps invariants and stays deterministic over a long run (both controllers)', () => {
     for (const controller of ['dials', 'brain'] as const) {
       const run = () => {
-        const w = new World({ seed: 'mobility', controller });
+        const w = new World({ seed: 'mobility', controller, leapEnabled: true });
         const violations: string[] = [];
         const kinds = new Set<string>();
         for (let t = 0; t < 500; t++) {
