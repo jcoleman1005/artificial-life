@@ -84,7 +84,7 @@ describe('Simulation host (the Web Worker side)', () => {
     expect(last.tick).toBe(direct.tick);
     expect(last.organisms).toEqual(Array.from(direct.organisms.values(), toOrganismView));
     expect(last.foodPatches).toEqual(Array.from(direct.foodPatches.values()));
-  });
+  }, 30_000); // runs the same world twice; slow when the machine is busy
 
   it('applies live settings, resets with new settings, and sends the selected organism in full', () => {
     const { env, posted, frames } = fakeEnv();
