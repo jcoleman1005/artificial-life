@@ -42,6 +42,7 @@ const OVERLAYS: readonly (readonly [OverlayMode, string, string])[] = [
   ['crowding', 'Crowding', 'blocked moves'],
   ['deaths', 'Deaths', 'where they die'],
   ['feeding', 'Feeding', 'where they eat'],
+  ['health', 'Cell health', 'grazed-down ground'],
 ];
 
 app.innerHTML = `

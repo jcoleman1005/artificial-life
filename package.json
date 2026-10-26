@@ -12,6 +12,7 @@
     "check": "tsc -b --pretty",
     "verify": "bash scripts/verify.sh",
     "fingerprint": "vite-node scripts/fingerprint.ts",
+    "sweep:overgrazing": "vite-node scripts/overgrazing-sweep.ts",
     "perf": "vite-node scripts/perf.ts",
     "census": "vite-node scripts/census.ts --",
     "experiment": "vite-node scripts/experiment.ts --",

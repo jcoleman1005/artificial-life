@@ -13,6 +13,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Food patches: random spawn, finite stock, regrowth to a capacity, replenished by new spawns.
 - Windfalls (`windfallsEnabled`): transient unseen-by-most food clusters anywhere; no PRNG draws when off.
 - Plants (`plantsEnabled`; `docs/specs/plants.md`): evolving 7-trait plants live in food patches; fixed rules, seed rain replaces spawning.
+- Overgrazing (`overgrazingEnabled`): per-cell health, bites damage it, rested cells recover, regrowth scales with it; matched-random control (2026-10-26).
 - World: 60×60 default (30×30 preset); food only in `foodRegionCount` fertile discs.
 - Seasons: `seasonLength` cycle with a lean stretch; `staggeredSeasons` shifts each region.
 - Energy is the only need; limited local senses; signals are the one longer-range sense; no global map.
