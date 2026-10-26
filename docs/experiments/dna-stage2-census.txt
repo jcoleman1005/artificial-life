@@ -1,0 +1,23 @@
+Mutation census: 2000 mutations of evolved genomes, 6 worlds (seeds 2-7), evolved 1500 ticks with the variation operators on.
+Test: 2 fixed 24×24 arenas × 60 ticks, mutant child alone; score = births of its line. Tolerance ±25.0% of the parent's births (min 1).
+Parents skipped (scored 0 themselves): 23. Evolved genome length: 425±8, 431±10, 411±5, 407±7, 435±7, 418±6.
+Events per birth (natural mix weights): step 19.670, keyFlip 1.035, insert 0.421, delete 0.421, duplicate 0.421.
+
+kind | n | silent | lethal | harmful | neutral | beneficial
+--- | --- | --- | --- | --- | --- | ---
+step | 404 | 3.5% | 0.0% | 1.2% | 94.1% | 1.2%
+keyFlip | 398 | 6.5% | 0.0% | 1.8% | 89.9% | 1.8%
+insert | 399 | 2.3% | 0.0% | 0.8% | 96.2% | 0.8%
+delete | 398 | 6.3% | 0.0% | 2.8% | 89.4% | 1.5%
+duplicate | 401 | 2.5% | 0.0% | 3.2% | 90.8% | 3.5%
+ALL (equal quota per kind) | 2000 | 4.2% | 0.0% | 1.9% | 92.1% | 1.8%
+NATURAL MIX (by events per birth) |  | 3.6% | 0.0% | 1.3% | 93.8% | 1.3%
+
+Sensitivity to the tolerance (natural mix):
+tolerance | silent | lethal | harmful | neutral | beneficial
+--- | --- | --- | --- | --- | ---
+10.0% | 3.6% | 0.0% | 2.9% | 90.6% | 2.9%
+25.0% | 3.6% | 0.0% | 1.3% | 93.8% | 1.3%
+50.0% | 3.6% | 0.0% | 0.5% | 95.1% | 0.8%
+
+Finished in 8.1 min.

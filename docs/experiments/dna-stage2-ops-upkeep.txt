@@ -1,0 +1,5 @@
+
+> artificial-life@0.1.0 experiment
+> vite-node scripts/experiment.ts -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000 --workers 4 --json docs/experiments/dna-stage2-ops-upkeep.json
+
+12 runs (6 seeds × 2 variants of dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate), 5000 ticks each, 4 workers, with {"dnaVariationEnabled":true}
