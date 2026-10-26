@@ -31,7 +31,8 @@ import { BRAIN_INPUTS, brainDrift, hiddenStrength } from '../src/sim/brain';
 import { unitDirectionOf } from '../src/sim/directions';
 import { seasonAt } from '../src/sim/seasons';
 import { PLANT_TRAIT_KEYS, computePlantMetrics } from '../src/sim/plants';
-import type { SimulationConfig } from '../src/sim/types';
+import type { Organism, SimulationConfig } from '../src/sim/types';
+import { continuousAbilities, herbivoryOf, splitDiets } from '../src/sim/traits';
 
 type ConfigValue = string | number | boolean;
 type Overrides = Record<string, ConfigValue>;
@@ -49,6 +50,21 @@ interface Job {
 const SIGNAL_INPUTS = ['isSignal', 'signalOnFood', 'signalHunger', 'moveSignal', 'moveSignalAlike'] as const;
 /** ...and the hunting ones. */
 const HUNTING_INPUTS = ['isAttack', 'attackKillChance', 'attackAlike', 'attackFamily', 'attackHunger', 'moveCarrion'] as const;
+
+/** Continuous abilities: per ability, the share holding it, holders' mean and spread of efficiency, and the share locked at 1. */
+function abilityEfficiencyResults(organisms: readonly Organism[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const name of ['diagonal', 'squeeze', 'leap'] as const) {
+    const held = organisms.map((o) => o.abilities[name]).filter((e) => e > 0);
+    const n = Math.max(1, held.length);
+    const avg = held.reduce((a, e) => a + e, 0) / n;
+    out[`held.${name}`] = held.length / Math.max(1, organisms.length);
+    out[`eff.${name}`] = avg;
+    out[`effSd.${name}`] = Math.sqrt(held.reduce((a, e) => a + (e - avg) ** 2, 0) / n);
+    out[`atOne.${name}`] = held.filter((e) => e >= 0.999).length / n;
+  }
+  return out;
+}
 
 /** Reads a SavedWorld file (or a bare WorldState) and returns the world state. */
 function readWorldState(path: string): WorldState {
@@ -222,6 +238,16 @@ function runJob(job: Job): RunResult {
     ...Object.fromEntries(
       Object.entries(abilityShares([...world.organisms.values()])).map(([k, v]) => [`ability.${k}`, v])
     ),
+    extinct: organisms.length === 0 ? 1 : 0,
+    ...(organisms.length > 0 ? { energy: mean((o) => o.energy) } : {}),
+    ...(continuousAbilities(world.config) && organisms.length > 0 ? abilityEfficiencyResults(organisms) : {}),
+    ...(splitDiets(world.config) && organisms.length > 0
+      ? {
+          herbivory: mean((o) => herbivoryOf(o, world.config)),
+          generalists: organisms.filter((o) => herbivoryOf(o, world.config) >= 0.5 && o.carnivory >= 0.5).length,
+          meatSpecialists: organisms.filter((o) => herbivoryOf(o, world.config) < 0.5 && o.carnivory >= 0.5).length,
+        }
+      : {}),
     ...(world.config.plantsEnabled ? plantResults(world, plantSum / job.ticks, edibleSum / job.ticks, job.ticks) : {}),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
@@ -265,13 +291,15 @@ function summarize(results: RunResult[], variants: string[]): string {
   lines.push(header.map(() => '---').join(' | '));
   for (const key of keys) {
     const means = variants.map((v) => {
-      const vals = byVariant(v).map((r) => r.metrics[key] ?? 0);
+      // Over the runs that report it (e.g. trait means only exist while something is alive).
+      const vals = byVariant(v).flatMap((r) => (key in r.metrics ? [r.metrics[key]] : []));
       return vals.reduce((a, x) => a + x, 0) / Math.max(1, vals.length);
     });
     const diffs = variants.slice(1).map((v) => {
-      const pairs = byVariant(v).map((r) => {
+      const pairs = byVariant(v).flatMap((r) => {
         const b = results.find((x) => x.variant === base && x.seed === r.seed);
-        return (r.metrics[key] ?? 0) - (b?.metrics[key] ?? 0);
+        // Only seeds where both report it (n in the "higher in" count).
+        return b && key in r.metrics && key in b.metrics ? [r.metrics[key] - b.metrics[key]] : [];
       });
       const d = pairs.reduce((a, x) => a + x, 0) / Math.max(1, pairs.length);
       const higher = pairs.filter((x) => x > 0).length;
