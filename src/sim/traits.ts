@@ -115,8 +115,9 @@ export function herbivoryOf(organism: Readonly<Pick<Organism, 'carnivory' | 'her
 /** Energy spent per tick just staying alive, including the upkeep of body traits. */
 export function metabolismCost(organism: Readonly<Organism>, config: Readonly<SimulationConfig>): number {
   return (
-    config.tickMetabolismCost +
+    (config.metabolismGeneEnabled ? config.tickMetabolismCost * (organism.metabolicRate ?? 1) : config.tickMetabolismCost) +
     config.carryUpkeep * organism.carryCapacity +
+    (config.fatEnabled ? config.fatUpkeep * (organism.fatCapacity ?? 0) : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
     // An ability only costs anything in worlds where it is enabled.
     config.abilityUpkeep *

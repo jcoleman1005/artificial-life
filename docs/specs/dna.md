@@ -19,7 +19,7 @@ Code: `src/sim/dna.ts`; tests: `tests/dna.test.ts`.
 | register weights (`memoryWeights`, 30) | traits 10–39 | 0 | Σ dose |
 | brain weights (skip 47, hidden 6 × 47, hidden bias 6, out 6, out bias 1) | brain gene classes 1–5 | 0 (no connection) | Σ dose |
 
-Traits 8–9 are reserved. Not in the genome: the policy dials (still inherited directly; open question whether to add them), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
+Traits 8–9 are reserved. Traits 40–45 are the life-history genes (reproduction threshold, investment, fat capacity, torpor depth, egg rate, metabolic rate; `docs/decisions.md`, `src/sim/lifehistory.ts`): present in a genome only while their switch is on, decoded to their starting value if a switch is on and the gene is missing, and clamped to their bounds. Not in the genome: the policy dials (still inherited directly; open question whether to add them), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
 
 ### Format
 

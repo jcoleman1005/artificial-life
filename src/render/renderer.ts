@@ -498,6 +498,12 @@ export class CanvasRenderer {
       this.drawCarrion(c, detail);
     }
 
+    // Eggs: small pale ovals, waiting
+    for (const egg of this.world.eggs.values()) {
+      if (!inView(egg.x, egg.y)) continue;
+      this.drawEgg(egg.x, egg.y, detail);
+    }
+
     // Overlays drawn under the organisms
     if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
       this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView);
@@ -723,6 +729,19 @@ export class CanvasRenderer {
       }
     }
     ctx.lineCap = 'butt';
+  }
+
+  private drawEgg(x: number, y: number, detail: number): void {
+    const { ctx, cellSize } = this;
+    const cx = (x + 0.5) * cellSize;
+    const cy = (y + 0.5) * cellSize;
+    ctx.fillStyle = '#f5efe0';
+    ctx.strokeStyle = 'rgba(70, 50, 20, 0.7)';
+    ctx.lineWidth = Math.max(1, cellSize * 0.05);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, cellSize * 0.2, cellSize * 0.27, 0, 0, TAU);
+    ctx.fill();
+    if (detail >= 0.5) ctx.stroke();
   }
 
   private drawCarrion(c: CarrionPatch, detail: number): void {

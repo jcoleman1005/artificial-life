@@ -11,6 +11,7 @@ import { PRNG } from './prng';
 import { isKin, shareWeightFor, tagSimilarity } from './tags';
 import { isLeapAction, unitDirectionOf } from './directions';
 import { carrionYield, killChance } from './traits';
+import { thresholdOf } from './lifehistory';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -368,8 +369,9 @@ export function scoreAction(
     case 'REPRODUCE_EAST':
     case 'REPRODUCE_WEST': {
       // Reproduction score increases with energy above reproduction threshold
-      const excessEnergy = Math.max(0, organism.energy - config.reproductionThreshold);
-      const headroom = Math.max(1, config.maxEnergy - config.reproductionThreshold);
+      const threshold = thresholdOf(organism, config);
+      const excessEnergy = Math.max(0, organism.energy - threshold);
+      const headroom = Math.max(1, config.maxEnergy - threshold);
       const fullness = excessEnergy / headroom;
       const reproComponent = policy.reproduceDrive * fullness * 3.5 + 0.2;
       components['surplusDrive'] = Number(reproComponent.toFixed(3));

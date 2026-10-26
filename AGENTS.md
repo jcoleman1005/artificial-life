@@ -31,6 +31,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Diet (`carnivory`): inherited; trades plant yield for carrion share.
 - Predation (`predationEnabled`, brain only): ATTACK adjacent organism; bites resolve after moves; kill leaves carrion, no energy.
 - Evolvable bodies so far: abilities, dispersal, carry capacity, memory span, diet.
+- Life-history genes (six switches, each the lock for its control arm; `src/sim/lifehistory.ts`): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate; all off reproduces the old world bit-identically.
 - Tribes are never assigned: inherited hue tag; graded kinship similarity (`kinSimilarity`, `strangerSimilarity`).
 - Giving food is need-aware (neighbour below half energy), delivered after all actions; `sharingEnabled` switch.
 - Childhood (`childhoodTicks`): children sense a food-carrying parent; `followFoodParent`.

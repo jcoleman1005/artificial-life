@@ -185,7 +185,8 @@ export type WorldCountedMetric =
   | 'carrionStock'
   | 'averageCarnivory'
   | 'meatEaters'
-  | 'plants';
+  | 'plants'
+  | 'life';
 
 export function computeWorldMetrics(
   tick: number,

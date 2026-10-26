@@ -1,0 +1,5 @@
+# npm run experiment -- --compare thresholdGeneEnabled=false,true --set investmentGeneEnabled=false --set fatEnabled=false --set torporEnabled=false --set eggsEnabled=false --set metabolismGeneEnabled=false --seeds 1-8 --ticks 10000 --workers 4
+# base commit 1295aa1 (+ uncommitted life-history genes), 2026-10-26
+16 runs (8 seeds × 2 variants of thresholdGeneEnabled), 10000 ticks each, 4 workers, with {"investmentGeneEnabled":false,"fatEnabled":false,"torporEnabled":false,"eggsEnabled":false,"metabolismGeneEnabled":false}
+  done: seed 1, thresholdGeneEnabled=true (1/16)
+  done: seed 1, thresholdGeneEnabled=false (2/16)
