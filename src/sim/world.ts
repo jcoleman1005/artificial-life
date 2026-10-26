@@ -24,6 +24,7 @@ import { computeWorldMetrics } from './metrics';
 import { MetricsHistory, type HistorySample } from './history';
 import { inheritTag, tagSimilarity } from './tags';
 import { regionSeasonAt, seasonAt } from './seasons';
+import { CellHealth, fertileCells, type CellHealthState } from './grazing';
 import {
   carrionFromBody,
   founderAbilities,
@@ -86,6 +87,8 @@ export interface WorldState {
   readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
   /** Plant totals (absent in saves from before plants). */
   readonly plantCounters?: PlantCounters;
+  /** Cell health (absent in saves from before overgrazing, or with it off). */
+  readonly cellHealth?: CellHealthState;
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -159,6 +162,9 @@ export class World {
   public plantCounters: PlantCounters = newPlantCounters();
   /** Soil fertility and season region per cell, built on first use (terrain and regions never change). */
   private soilField: SoilField | null = null;
+  private fertileList: number[] | null = null;
+  /** Overgrazing: per-cell health (null when overgrazingEnabled is off). */
+  public cellHealth: CellHealth | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -198,6 +204,8 @@ export class World {
     this.lastKill = null;
     this.plantCounters = newPlantCounters();
     this.soilField = null;
+    this.fertileList = null;
+    this.cellHealth = this.config.overgrazingEnabled ? new CellHealth(this.config.gridWidth * this.config.gridHeight) : null;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -331,10 +339,23 @@ export class World {
     return true;
   }
 
+  /** A bite from a patch of fertile ground lowers its cell's health (windfalls are not fertile ground). */
+  private biteCell(patch: FoodPatch): void {
+    if (this.cellHealth && patch.expiresAt === undefined) {
+      this.cellHealth.bite(patch.y * this.config.gridWidth + patch.x, this.tick, this.config);
+    }
+  }
+
   /** Soil fertility and season regions, built once the terrain and regions exist. */
   private soil(): SoilField {
     this.soilField ??= new SoilField(this.config, this.foodRegions, this.obstacles);
     return this.soilField;
+  }
+
+  /** Indices of the fertile cells (overgrazing metrics and its matched-random control). */
+  private fertile(): number[] {
+    this.fertileList ??= fertileCells(this.soil());
+    return this.fertileList;
   }
 
   /**
@@ -440,6 +461,7 @@ export class World {
       }),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
+      ...(this.cellHealth ? { cellHealth: this.cellHealth.exportState() } : {}),
     };
   }
 
@@ -462,6 +484,12 @@ export class World {
     for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, clone(p));
     world.plantCounters = { ...newPlantCounters(), ...state.plantCounters };
     world.soilField = null;
+    world.fertileList = null;
+    world.cellHealth = state.cellHealth
+      ? CellHealth.fromState(state.cellHealth)
+      : world.config.overgrazingEnabled
+        ? new CellHealth(world.config.gridWidth * world.config.gridHeight)
+        : null;
     world.carrion.clear();
     for (const c of state.carrion ?? []) world.carrion.set(`${c.x},${c.y}`, { ...c });
     world.organisms.clear();
@@ -805,6 +833,7 @@ export class World {
             if (fromPatch) {
               patch.stock -= 1;
               grazePlant(patch, this.tick, this.plantCounters);
+              this.biteCell(patch);
             } else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
@@ -964,6 +993,7 @@ export class World {
           if (patch && patch.stock > 0 && organism.carriedFood < organism.carryCapacity) {
             patch.stock -= 1;
             grazePlant(patch, this.tick, this.plantCounters);
+            this.biteCell(patch);
             organism.carriedFood += 1;
             outcome = 'success';
           } else {
@@ -1244,6 +1274,10 @@ export class World {
       }
     }
 
+    // 0c. Cells rest and recover (and the matched-random control spends its damage)
+    const health = this.cellHealth;
+    if (health) health.step(this.tick, this.config, this.prng, this.config.overgrazingMatchedRandom ? this.fertile() : []);
+
     // 1a. Plants grow, seed and die in place of classic regrowth and spawning.
     if (this.config.plantsEnabled) {
       stepPlants({
@@ -1256,6 +1290,7 @@ export class World {
         regionLean,
         worldLean,
         counters: this.plantCounters,
+        ...(health ? { health: health.health } : {}),
       });
     }
 
@@ -1267,7 +1302,9 @@ export class World {
         if (patch.expiresAt !== undefined) continue;
         const lean = patch.region === undefined ? worldLean : regionLean[patch.region];
         if ((!lean || regrowsLean) && patch.stock < patch.capacity) {
-          patch.stock = Math.min(patch.capacity, patch.stock + foodRegenAmount);
+          const index = patch.y * gridWidth + patch.x;
+          patch.stock = Math.min(patch.capacity, patch.stock + (health ? health.regrow(index, foodRegenAmount) : foodRegenAmount));
+          if (health && patch.stock >= patch.capacity) health.clearCarry(index);
         }
       }
     }
@@ -1369,6 +1406,7 @@ export class World {
       meatEaters: organisms.filter((o) => o.carnivory >= 0.5).length,
       season: this.worldSeason(),
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
+      overgrazing: this.cellHealth ? this.cellHealth.metrics(this.soil(), this.foodRegions.length, this.fertile()) : null,
     };
   }
 

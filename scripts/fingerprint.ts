@@ -30,6 +30,7 @@ for (const [name, overrides] of Object.entries(worlds)) {
         const orgs = Array.from(w.organisms.values()).sort((a, b) => a.id.localeCompare(b.id));
         h.update(JSON.stringify(orgs.map((o) => [o.id, o.x, o.y, o.energy, o.carriedFood, o.tag, o.recentHistory[0]?.chosenAction.type])));
         h.update(JSON.stringify(Array.from(w.foodPatches.values())));
+        if (w.cellHealth) h.update(JSON.stringify(w.cellHealth.exportState())); // overgrazing state, only while it is on
       }
     }
     out.push(`${name} ${controller}: ${h.digest('hex').slice(0, 16)} pop ${w.organisms.size} births ${w.birthsTotal}`);

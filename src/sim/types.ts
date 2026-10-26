@@ -313,6 +313,14 @@ export interface Abilities {
 
 export type AbilityName = keyof Abilities;
 
+/** Cell health on fertile ground (overgrazingEnabled). Regions are in the order of World.foodRegions; one entry when there are none. */
+export interface OvergrazingMetrics {
+  readonly meanHealth: readonly number[];
+  /** Mean health of all fertile cells, and the share below 0.5. */
+  readonly meanHealthAll: number;
+  readonly fractionDegraded: number;
+}
+
 export interface FoodPatch {
   readonly x: number;
   readonly y: number;
@@ -501,6 +509,11 @@ export interface SimulationConfig {
   dnaContinuousAbilities: boolean; // With DNA: abilities are efficiencies in [0, 1] (cost and upkeep scale with them) instead of 0/1
   abilityMutationStdDev: number; // Continuous abilities: how far an efficiency drifts when it mutates (with traitMutationRate)
   dnaSplitDiets: boolean; // With DNA: independent plant (herbivory) and meat (carnivory) efficiencies, each costing dietUpkeep, instead of the dietTradeoff
+  overgrazingEnabled: boolean; // Each bite damages the cell's health; regrowth is scaled by it (docs/decisions.md)
+  overgrazingDamagePerBite: number; // Health lost per bite, health in [0, 1]
+  overgrazingRecoveryRate: number; // Health regained per tick once rested
+  overgrazingRestTicks: number; // Ticks without a bite before a cell starts to recover
+  overgrazingMatchedRandom: boolean; // Control: the same damage lands on random fertile cells, not where bites happen
   dietUpkeep: number; // Split diets: energy per tick per unit of herbivory + carnivory
   seed: number | string;
 }
@@ -561,6 +574,8 @@ export interface WorldMetrics {
   season: 'plenty' | 'lean' | null;
   /** Plant population, or null when plants are off. */
   plants: PlantMetrics | null;
+  /** Cell health of the fertile ground, or null when overgrazing is off. */
+  overgrazing: OvergrazingMetrics | null;
 }
 
 export interface WorldSnapshot {

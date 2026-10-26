@@ -95,6 +95,11 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   plantMutationStdDev: 0.08,
   seedRainInterval: 50,
   seedRainCount: 3,
+  overgrazingEnabled: true, // staying on a patch has a future cost (see docs/findings.md for the sweep)
+  overgrazingDamagePerBite: 0.02,
+  overgrazingRecoveryRate: 0.005,
+  overgrazingRestTicks: 50,
+  overgrazingMatchedRandom: false,
   dnaEnabled: true, // Stage 1 is bit-identical to DNA off (docs/specs/dna.md)
   dnaContinuousAbilities: false, // Stage 1b.1 (needs dnaEnabled)
   abilityMutationStdDev: 0.1,
