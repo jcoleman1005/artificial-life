@@ -7,3 +7,6 @@
   done: seed 4, dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0 (2/12)
   done: seed 6, dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0 (3/12)
   done: seed 3, dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0.001 (4/12)
+  done: seed 3, dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0 (5/12)
+  done: seed 2, dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0.001 (6/12)
+  done: seed 5, dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0.001 (7/12)
