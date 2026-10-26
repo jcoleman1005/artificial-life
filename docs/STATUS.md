@@ -29,6 +29,10 @@ _Last updated: 2026-10-26._
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce asexually and, with the brain, hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
 
+## Life-history genes (built and merged 2026-10-26)
+
+Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate. Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Next: watch long runs for whether the genes drift (add history charts for them), and re-gate those three alone with eggs on.
+
 ## In progress: DNA (2026-10-26)
 
 Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
@@ -96,5 +100,6 @@ There is no target outcome: new features go in on by default and the world is le
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
 - Fingerprint (2026-10-26; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500 (dials 831, brain 390). Identical with `dnaEnabled=false`. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds:
   `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`
+  With the six life-history genes on (default; the hash also covers their state): `large dials 7b57d1d02fc2951e · large brain 542f52ae3400dbe6` (pop 570 / 503). With all six switched off the hashes above are reproduced exactly.
 - `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Shorten those tests or run them in their own pool if it becomes a nuisance.
 - The S21 check (roadmap item 1) is still to do on the phone itself.
