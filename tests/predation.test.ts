@@ -82,7 +82,11 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
   };
 }
 
-/** An empty world where nothing costs energy unless a test says so. */
+/**
+ * An empty world where nothing costs energy unless a test says so: metabolism,
+ * memory, windfalls and signals are off to isolate one mechanism. The defaults
+ * are unchanged (tests/defaults.test.ts).
+ */
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
     seed: 'predation',

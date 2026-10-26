@@ -106,6 +106,7 @@ function runJob(job: Job): RunResult {
   let plantSum = 0;
   let edibleSum = 0;
   // Windfalls: how often organisms standing on windfall food signal.
+  const mating = { offered: 0, offeredAlike: 0, readyPairs: 0, readyPairsAlike: 0, readyPairsFamily: 0, asks: 0, asksAlike: 0 };
   const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, onWindfall: 0, onWindfallSent: 0, movesWithSignal: 0, movesToward: 0 };
   const onWindfall = new Set<string>();
 
@@ -144,6 +145,26 @@ function runJob(job: Job): RunResult {
       // A new cycle just began: record the previous cycle's low (skip the first).
       if (t > world.config.seasonLength) leanLows.push(cycleLow);
       cycleLow = Infinity;
+    }
+    // Mating, every tick: who was asked, against who could have been (the
+    // chance baseline: adjacent partners that were also ready to mate).
+    const kin = world.config.kinSimilarity;
+    for (const o of world.organisms.values()) {
+      const d = o.recentHistory[0];
+      if (!d || d.tick !== world.tick - 1) continue;
+      for (const { action } of d.scores) {
+        if (!action.type.startsWith('MATE_')) continue;
+        mating.offered++;
+        if ((action.mateSimilarity ?? 0) >= kin) mating.offeredAlike++;
+        if (!action.mateReady) continue;
+        mating.readyPairs++;
+        if ((action.mateSimilarity ?? 0) >= kin) mating.readyPairsAlike++;
+        if (action.mateIsFamily) mating.readyPairsFamily++;
+      }
+      if (d.chosenAction.type.startsWith('MATE_')) {
+        mating.asks++;
+        if ((d.chosenAction.mateSimilarity ?? 0) >= kin) mating.asksAlike++;
+      }
     }
     if (t > tailStart) {
       for (const o of world.organisms.values()) {
@@ -202,6 +223,12 @@ function runJob(job: Job): RunResult {
     'matingsAlike%': (100 * (m.matingsAlikeTotal - start.matingsAlikeTotal)) / Math.max(1, m.matingsTotal - start.matingsTotal),
     'matingsOfStrangers%': (100 * (m.matingsOfStrangersTotal - start.matingsOfStrangersTotal)) / Math.max(1, m.matingsTotal - start.matingsTotal),
     'matingsParentChild%': (100 * (m.matingsInFamilyTotal - start.matingsInFamilyTotal)) / Math.max(1, m.matingsTotal - start.matingsTotal),
+    // Chance baselines for the two above: the same shares among all ready adjacent partners.
+    'readyPairsAlike%': (100 * mating.readyPairsAlike) / Math.max(1, mating.readyPairs),
+    'readyPairsParentChild%': (100 * mating.readyPairsFamily) / Math.max(1, mating.readyPairs),
+    mateAsks: mating.asks,
+    'asksAlike%': (100 * mating.asksAlike) / Math.max(1, mating.asks),
+    'offeredAlike%': (100 * mating.offeredAlike) / Math.max(1, mating.offered), // baseline for asksAlike%
     carrionEaten: m.carrionEatenTotal - start.carrionEatenTotal,
     carnivory: m.averageCarnivory,
     meatEaters: m.meatEaters,

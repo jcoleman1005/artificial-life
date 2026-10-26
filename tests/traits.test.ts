@@ -113,6 +113,9 @@ describe('Carry capacity trait', () => {
   });
 
   it('is passed from parent to child in a running world', () => {
+    // Sex is switched off here to isolate cloning (a child of mating can take
+    // its capacity from a parent of another lineage). Only this test's world
+    // changes; the default stays on (tests/defaults.test.ts).
     const world = new World({ seed: 'traits', traitMutationRate: 0, sexEnabled: false, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 });
     const founders = new Map(Array.from(world.organisms.values(), (o) => [o.lineage.id, o.carryCapacity]));
     for (let t = 0; t < 300; t++) world.step();

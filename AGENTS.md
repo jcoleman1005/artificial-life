@@ -68,6 +68,10 @@ Nothing is deferred. Any feature is fair game to suggest or build: predation, co
 - TypeScript strict mode.
 - Avoid unnecessary dependencies and services.
 - Keep the stack small: add a database, authentication, cloud inference or a backend only when a feature needs it, and say why.
+- Tests verify mechanisms and invariants: physics, inheritance, determinism, conservation, and that a path to a behaviour is physically possible. Never assert that an evolved behaviour appears. (2026-10-26)
+- Don't tune parameters (head starts, costs, rates) to make a behaviour emerge without logging the parameter, the old and new values and why in `docs/STATUS.md` (Parameter log). `tests/defaults.test.ts` pins the logged head starts.
+- Emergence is measured by controlled experiments (matched seeds, on/off arms, shuffled or chance baselines) and reported plainly in `docs/STATUS.md` findings, null results included.
+- When a test disables a feature to isolate a mechanism, say so in the test, and keep `tests/defaults.test.ts` confirming the default config is unchanged.
 - Write deterministic tests for energy accounting, action legality, conflict resolution, reproduction, inheritance, mutation, and seeded repeatability.
 - Record observable inputs, action scores, decisions, and energy changes.
 - Do not claim organisms learned during life unless lifetime learning is implemented.
