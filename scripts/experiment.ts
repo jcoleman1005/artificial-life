@@ -33,6 +33,7 @@ import { seasonAt } from '../src/sim/seasons';
 import { PLANT_TRAIT_KEYS, computePlantMetrics } from '../src/sim/plants';
 import type { Organism, SimulationConfig } from '../src/sim/types';
 import { continuousAbilities, herbivoryOf, splitDiets } from '../src/sim/traits';
+import { GENE_TYPES, genomeStats } from '../src/sim/dna';
 
 type ConfigValue = string | number | boolean;
 type Overrides = Record<string, ConfigValue>;
@@ -122,6 +123,10 @@ function runJob(job: Job): RunResult {
   // Windfalls: how often organisms standing on windfall food signal.
   const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, onWindfall: 0, onWindfallSent: 0, movesWithSignal: 0, movesToward: 0 };
   const onWindfall = new Set<string>();
+  // Stage 2: genome length (mean and spread) at five checkpoints, and the cost of the steps themselves.
+  const genomeSeries: { mean: number; sd: number }[] = [];
+  let stepMs = 0;
+  let organismSteps = 0;
 
   for (let t = 1; t <= job.ticks; t++) {
     onWindfall.clear();
@@ -130,9 +135,16 @@ function runJob(job: Job): RunResult {
         if (world.foodPatches.get(`${o.x},${o.y}`)?.expiresAt !== undefined) onWindfall.add(o.id);
       }
     }
+    const stepStart = performance.now();
     world.step();
+    stepMs += performance.now() - stepStart;
     const n = world.organisms.size;
+    organismSteps += n;
     popSum += n;
+    if (world.config.dnaVariationEnabled && t % Math.floor(job.ticks / 5) === 0 && genomeSeries.length < 5) {
+      const s = genomeStats(Array.from(world.organisms.values(), (o) => o.genome ?? new Uint32Array(0)), world.config);
+      genomeSeries.push({ mean: s.meanLength, sd: s.sdLength });
+    }
     if (world.config.plantsEnabled) {
       for (const p of world.foodPatches.values()) {
         if (!p.plant) continue;
@@ -249,6 +261,8 @@ function runJob(job: Job): RunResult {
         }
       : {}),
     ...(world.config.plantsEnabled ? plantResults(world, plantSum / job.ticks, edibleSum / job.ticks, job.ticks) : {}),
+    usPerOrganismTick: (1000 * stepMs) / Math.max(1, organismSteps),
+    ...(world.config.dnaVariationEnabled && organisms.length > 0 ? genomeResults(organisms, world.config, genomeSeries) : {}),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
     ...Object.fromEntries(
@@ -258,6 +272,23 @@ function runJob(job: Job): RunResult {
     ...Object.fromEntries(Object.entries(actions).map(([k, v]) => [`act.${k}%`, (100 * v) / actionTotal])),
   };
   return { seed: job.seed, variant: job.variant, metrics };
+}
+
+/** Stage 2 measurements: genome length over time, gene counts by type, and how far duplicated copies have drifted apart. */
+function genomeResults(organisms: readonly Organism[], config: SimulationConfig, series: { mean: number; sd: number }[]): Record<string, number> {
+  const s = genomeStats(organisms.map((o) => o.genome ?? new Uint32Array(0)), config);
+  return {
+    'genes.mean': s.meanLength,
+    'genes.sd': s.sdLength,
+    'genes.min': s.minLength,
+    'genes.max': s.maxLength,
+    'genes.atCap%': (100 * organisms.filter((o) => (o.genome?.length ?? 0) / 3 >= config.dnaMaxGenes).length) / organisms.length,
+    ...Object.fromEntries(series.flatMap((p, i) => [[`genes.mean@${(i + 1) * 20}%`, p.mean], [`genes.sd@${(i + 1) * 20}%`, p.sd]])),
+    ...Object.fromEntries(GENE_TYPES.map((t) => [`genes.${t}`, s.meanByType[t]])),
+    'dup.multiCopySlots': s.multiCopySlots,
+    'dup.identical%': 100 * s.identicalShare,
+    'dup.spread(sd)': s.meanSpread,
+  };
 }
 
 /** Plant measurements: standing crop, production, grazing, deaths by cause and final trait means. */

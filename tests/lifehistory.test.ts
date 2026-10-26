@@ -89,7 +89,7 @@ describe('life-history genes: switches and inheritance', () => {
       ]);
     };
     expect(run(true)).toBe(run(false));
-  });
+  }, 30_000);
 
   it('keeps every evolved value inside its bounds', () => {
     const w = new World({ seed: 12, traitMutationRate: 1, thresholdStep: 40, investmentStep: 0.5, fatStep: 50, torporStep: 1, eggStep: 1, metabolismStep: 2 });

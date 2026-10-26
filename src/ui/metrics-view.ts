@@ -87,6 +87,14 @@ export class MetricsView {
           <span class="m-val">${Math.round((metrics.averageCarnivory ?? 0) * 100)}% meat <small>(${metrics.meatEaters ?? 0} mostly meat eaters)</small></span>
         </div>
         ${lifeCards(metrics)}
+        ${
+          metrics.genomeLength
+            ? `<div class="metric-card">
+          <span class="m-label">Genome</span>
+          <span class="m-val">${metrics.genomeLength.mean} genes <small>(±${metrics.genomeLength.sd}, longest ${metrics.genomeLength.max})</small></span>
+        </div>`
+            : ''
+        }
         <div class="metric-card">
           <span class="m-label">Carrion</span>
           <span class="m-val">${metrics.carrionStock ?? 0} energy <small>(${metrics.carrionEatenTotal ?? 0} meals eaten)</small></span>

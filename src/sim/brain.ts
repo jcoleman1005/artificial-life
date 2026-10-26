@@ -79,7 +79,7 @@ export type BrainInput = (typeof BRAIN_INPUTS)[number];
 
 export const BRAIN_INPUT_COUNT = BRAIN_INPUTS.length;
 export const BRAIN_HIDDEN = 6;
-const WEIGHT_LIMIT = 40;
+export const WEIGHT_LIMIT = 40;
 
 export interface Brain {
   readonly skip: readonly number[]; // BRAIN_INPUT_COUNT

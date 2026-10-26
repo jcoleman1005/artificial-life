@@ -20,6 +20,7 @@ export interface SettingsCallbacks {
   onImmigrationChange: (enabled: boolean) => void;
   onPlantsChange: (enabled: boolean) => void;
   onMemoryChange: (enabled: boolean) => void;
+  onGenomeVariationChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -41,6 +42,7 @@ export interface ExperimentToggles {
   immigrationEnabled: boolean;
   plantsEnabled: boolean;
   memoryEnabled: boolean;
+  dnaVariationEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
   worldSize: WorldSize;
@@ -174,6 +176,7 @@ export class SettingsView {
         ${segmented('Signals', 'signals', onOff, toggles.signalsEnabled ? 'on' : 'off')}
         ${segmented('Dispersal', 'dispersal', onOff, toggles.dispersalEnabled ? 'on' : 'off')}
         ${segmented('Memory', 'memory', onOff, toggles.memoryEnabled ? 'on' : 'off')}
+        ${segmented('Genome changes', 'genomeVariation', onOff, toggles.dnaVariationEnabled ? 'on' : 'off')}
         ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
       </section>
       <section class="settings-group">
@@ -231,6 +234,7 @@ export class SettingsView {
     set('immigration', t.immigrationEnabled ? 'on' : 'off');
     set('plants', t.plantsEnabled ? 'on' : 'off');
     set('memory', t.memoryEnabled ? 'on' : 'off');
+    set('genomeVariation', t.dnaVariationEnabled ? 'on' : 'off');
     set('controller', t.controller);
   }
 
@@ -286,6 +290,7 @@ export class SettingsView {
     this.bindSegment('immigration', (v) => cb.onImmigrationChange(v === 'on'));
     this.bindSegment('plants', (v) => cb.onPlantsChange(v === 'on'));
     this.bindSegment('memory', (v) => cb.onMemoryChange(v === 'on'));
+    this.bindSegment('genomeVariation', (v) => cb.onGenomeVariationChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
     this.bindSegment('motion', (v) => cb.onMotionStyleChange(v as MotionStyle));

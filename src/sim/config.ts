@@ -138,6 +138,15 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   metabolismMin: 0.5,
   metabolismMax: 1.5,
   birthCooldown: 12,
+  dnaVariationEnabled: false, // Stage 2 (needs dnaEnabled; docs/specs/dna.md)
+  dnaInsertionRate: 0.001,
+  dnaDeletionRate: 0.001,
+  dnaDuplicationRate: 0.001,
+  dnaDuplicationMaxLength: 4,
+  dnaKeyFlipFraction: 0.05,
+  dnaDosageCompensation: false,
+  dnaUpkeepPerGene: 0.00005, // a 380-gene founder pays about 8% of base metabolism
+  dnaMaxGenes: 1500,
   seed: 42,
 };
 

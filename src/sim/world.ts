@@ -57,7 +57,7 @@ import {
   LIFE_GENES,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
-import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
+import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -439,7 +439,7 @@ export class World {
         parent.genome && !needsHerbivory && !lifeStale
           ? parent.genome
           : encodeOrganismDNA(this.freshPhenotype(parent, needsHerbivory));
-      const genome = mutateGenome(parentGenome, config, prng);
+      const genome = config.dnaVariationEnabled ? mutateGenomeVariation(parentGenome, config, prng) : mutateGenome(parentGenome, config, prng);
       return { ...decodeOrganismDNA(genome, config), genome };
     }
     return {
@@ -466,7 +466,7 @@ export class World {
   private static restoreOrganism({ genome, ...o }: SavedOrganism): Organism {
     return {
       ...clone(o),
-      ...(genome ? { genome: upgradeGenome(genome) } : {}),
+      ...(genome ? { genome: upgradeGenome(genome, o.brain.skip.length) } : {}),
       brain: upgradeBrain(clone(o.brain)),
       carnivory: o.carnivory ?? 0,
       kills: o.kills ?? 0,
@@ -1552,6 +1552,7 @@ export class World {
       averageCarnivory:
         organisms.length > 0 ? Number((organisms.reduce((a, o) => a + o.carnivory, 0) / organisms.length).toFixed(3)) : 0,
       meatEaters: organisms.filter((o) => o.carnivory >= 0.5).length,
+      genomeLength: this.genomeLength(organisms),
       season: this.worldSeason(),
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
       life: this.lifeMetrics(organisms),
@@ -1577,6 +1578,15 @@ export class World {
       eggsHatchedTotal: this.eggsHatchedTotal,
       eggsDecayedTotal: this.eggsDecayedTotal,
     };
+  }
+
+  /** Genes per genome (mean, spread, longest) over the living, or null when no one has a genome. */
+  private genomeLength(organisms: readonly Organism[]): { mean: number; sd: number; max: number } | null {
+    const lengths = organisms.flatMap((o) => (o.genome ? [o.genome.length / 3] : []));
+    if (lengths.length === 0) return null;
+    const mean = lengths.reduce((a, l) => a + l, 0) / lengths.length;
+    const sd = Math.sqrt(lengths.reduce((a, l) => a + (l - mean) ** 2, 0) / lengths.length);
+    return { mean: Number(mean.toFixed(1)), sd: Number(sd.toFixed(1)), max: Math.max(...lengths) };
   }
 
   /**
