@@ -31,7 +31,9 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 ## In progress: DNA (2026-10-26)
 
-Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
+Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled`; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain (not the dials) are decoded from a genome, bit-identical to a legacy world. Stage 1b is built as two toggles, off by default, with gates in `docs/experiments/dna-1b*.txt` (continuous abilities: met; split diets: plant eaters met, meat eaters not yet seen in 3,000 ticks). **Paused for the user's review before Stage 2.**
+
+Urgent: 5 of 8 default worlds go extinct (4 in an early lean season), with or without DNA (`docs/findings.md`). Gates now report `extinct` and average traits over survivors.
 
 ## Latest findings (details and all other results in `docs/findings.md`)
 

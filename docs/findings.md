@@ -6,6 +6,9 @@ Experiment results and engine notes, moved out of `docs/STATUS.md`. Raw outputs 
 
 | Question | Result |
 |---|---|
+| DNA 1b.1 continuous abilities (8 seeds × 3,000 ticks, 2026-10-26) | Efficiencies drift to mid-range (diagonal 0.30, squeeze 0.54, leap 0.29; few locked at 1) and abilities spread to ~75–80% of organisms. Populations a little lower; extinctions unchanged (4/8). `docs/experiments/dna-1b1-continuous-abilities.txt`. |
+| DNA 1b.2 split diets (8 seeds × 3,000 ticks, 2026-10-26) | Plant eaters stay full plant eaters (herbivory 0.96) and do better: extinct seeds 2/8 vs 4/8, population +80, lean low +51. Kills double, but no meat-eating lineage appears in 3,000 ticks (carnivory 0.10). `docs/experiments/dna-1b2-split-diets.txt`. |
+| Default world survival (DNA off, 8 seeds × 10,000 ticks, 2026-10-26) | **5 of 8 seeds go extinct**, 4 of them in an early lean season (seed 1 by tick ~800). Not caused by DNA (same with it off); probably since spontaneous generation went off by default. Worth fixing before relying on stage gates. |
 | DNA Stage 1 gate (`dnaEnabled` off vs on, 2026-10-26) | **Identical.** Every metric (population, lean lows, births, kills, traits, abilities, brain drift, plants) matches exactly in all 8 seeds (Δ 0, 0/8 higher), as designed: the genome path draws from the PRNG in the legacy order. `docs/experiments/dna-stage1-gate.txt`. |
 | Do tribes form from sharing? | **No.** Look-alike clusters come from family structure (children born adjacent with the parent's tag); clustering is the same with sharing off. |
 | Energy sharing (×1.5) | Organisms exploited it by passing energy back and forth (32–39% returned within 5 ticks). Replaced by pure transfer, then by food sharing. |

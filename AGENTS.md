@@ -48,7 +48,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Simulation is independent of rendering; runs in a `SimulationHost` (Worker or server) behind `src/sim/protocol.ts`.
 - Observers (`WorldEventDetector`, `ActivityMaps`) never change the world; the feed shows world events only.
 - Overlays, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
-- DNA (`dnaEnabled`, off until signed off; `docs/specs/dna.md`): genome-decoded body and brain; Stage 1 bit-identical to legacy.
+- DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` off.
 - Snapshots: `exportState()` / `fromState()` restore bit-identically; `SavedWorld` format; browser auto-save, branch points, files.
 - Experiments can start from a saved world (`--from saved.json`).
 - Always-on server (`server/`): one shared `SimulationHost`, SSE out, POST in, saves to `data/world.json`; not safe public unless `--watch-only`.
