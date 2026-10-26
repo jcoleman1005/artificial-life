@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "tsc -b --pretty",
+    "verify": "bash scripts/verify.sh",
     "fingerprint": "vite-node scripts/fingerprint.ts",
     "perf": "vite-node scripts/perf.ts",
     "experiment": "vite-node scripts/experiment.ts --",
