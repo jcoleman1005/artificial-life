@@ -123,7 +123,9 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ((config.diagonalMoves ? organism.abilities.diagonal : 0) +
         (config.squeezeEnabled ? organism.abilities.squeeze : 0) +
         (config.leapEnabled ? organism.abilities.leap : 0)) +
-    (splitDiets(config) ? config.dietUpkeep * (herbivoryOf(organism, config) + organism.carnivory) : 0)
+    (splitDiets(config) ? config.dietUpkeep * (herbivoryOf(organism, config) + organism.carnivory) : 0) +
+    // Stage 2: every gene costs upkeep, so genome length is under selection.
+    (config.dnaVariationEnabled && organism.genome ? config.dnaUpkeepPerGene * (organism.genome.length / 3) : 0)
   );
 }
 

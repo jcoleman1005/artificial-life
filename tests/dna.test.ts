@@ -18,7 +18,13 @@ import {
   geneDose,
   geneIndexOf,
   geneKey,
+  genomeStats,
+  mutateGenomeVariation,
+  mutateOnce,
   phenotypeOf,
+  pointMutationRate,
+  type MutationKind,
+  upgradeGenome,
   type Phenotype,
 } from '../src/sim/dna';
 import type { Organism } from '../src/sim/types';
@@ -354,4 +360,180 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
     expect(born.length).toBeGreaterThan(0);
     for (const o of born) expect(o.herbivory).toBeGreaterThan(0.5);
   }, 30_000);
+});
+
+describe('DNA Stage 2: variation operators (dnaVariationEnabled)', () => {
+  const vc = createConfig({ dnaVariationEnabled: true });
+  const founder = () => encodeOrganismDNA(phenotypeOf(legacyOrganisms()[0]));
+  const kinds: MutationKind[] = ['step', 'keyFlip', 'insert', 'delete', 'duplicate'];
+
+  it('draws Poisson counts: mean and variance both close to the mean', () => {
+    const prng = new PRNG(7);
+    for (const mean of [0.2, 3, 19, 76]) {
+      const draws = Array.from({ length: 4000 }, () => prng.nextPoisson(mean));
+      const m = draws.reduce((a, d) => a + d, 0) / draws.length;
+      const v = draws.reduce((a, d) => a + (d - m) ** 2, 0) / draws.length;
+      expect(Math.abs(m - mean)).toBeLessThan(0.1 * Math.max(1, mean));
+      expect(Math.abs(v - mean)).toBeLessThan(0.2 * Math.max(1, mean));
+    }
+    expect(prng.nextPoisson(0)).toBe(0);
+  });
+
+  it('point mutations alone follow each gene’s own rate: the expected count is the sum of the rates', () => {
+    const cfg = createConfig({ dnaVariationEnabled: true, dnaInsertionRate: 0, dnaDeletionRate: 0, dnaDuplicationRate: 0, dnaKeyFlipFraction: 0 });
+    const parent = founder();
+    let expected = 0;
+    for (let g = 0; g < geneCount(parent); g++) expected += pointMutationRate(parent[g * GENE_WORDS], cfg);
+    const prng = new PRNG(11);
+    let changed = 0;
+    const births = 400;
+    for (let b = 0; b < births; b++) {
+      const child = mutateGenomeVariation(parent, cfg, prng);
+      expect(geneCount(child)).toBe(geneCount(parent));
+      for (let w = 0; w < parent.length; w++) if (child[w] !== parent[w]) { changed++; w += 2 - (w % 3); }
+    }
+    expect(changed / births).toBeGreaterThan(0.85 * expected * 0.9); // some steps land on the same value after rounding or clamping
+    expect(changed / births).toBeLessThan(1.1 * expected);
+  });
+
+  it('each operator changes the gene count as named, and never touches the parent', () => {
+    const parent = founder();
+    const copy = parent.slice();
+    const n = geneCount(parent);
+    const prng = new PRNG(3);
+    for (let i = 0; i < 200; i++) {
+      expect(geneCount(mutateOnce(parent, 'insert', vc, prng))).toBe(n + 1);
+      expect(geneCount(mutateOnce(parent, 'delete', vc, prng))).toBe(n - 1);
+      const dup = geneCount(mutateOnce(parent, 'duplicate', vc, prng)) - n;
+      expect(dup).toBeGreaterThanOrEqual(1);
+      expect(dup).toBeLessThanOrEqual(vc.dnaDuplicationMaxLength);
+      expect(geneCount(mutateOnce(parent, 'step', vc, prng))).toBe(n);
+      expect(geneCount(mutateOnce(parent, 'keyFlip', vc, prng))).toBe(n);
+    }
+    expect(parent).toEqual(copy);
+  });
+
+  it('a duplicated segment is an exact copy of genes already there, inserted elsewhere', () => {
+    const parent = founder();
+    const prng = new PRNG(5);
+    for (let i = 0; i < 100; i++) {
+      const child = mutateOnce(parent, 'duplicate', vc, prng);
+      const words = (dna: Uint32Array) => Array.from({ length: geneCount(dna) }, (_, g) => Array.from(dna.subarray(g * GENE_WORDS, g * GENE_WORDS + GENE_WORDS)).join(','));
+      const before = new Map<string, number>();
+      for (const w of words(parent)) before.set(w, (before.get(w) ?? 0) + 1);
+      const extra = new Map<string, number>();
+      for (const w of words(child)) extra.set(w, (extra.get(w) ?? 0) + 1);
+      for (const [w, c] of before) extra.set(w, (extra.get(w) ?? 0) - c);
+      for (const [w, c] of extra) if (c !== 0) expect(before.has(w)).toBe(true); // every added gene already existed
+    }
+  });
+
+  it('whatever the operators do, the genome decodes to a valid phenotype (no NaN, traits in range, empty genome included)', () => {
+    const prng = new PRNG(13);
+    let dna = founder();
+    for (let i = 0; i < 3000; i++) {
+      dna = mutateOnce(dna, kinds[i % kinds.length], vc, prng);
+      if (geneCount(dna) < 5) dna = founder();
+      if (i % 25 === 0) {
+        const p = decodeOrganismDNA(dna, vc);
+        expect(allNumbers(p).every(Number.isFinite)).toBe(true);
+        expect(p.carryCapacity).toBeGreaterThanOrEqual(0);
+        expect(p.carryCapacity).toBeLessThanOrEqual(vc.maxCarryCapacity);
+        expect(p.tag).toBeGreaterThanOrEqual(0);
+        expect(p.tag).toBeLessThan(360);
+      }
+    }
+    expect(allNumbers(decodeOrganismDNA(new Uint32Array(0), vc)).every(Number.isFinite)).toBe(true);
+  });
+
+  it('insertions and duplications stop at dnaMaxGenes', () => {
+    const cfg = createConfig({ dnaVariationEnabled: true, dnaMaxGenes: 400, dnaInsertionRate: 0.05, dnaDuplicationRate: 0.05, dnaDeletionRate: 0 });
+    const prng = new PRNG(17);
+    let dna = founder();
+    for (let i = 0; i < 100; i++) dna = mutateGenomeVariation(dna, cfg, prng);
+    expect(geneCount(dna)).toBeLessThanOrEqual(400);
+    expect(geneCount(dna)).toBeGreaterThan(390);
+  });
+
+  it('dosage compensation makes a duplication phenotype-neutral; without it a duplicated weight doubles', () => {
+    const parent = founder();
+    const key = geneKey(GeneClass.brainSkip, 0);
+    const at = Array.from({ length: geneCount(parent) }, (_, g) => parent[g * GENE_WORDS]).indexOf(key);
+    const dosed = (dna: Uint32Array) => decodeOrganismDNA(dna, vc).brain.skip[0];
+    const one = { ...vc, dnaDuplicationMaxLength: 1 };
+    // duplicate exactly gene `at`: search seeds until the operator picks it
+    for (const compensate of [false, true]) {
+      const cfg = { ...one, dnaDosageCompensation: compensate };
+      let seen = 0;
+      for (let s = 0; s < 4000 && seen < 3; s++) {
+        const child = mutateOnce(parent, 'duplicate', cfg, new PRNG(s));
+        if (geneCount(child) !== geneCount(parent) + 1) continue;
+        const copies = Array.from({ length: geneCount(child) }, (_, g) => child[g * GENE_WORDS]).filter((k) => k === key).length;
+        if (copies !== 2) continue;
+        seen++;
+        const w = dosed(parent);
+        if (compensate) expect(dosed(child)).toBeCloseTo(w, 12);
+        else expect(dosed(child)).toBeCloseTo(2 * w, 12);
+      }
+      expect(seen).toBeGreaterThan(0);
+    }
+    expect(at).toBeGreaterThanOrEqual(0);
+  });
+
+  it('every gene costs dnaUpkeepPerGene per tick, only when the stage is on', () => {
+    const o = { ...legacyOrganisms()[0], genome: founder() } as Organism;
+    const off = createConfig({ dnaVariationEnabled: false });
+    const on = createConfig({ dnaVariationEnabled: true, dnaUpkeepPerGene: 0.001 });
+    expect(metabolismCost(o, off)).toBe(metabolismCost({ ...o, genome: undefined }, off));
+    expect(metabolismCost(o, on) - metabolismCost({ ...o, genome: undefined }, on)).toBeCloseTo(0.001 * geneCount(o.genome!), 12);
+  });
+
+  it('genomeStats counts lengths, types and diverged copies', () => {
+    const cfg = createConfig({ dnaVariationEnabled: true });
+    const k = geneKey(GeneClass.brainSkip, 3);
+    const stats = genomeStats(
+      [genomeOf([[k, 1], [k, 1], [geneKey(GeneClass.trait, 9), 5]]), genomeOf([[k, 1], [k, 1.3]])],
+      cfg
+    );
+    expect(stats.meanLength).toBe(2.5);
+    expect(stats.meanByType.brainSkip).toBe(2);
+    expect(stats.meanByType.silent).toBe(0.5);
+    expect(stats.multiCopySlots).toBe(1);
+    expect(stats.identicalShare).toBe(0.5);
+    expect(stats.meanSpread).toBeCloseTo(0.3 / cfg.brainMutationStdDev, 9);
+  });
+
+  it('a variation world is deterministic, genome lengths vary, and a saved one continues exactly', () => {
+    const cfg = { ...SMALL, seed: 'dna-stage2', dnaVariationEnabled: true, dnaInsertionRate: 0.01, dnaDeletionRate: 0.01, dnaDuplicationRate: 0.01 };
+    const run = () => {
+      const w = new World(cfg);
+      for (let t = 0; t < 250; t++) w.step();
+      return w;
+    };
+    const a = run();
+    const b = run();
+    expect(hash(a.exportState())).toBe(hash(b.exportState()));
+    const lengths = new Set(Array.from(a.organisms.values(), (o) => geneCount(o.genome!)));
+    expect(lengths.size).toBeGreaterThan(1);
+    const restored = World.fromState(JSON.parse(JSON.stringify(a.exportState())) as WorldState);
+    for (let t = 0; t < 60; t++) { a.step(); restored.step(); }
+    expect(hash(restored.exportState())).toBe(hash(a.exportState()));
+  }, 60_000);
+
+  it('with the structural rates at 0 and no key flips, genomes keep their length (the stage-off world is the Stage 1 one, tested above)', () => {
+    const off = new World({ ...SMALL, seed: 's2-off', dnaVariationEnabled: false });
+    const flat = new World({ ...SMALL, seed: 's2-off', dnaVariationEnabled: true, dnaInsertionRate: 0, dnaDeletionRate: 0, dnaDuplicationRate: 0, dnaKeyFlipFraction: 0, dnaUpkeepPerGene: 0 });
+    for (let t = 0; t < 150; t++) { off.step(); flat.step(); }
+    const founderLength = geneCount(encodeOrganismDNA(phenotypeOf(Array.from(flat.organisms.values())[0])));
+    for (const o of flat.organisms.values()) expect(geneCount(o.genome!)).toBe(founderLength);
+  }, 60_000);
+
+  it('loading a save does not bring back a skip gene that was deleted', () => {
+    const parent = founder();
+    const key = geneKey(GeneClass.brainSkip, 5);
+    const trimmed = without(parent, (k) => k === key);
+    const loaded = upgradeGenome(trimmed, BRAIN_INPUT_COUNT);
+    expect(geneCount(loaded)).toBe(geneCount(trimmed));
+    expect(geneCount(upgradeGenome(trimmed, BRAIN_INPUT_COUNT - 1))).toBe(geneCount(trimmed) + 1);
+  });
 });

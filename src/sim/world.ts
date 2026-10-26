@@ -42,7 +42,7 @@ import {
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
-import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
+import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -403,7 +403,7 @@ export class World {
         parent.genome && !needsHerbivory
           ? parent.genome
           : encodeOrganismDNA({ ...phenotypeOf(parent), ...(needsHerbivory ? { herbivory: herbivoryOf(parent, config) } : {}) });
-      const genome = mutateGenome(parentGenome, config, prng);
+      const genome = config.dnaVariationEnabled ? mutateGenomeVariation(parentGenome, config, prng) : mutateGenome(parentGenome, config, prng);
       return { ...decodeOrganismDNA(genome, config), genome };
     }
     return {
@@ -468,7 +468,7 @@ export class World {
     for (const { genome, ...o } of state.organisms) {
       world.organisms.set(o.id, {
         ...clone(o),
-        ...(genome ? { genome: upgradeGenome(genome) } : {}),
+        ...(genome ? { genome: upgradeGenome(genome, o.brain.skip.length) } : {}),
         brain: upgradeBrain(clone(o.brain)),
         carnivory: o.carnivory ?? 0,
         kills: o.kills ?? 0,

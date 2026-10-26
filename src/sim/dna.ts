@@ -1,5 +1,5 @@
 import type { PRNG } from './prng';
-import { BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, mutateWeight, type Brain } from './brain';
+import { BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, mutateWeight, type Brain } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
 import {
@@ -305,18 +305,375 @@ export function phenotypeOf(o: Readonly<Organism>): Phenotype {
 
 /**
  * A genome from a save made before the newest brain inputs existed: adds a
- * direct-connection gene with the head start for each input it lacks (new
- * hidden connections are absent, i.e. 0), as upgradeBrain does for brains.
+ * direct-connection gene with the head start for each input the save lacked
+ * (new hidden connections are absent, i.e. 0), as upgradeBrain does for
+ * brains. `savedInputs` is how many brain inputs the save had (its brain's
+ * skip length); only inputs past it are added, so a gene that Stage 2
+ * deleted is not brought back.
  */
-export function upgradeGenome(dna: ArrayLike<number>): Uint32Array {
-  const present = new Set<number>();
-  for (let g = 0, n = geneCount(dna); g < n; g++) {
-    const key = dna[g * GENE_WORDS];
-    if (geneClassOf(key) === GeneClass.brainSkip) present.add(geneIndexOf(key));
-  }
-  const missing = HEAD_START_SKIP.map((_, i) => i).filter((i) => !present.has(i));
+export function upgradeGenome(dna: ArrayLike<number>, savedInputs: number): Uint32Array {
+  const missing = HEAD_START_SKIP.map((_, i) => i).filter((i) => i >= savedInputs);
   const out = new Uint32Array((geneCount(dna) + missing.length) * GENE_WORDS);
   out.set(Array.from(dna).slice(0, geneCount(dna) * GENE_WORDS));
   missing.forEach((i, k) => writeGene(out, (geneCount(dna) + k) * GENE_WORDS, geneKey(GeneClass.brainSkip, i), HEAD_START_SKIP[i]));
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2: variation operators (`dnaVariationEnabled`)
+// ---------------------------------------------------------------------------
+
+/**
+ * Stage 2 changes how a child's genome is made. The number of point
+ * mutations is drawn from a Poisson distribution (not one die per gene), and
+ * three structural operators can change the gene count: insertion of a new
+ * random gene, deletion of a gene, duplication of a segment of 1 to
+ * `dnaDuplicationMaxLength` genes. Every gene costs `dnaUpkeepPerGene` energy
+ * per tick (see metabolismCost), so length is under selection.
+ *
+ * Each gene keeps its legacy per-gene mutation rate (brain and register
+ * weights `brainMutationRate`, the tag `tagMutationRate`, body traits
+ * `traitMutationRate`, binary abilities `abilityMutationRate`), so with the
+ * structural rates at 0 the point process matches Stage 1's in distribution.
+ *
+ * A point mutation steps a gene's dose (its legacy step) or, with probability
+ * `dnaKeyFlipFraction`, flips one bit of the gene's index field, which
+ * retargets it to another slot (or to none: silent DNA).
+ */
+
+const LAST_BODY_TRAIT = TraitId.leap;
+const REGISTER_END = TraitId.memoryWeight0 + MEMORY_WEIGHT_COUNT;
+
+/** The per-gene point-mutation rate of a gene: the rate of the legacy operator for its trait. */
+export function pointMutationRate(key: number, config: Readonly<SimulationConfig>): number {
+  if (geneClassOf(key) !== GeneClass.trait) return config.brainMutationRate;
+  const id = geneIndexOf(key);
+  if (id >= TraitId.memoryWeight0) return id < REGISTER_END ? config.brainMutationRate : 0;
+  switch (id) {
+    case TraitId.tag:
+      return config.tagMutationRate;
+    case TraitId.carryCapacity:
+    case TraitId.dispersal:
+    case TraitId.memorySpan:
+    case TraitId.carnivory:
+    case TraitId.herbivory:
+      return config.traitMutationRate;
+    case TraitId.diagonal:
+    case TraitId.squeeze:
+    case TraitId.leap:
+      return continuousAbilities(config) ? config.traitMutationRate : config.abilityMutationRate;
+    default:
+      return 0;
+  }
+}
+
+/** Whether a gene points at a slot this build decodes (otherwise it is silent DNA). */
+export function isExpressed(key: number, config: Readonly<SimulationConfig>): boolean {
+  const index = geneIndexOf(key);
+  switch (geneClassOf(key)) {
+    case GeneClass.trait:
+      return index <= LAST_BODY_TRAIT || (index === TraitId.herbivory && splitDiets(config)) || (index >= TraitId.memoryWeight0 && index < REGISTER_END);
+    case GeneClass.brainSkip:
+      return index < BRAIN_INPUT_COUNT;
+    case GeneClass.brainHidden:
+      return index >>> 8 < BRAIN_HIDDEN && (index & 0xff) < BRAIN_INPUT_COUNT;
+    case GeneClass.brainHiddenBias:
+    case GeneClass.brainOut:
+      return index < BRAIN_HIDDEN;
+    case GeneClass.brainOutBias:
+      return index < 1;
+    default:
+      return false;
+  }
+}
+
+/** Every slot a gene can express, as keys (the pool insertions draw from). */
+function slotKeys(config: Readonly<SimulationConfig>): number[] {
+  const keys: number[] = [];
+  for (let t = 0; t <= LAST_BODY_TRAIT; t++) keys.push(geneKey(GeneClass.trait, t));
+  if (splitDiets(config)) keys.push(geneKey(GeneClass.trait, TraitId.herbivory));
+  for (let i = 0; i < MEMORY_WEIGHT_COUNT; i++) keys.push(geneKey(GeneClass.trait, TraitId.memoryWeight0 + i));
+  for (let i = 0; i < BRAIN_INPUT_COUNT; i++) keys.push(geneKey(GeneClass.brainSkip, i));
+  for (let h = 0; h < BRAIN_HIDDEN; h++) {
+    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
+    keys.push(geneKey(GeneClass.brainHiddenBias, h), geneKey(GeneClass.brainOut, h));
+  }
+  keys.push(geneKey(GeneClass.brainOutBias, 0));
+  return keys;
+}
+let slotCache: { split: boolean; keys: number[] } | null = null;
+function slotsFor(config: Readonly<SimulationConfig>): number[] {
+  const split = splitDiets(config);
+  if (slotCache?.split !== split) slotCache = { split, keys: slotKeys(config) };
+  return slotCache.keys;
+}
+
+/** The dose of a freshly inserted gene: small for summed traits and weights (so it nudges its slot), a random hue for a tag. */
+function randomDose(key: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
+  if (geneClassOf(key) === GeneClass.trait) {
+    switch (geneIndexOf(key)) {
+      case TraitId.tag:
+        return Number(prng.nextFloat(0, 360).toFixed(2));
+      case TraitId.carryCapacity:
+      case TraitId.dispersal:
+      case TraitId.memorySpan:
+        return Number(prng.nextGaussian(0, 1).toFixed(3));
+      case TraitId.carnivory:
+      case TraitId.herbivory:
+        return Number(prng.nextGaussian(0, config.carnivoryMutationStdDev).toFixed(3));
+      case TraitId.diagonal:
+      case TraitId.squeeze:
+      case TraitId.leap:
+        return Number(prng.nextGaussian(0, config.abilityMutationStdDev).toFixed(3));
+      default:
+        break;
+    }
+  }
+  return Number(prng.nextGaussian(0, config.brainMutationStdDev).toFixed(4));
+}
+
+/** A dose after its legacy mutation operator has fired (the operators' "did it mutate?" draw already made). */
+function stepDose(key: number, dose: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
+  const weight = () => {
+    const next = dose + prng.nextGaussian(0, config.brainMutationStdDev);
+    return Number(Math.max(-WEIGHT_LIMIT, Math.min(WEIGHT_LIMIT, next)).toFixed(4));
+  };
+  if (geneClassOf(key) !== GeneClass.trait) return weight();
+  const id = geneIndexOf(key);
+  if (id >= TraitId.memoryWeight0) return weight();
+  const sign = () => (prng.next() < 0.5 ? -1 : 1);
+  switch (id) {
+    case TraitId.tag:
+      return Number((((dose + prng.nextGaussian(0, config.tagMutationStdDev)) % 360 + 360) % 360).toFixed(2));
+    case TraitId.carryCapacity:
+      return Math.max(0, Math.min(config.maxCarryCapacity, dose + sign()));
+    case TraitId.dispersal:
+      return Math.max(0, Math.min(config.maxDispersal - 1, dose + sign()));
+    case TraitId.memorySpan:
+      return Math.max(0, Math.min(config.maxMemorySpan, dose + sign() * config.memorySpanStep));
+    case TraitId.carnivory:
+    case TraitId.herbivory:
+      return Number(Math.max(0, Math.min(1, dose + prng.nextGaussian(0, config.carnivoryMutationStdDev))).toFixed(3));
+    case TraitId.diagonal:
+    case TraitId.squeeze:
+    case TraitId.leap:
+      if (continuousAbilities(config)) return Number(Math.max(0, Math.min(1, dose + prng.nextGaussian(0, config.abilityMutationStdDev))).toFixed(3));
+      return 1 - dose;
+    default:
+      return dose;
+  }
+}
+
+/** Point-mutates gene `g` in place: a dose step, or a flip of one bit of its index field. */
+function pointMutate(dna: Uint32Array, g: number, config: Readonly<SimulationConfig>, prng: PRNG, flip: boolean): void {
+  const at = g * GENE_WORDS;
+  if (flip) {
+    dna[at] = (dna[at] ^ (1 << prng.nextInt(0, 15))) >>> 0;
+    return;
+  }
+  writeGene(dna, at, dna[at], stepDose(dna[at], geneDose(dna, at), config, prng));
+}
+
+/** A uniformly random gene that passes the rate thinning (a gene is picked in proportion to its rate). */
+function pickMutable(dna: Uint32Array, config: Readonly<SimulationConfig>, prng: PRNG, maxRate: number): number {
+  const n = geneCount(dna);
+  for (let tries = 0; tries < 10_000; tries++) {
+    const g = prng.nextInt(0, n - 1);
+    if (prng.next() * maxRate < pointMutationRate(dna[g * GENE_WORDS], config)) return g;
+  }
+  return -1; // no gene can mutate
+}
+
+const maxPointRate = (config: Readonly<SimulationConfig>): number =>
+  Math.max(config.brainMutationRate, config.tagMutationRate, config.traitMutationRate, config.abilityMutationRate);
+
+function deleteAt(dna: Uint32Array, g: number): Uint32Array {
+  const out = new Uint32Array(dna.length - GENE_WORDS);
+  out.set(dna.subarray(0, g * GENE_WORDS));
+  out.set(dna.subarray((g + 1) * GENE_WORDS), g * GENE_WORDS);
+  return out;
+}
+
+function insertAt(dna: Uint32Array, g: number, genes: Uint32Array): Uint32Array {
+  const out = new Uint32Array(dna.length + genes.length);
+  out.set(dna.subarray(0, g * GENE_WORDS));
+  out.set(genes, g * GENE_WORDS);
+  out.set(dna.subarray(g * GENE_WORDS), g * GENE_WORDS + genes.length);
+  return out;
+}
+
+/** Whether halving a gene's dose when it is duplicated keeps the phenotype (summed traits and weights; not hues or binary abilities). */
+function halvesOnDuplication(key: number, config: Readonly<SimulationConfig>): boolean {
+  if (geneClassOf(key) !== GeneClass.trait) return true;
+  const id = geneIndexOf(key);
+  if (id === TraitId.tag) return false;
+  if (id === TraitId.diagonal || id === TraitId.squeeze || id === TraitId.leap) return continuousAbilities(config);
+  return true;
+}
+
+/** Copies genes [start, start + length) and inserts the copy before gene `to` (in the genome without the copy). */
+function duplicateSegment(dna: Uint32Array, start: number, length: number, to: number, config: Readonly<SimulationConfig>): Uint32Array {
+  const copy = dna.slice(start * GENE_WORDS, (start + length) * GENE_WORDS);
+  let out = dna;
+  if (config.dnaDosageCompensation) {
+    out = dna.slice();
+    for (let k = 0; k < length; k++) {
+      if (!halvesOnDuplication(copy[k * GENE_WORDS], config)) continue;
+      const half = geneDose(copy, k * GENE_WORDS) / 2;
+      writeGene(copy, k * GENE_WORDS, copy[k * GENE_WORDS], half);
+      writeGene(out, (start + k) * GENE_WORDS, out[(start + k) * GENE_WORDS], half);
+    }
+  }
+  return insertAt(out, to, copy);
+}
+
+export type MutationKind = 'step' | 'keyFlip' | 'insert' | 'delete' | 'duplicate';
+
+/** Inserts a new random gene at a random position (does nothing at dnaMaxGenes). */
+function insertRandom(dna: Uint32Array, config: Readonly<SimulationConfig>, prng: PRNG): Uint32Array {
+  if (geneCount(dna) >= config.dnaMaxGenes) return dna;
+  const slots = slotsFor(config);
+  const key = slots[prng.nextInt(0, slots.length - 1)];
+  const gene = new Uint32Array(GENE_WORDS);
+  writeGene(gene, 0, key, randomDose(key, config, prng));
+  return insertAt(dna, prng.nextInt(0, geneCount(dna)), gene);
+}
+
+function deleteRandom(dna: Uint32Array, prng: PRNG): Uint32Array {
+  return geneCount(dna) === 0 ? dna : deleteAt(dna, prng.nextInt(0, geneCount(dna) - 1));
+}
+
+function duplicateRandom(dna: Uint32Array, config: Readonly<SimulationConfig>, prng: PRNG): Uint32Array {
+  const n = geneCount(dna);
+  if (n === 0) return dna;
+  const start = prng.nextInt(0, n - 1);
+  const length = prng.nextInt(1, Math.max(1, Math.min(config.dnaDuplicationMaxLength, n - start)));
+  if (n + length > config.dnaMaxGenes) return dna;
+  return duplicateSegment(dna, start, length, prng.nextInt(0, n), config);
+}
+
+/**
+ * A child's genome under Stage 2: point mutations (a Poisson count over the
+ * genome), then deletions, insertions and duplications (each a Poisson count
+ * at the per-gene rate times the parent's length).
+ */
+export function mutateGenomeVariation(parent: Uint32Array, config: Readonly<SimulationConfig>, prng: PRNG): Uint32Array {
+  let child = parent.slice();
+  const n = geneCount(parent);
+  const maxRate = maxPointRate(config);
+  // Candidates arrive at the highest rate and each is kept with its own gene's rate over that: an exact
+  // sample of independent per-gene rates without a die per gene.
+  for (let k = prng.nextPoisson(maxRate * n); k > 0; k--) {
+    const g = prng.nextInt(0, n - 1);
+    if (prng.next() * maxRate >= pointMutationRate(child[g * GENE_WORDS], config)) continue;
+    pointMutate(child, g, config, prng, prng.next() < config.dnaKeyFlipFraction);
+  }
+  for (let k = prng.nextPoisson(config.dnaDeletionRate * n); k > 0; k--) child = deleteRandom(child, prng);
+  for (let k = prng.nextPoisson(config.dnaInsertionRate * n); k > 0; k--) child = insertRandom(child, config, prng);
+  for (let k = prng.nextPoisson(config.dnaDuplicationRate * n); k > 0; k--) child = duplicateRandom(child, config, prng);
+  return child;
+}
+
+/** One mutation event of a given kind applied to a parent genome (for the census); the parent is untouched. */
+export function mutateOnce(parent: Uint32Array, kind: MutationKind, config: Readonly<SimulationConfig>, prng: PRNG): Uint32Array {
+  switch (kind) {
+    case 'insert':
+      return insertRandom(parent, config, prng);
+    case 'delete':
+      return deleteRandom(parent, prng);
+    case 'duplicate':
+      return duplicateRandom(parent, config, prng);
+    default: {
+      const child = parent.slice();
+      const g = pickMutable(child, config, prng, maxPointRate(config));
+      if (g >= 0) pointMutate(child, g, config, prng, kind === 'keyFlip');
+      return child;
+    }
+  }
+}
+
+// --- Measurements ---------------------------------------------------------
+
+export const GENE_TYPES = ['body', 'register', 'brainSkip', 'brainHidden', 'brainHiddenBias', 'brainOut', 'brainOutBias', 'silent'] as const;
+export type GeneType = (typeof GENE_TYPES)[number];
+
+/** What a gene is: its slot's type, or silent when it points at nothing this build decodes. */
+export function geneTypeOf(key: number, config: Readonly<SimulationConfig>): GeneType {
+  if (!isExpressed(key, config)) return 'silent';
+  switch (geneClassOf(key)) {
+    case GeneClass.trait:
+      return geneIndexOf(key) >= TraitId.memoryWeight0 ? 'register' : 'body';
+    case GeneClass.brainSkip:
+      return 'brainSkip';
+    case GeneClass.brainHidden:
+      return 'brainHidden';
+    case GeneClass.brainHiddenBias:
+      return 'brainHiddenBias';
+    case GeneClass.brainOut:
+      return 'brainOut';
+    default:
+      return 'brainOutBias';
+  }
+}
+
+export interface GenomeStats {
+  readonly count: number;
+  readonly meanLength: number;
+  readonly sdLength: number;
+  readonly minLength: number;
+  readonly maxLength: number;
+  /** Mean genes of each type per genome. */
+  readonly meanByType: Record<GeneType, number>;
+  /** Mean number of slots (keys) carried by two or more genes, per genome. */
+  readonly multiCopySlots: number;
+  /** Of the weight slots carried by two or more genes: the share whose copies all hold one dose. */
+  readonly identicalShare: number;
+  /** ...and the mean spread (largest − smallest dose) of the others, in brainMutationStdDev. */
+  readonly meanSpread: number;
+}
+
+/** Length, gene types and duplicate-copy divergence over a set of genomes. */
+export function genomeStats(genomes: readonly ArrayLike<number>[], config: Readonly<SimulationConfig>): GenomeStats {
+  const byType = Object.fromEntries(GENE_TYPES.map((t) => [t, 0])) as Record<GeneType, number>;
+  const lengths = genomes.map(geneCount);
+  const mean = lengths.reduce((a, l) => a + l, 0) / Math.max(1, lengths.length);
+  const sd = Math.sqrt(lengths.reduce((a, l) => a + (l - mean) ** 2, 0) / Math.max(1, lengths.length));
+  let multi = 0;
+  let identical = 0;
+  let spreadSum = 0;
+  let diverged = 0;
+  for (const dna of genomes) {
+    const doses = new Map<number, number[]>();
+    for (let g = 0, n = geneCount(dna); g < n; g++) {
+      const key = dna[g * GENE_WORDS];
+      byType[geneTypeOf(key, config)]++;
+      const list = doses.get(key);
+      if (list) list.push(geneDose(dna, g * GENE_WORDS));
+      else doses.set(key, [geneDose(dna, g * GENE_WORDS)]);
+    }
+    for (const [key, list] of doses) {
+      if (list.length < 2) continue;
+      multi++;
+      if (geneClassOf(key) === GeneClass.trait && geneIndexOf(key) < TraitId.memoryWeight0) continue; // hues, counts and flags aren't comparable in std units
+      const spread = Math.max(...list) - Math.min(...list);
+      if (spread === 0) identical++;
+      else {
+        diverged++;
+        spreadSum += spread / config.brainMutationStdDev;
+      }
+    }
+  }
+  const total = Math.max(1, genomes.length);
+  for (const t of GENE_TYPES) byType[t] /= total;
+  return {
+    count: genomes.length,
+    meanLength: mean,
+    sdLength: sd,
+    minLength: lengths.length ? Math.min(...lengths) : 0,
+    maxLength: lengths.length ? Math.max(...lengths) : 0,
+    meanByType: byType,
+    multiCopySlots: multi / total,
+    identicalShare: identical + diverged > 0 ? identical / (identical + diverged) : 1,
+    meanSpread: diverged > 0 ? spreadSum / diverged : 0,
+  };
 }
