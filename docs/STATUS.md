@@ -31,7 +31,7 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 ## In progress: DNA (2026-10-26)
 
-Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, plus the 8-seed gate in `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
+Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
 
 ## Latest findings (details and all other results in `docs/findings.md`)
 
@@ -93,4 +93,5 @@ There is no target outcome: new features go in on by default and the world is le
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
 - Fingerprints changed with the mobility merge, the new dial weight, and windfalls and memory on by default; record new ones (`npm run fingerprint`) before the next engine optimisation.
+- `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Shorten those tests or run them in their own pool if it becomes a nuisance.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

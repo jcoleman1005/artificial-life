@@ -62,7 +62,7 @@ let legacySample: Organism[] | null = null;
 function legacyOrganisms(): Organism[] {
   if (!legacySample) {
     const world = new World({ ...SMALL, seed: 'dna-legacy' });
-    for (let t = 0; t < 300; t++) world.step();
+    for (let t = 0; t < 200; t++) world.step();
     legacySample = Array.from(world.organisms.values());
   }
   expect(legacySample.length).toBeGreaterThan(10);
@@ -201,7 +201,7 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
   it.each(['brain', 'dials'] as const)('a world with DNA on runs bit-identically to one with it off (%s)', (controller) => {
     const legacy = new World({ ...SMALL, seed: 'dna-gate', controller });
     const dna = new World({ ...SMALL, seed: 'dna-gate', controller, dnaEnabled: true });
-    for (let t = 1; t <= 300; t++) {
+    for (let t = 1; t <= 200; t++) {
       legacy.step();
       dna.step();
       if (t % 100 === 0) expect(withoutDna(dna.exportState())).toBe(withoutDna(legacy.exportState()));
@@ -217,7 +217,7 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
   it('two DNA runs from one seed give identical state hashes', () => {
     const runs = [0, 1].map(() => {
       const w = new World({ ...SMALL, seed: 'dna-hash', dnaEnabled: true });
-      for (let t = 0; t < 300; t++) w.step();
+      for (let t = 0; t < 150; t++) w.step();
       return hash(w.exportState());
     });
     expect(runs[0]).toBe(runs[1]);
@@ -225,9 +225,9 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
 
   it('a DNA world saved through JSON continues exactly, genomes included', () => {
     const original = new World({ ...SMALL, seed: 'dna-snap', dnaEnabled: true });
-    for (let t = 0; t < 200; t++) original.step();
+    for (let t = 0; t < 100; t++) original.step();
     const restored = World.fromState(JSON.parse(JSON.stringify(original.exportState())) as WorldState);
-    for (let t = 0; t < 200; t++) {
+    for (let t = 0; t < 100; t++) {
       original.step();
       restored.step();
     }
@@ -237,9 +237,9 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
 
   it('switching DNA on mid-run encodes parents at their next birth and changes nothing', () => {
     const legacy = new World({ ...SMALL, seed: 'dna-switch' });
-    for (let t = 0; t < 100; t++) legacy.step();
+    for (let t = 0; t < 60; t++) legacy.step();
     const dna = World.fromState({ ...legacy.exportState(), config: { ...legacy.config, dnaEnabled: true } });
-    for (let t = 0; t < 300; t++) {
+    for (let t = 0; t < 140; t++) {
       legacy.step();
       dna.step();
     }

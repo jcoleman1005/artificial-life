@@ -35,7 +35,7 @@ A genome is a `Uint32Array` of genes, three words each: `[key, low, high]`. `key
 ### Gate
 
 - Tests: trait-by-trait `decode(encode(o))` equality; legacy upkeep; absence robustness (each trait gene and each brain weight gene deleted in turn, empty genome, junk doses); circular tag mean (10°+350° → 0°, 90°+270° → 0°); 1,000 random input vectors score identically; a DNA world and a legacy world from one seed stay **bit-identical** (both controllers, and with DNA switched on mid-run); two DNA runs give identical state hashes; a DNA world restored through JSON continues exactly.
-- Experiment: `npm run experiment -- --compare dnaEnabled=false,true --seeds 1-8 --ticks 10000` (`docs/experiments/dna-stage1-gate.txt`): see `docs/findings.md`.
+- Experiment: `npm run experiment -- --compare dnaEnabled=false,true --seeds 1-8 --ticks 10000` (`docs/experiments/dna-stage1-gate.txt`): every metric identical in all 8 seeds (Δ 0).
 - Cost: ~25 µs extra per birth (genome mutate + decode, vs the legacy brain and register mutation), about 0.03 ms per tick at ~1 birth per tick. `npm run perf` has a `brain + DNA` row.
 
 Because Stage 1 is bit-identical, the gate is met by construction; switching it on by default only adds the genome's cost.

@@ -6,6 +6,7 @@ Experiment results and engine notes, moved out of `docs/STATUS.md`. Raw outputs 
 
 | Question | Result |
 |---|---|
+| DNA Stage 1 gate (`dnaEnabled` off vs on, 2026-10-26) | **Identical.** Every metric (population, lean lows, births, kills, traits, abilities, brain drift, plants) matches exactly in all 8 seeds (Δ 0, 0/8 higher), as designed: the genome path draws from the PRNG in the legacy order. `docs/experiments/dna-stage1-gate.txt`. |
 | Do tribes form from sharing? | **No.** Look-alike clusters come from family structure (children born adjacent with the parent's tag); clustering is the same with sharing off. |
 | Energy sharing (×1.5) | Organisms exploited it by passing energy back and forth (32–39% returned within 5 ticks). Replaced by pure transfer, then by food sharing. |
 | Pure-transfer or need-aware energy sharing | No effect on population or in-group bias. |
