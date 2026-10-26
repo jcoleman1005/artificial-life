@@ -16,9 +16,11 @@ for (let i = 0; i < args.length; i++) {
   const n = Number(raw);
   (set as Record<string, unknown>)[k] = raw === 'true' ? true : raw === 'false' ? false : raw.trim() !== '' && !Number.isNaN(n) ? n : raw;
 }
+// Immigration keeps every world populated for the whole run (without it all
+// four die out before tick 900, leaving later samples nothing to hash).
 const worlds: Record<string, Partial<SimulationConfig>> = {
-  small: { ...WORLD_SIZES.small, ...FOOD_LAYOUTS.anywhere },
-  large: {},
+  small: { ...WORLD_SIZES.small, ...FOOD_LAYOUTS.anywhere, immigrationEnabled: true },
+  large: { immigrationEnabled: true },
 };
 const out: string[] = [];
 for (const [name, overrides] of Object.entries(worlds)) {
