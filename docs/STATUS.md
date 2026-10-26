@@ -27,7 +27,7 @@ _Last updated: 2026-10-26._
 
 ## What exists (summary)
 
-A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce asexually and, with the brain, hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
+A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
 
 ## In progress: DNA (2026-10-26)
 
@@ -40,6 +40,7 @@ Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec
 - Squeezing past other organisms is what solved crowding (blocked moves 49.5% → 5.1%).
 - Signals have not evolved any meaning, even over 50,000 ticks, and windfalls did not give them a job.
 - Staggered region seasons raised lean-season lows about 2.5×.
+- Mating (2026-10-26, 6 seeds × 15k, before DNA): used in every surviving world (0.1–24% of births), no colour choosiness, parent–child pairs 2–3× chance; population lower with sex on, cause unclear.
 - Carrion/predation: scavenging pays at once, hunting takes off in some worlds in waves. Plants vs classic food: same population, faster turnover.
 - Findings predate the 2026-10-25 region layout; rerun before relying on exact numbers.
 
@@ -47,13 +48,13 @@ Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec
 
 Not targets to hardcode: conditions to build so they *can* happen, then watch.
 
-- **Colour groups becoming separate species** (2026-10-25). Today reproduction is asexual, so a colour group is just a big family and "species" has no meaning yet. Likely recipe, none of it built:
+- **Colour groups becoming separate species** (2026-10-25). Likely recipe (step 2 built 2026-10-26, with the first half of step 3: who to mate with is left to evolve):
   1. Different ways to make a living: two food types with a digestion trade-off, so groups in different regions are pushed apart (overlaps roadmap item 8).
-  2. Sexual reproduction: two adjacent organisms mate and the child mixes both parents' genes, colour included (roadmap item 14).
+  2. ~~Sexual reproduction~~ (built 2026-10-26 as an option next to cloning; see `docs/decisions.md`, Mating): two adjacent organisms that ask each other make a child that mixes both parents' genes, colour included. Whether sex catches on is left to evolve.
   3. Who mates with whom: an evolved preference for partners of similar colour, and/or weaker or infertile offspring from parents too far apart genetically. Mixed offspring that are bad at both foods would make choosy mating pay.
   4. Recognising species: group organisms by who can still interbreed (instead of fixed hue buckets), name them, colour by species, and log "a new species split off" events; later a family tree.
 
-  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Keep asexual reproduction as a setting. The build order is not yet agreed; the roadmap below is unchanged.
+  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection.
 
 ## Roadmap (agreed 2026-10-25; build in this order)
 
@@ -81,7 +82,7 @@ There is no target outcome: new features go in on by default and the world is le
 
 **Phase 4: slow burners on the always-on server**
 13. ~~The always-on Node.js server.~~ Built 2026-10-25 (moved ahead of Phases 2–3). Next: install it on the S21 (`docs/server.md`), then long brain runs (100k+ ticks).
-14. Sexual reproduction and mate preference (visible species splitting by colour; name colour groups in a way that scales to it).
+14. ~~Sexual reproduction and mate preference~~ (mating built 2026-10-26, ahead of order; partner preference is an evolvable brain input). Still to do: name colour groups in a way that scales to species.
 15. Pheromone trails, then individual recognition, then lifetime plasticity.
 
 **Phase 5: polish for the phone**

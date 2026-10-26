@@ -230,7 +230,7 @@ export class InspectorView {
             <div class="header-pre">
               ${energy > 0 ? describeDoing(organism, nameOf) : 'Died'} · ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°${
                 lineage.parentId === null && lineage.birthTick > 0 ? ` · spontaneously generated (tick ${lineage.birthTick})` : ''
-              }${lineage.parentId ? ` · child of ${givenName(lineage.parentId)}` : ''}
+              }${lineage.parentId ? ` · child of ${givenName(lineage.parentId)}${lineage.mateId ? ` and ${givenName(lineage.mateId)}` : ''}` : ''}
             </div>
           </div>
           <button type="button" class="btn-close-inspector" aria-label="Deselect">✕</button>

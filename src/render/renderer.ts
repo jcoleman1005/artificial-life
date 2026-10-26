@@ -639,11 +639,13 @@ export class CanvasRenderer {
       ctx.stroke();
     };
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-    const parent = selected.lineage.parentId ? this.world.organisms.get(selected.lineage.parentId) : undefined;
-    if (parent) link(parent, false);
+    for (const parentId of [selected.lineage.parentId, selected.lineage.mateId]) {
+      const parent = parentId ? this.world.organisms.get(parentId) : undefined;
+      if (parent) link(parent, false);
+    }
     ctx.strokeStyle = 'rgba(252, 216, 119, 0.8)';
     for (const org of this.world.organisms.values()) {
-      if (org.lineage.parentId === selected.id) link(org, true);
+      if (org.lineage.parentId === selected.id || org.lineage.mateId === selected.id) link(org, true);
     }
     ctx.setLineDash([]);
     ctx.lineCap = 'butt';

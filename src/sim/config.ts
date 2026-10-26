@@ -79,6 +79,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   predationEnabled: true,
   attackCost: 2,
   bitePowerMin: 0.2,
+  sexEnabled: true,
   immigrationEnabled: false, // watch only the founders and their descendants
   immigrationInterval: 25,
   immigrationCount: 1,
@@ -107,7 +108,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dnaDuplicationMaxLength: 4,
   dnaKeyFlipFraction: 0.05,
   dnaDosageCompensation: false,
-  dnaUpkeepPerGene: 0.00005, // a 380-gene founder pays about 8% of base metabolism
+  dnaUpkeepPerGene: 0.00005, // a 415-gene founder (52 brain inputs) pays about 8% of base metabolism
   dnaMaxGenes: 1500,
   seed: 42,
 };

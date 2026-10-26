@@ -48,6 +48,11 @@ export function describeEvent(e: WorldEvent, regions: readonly FoodRegion[], con
           : 'The first kill';
       return { text, colour: MOOD.bad };
     }
+    case 'firstMating': {
+      const [a, b] = e.groups ? e.groups.map((g) => GROUP_NAMES[g]) : [null, null];
+      const text = a && b ? (a === b ? `First mating: two of the ${a}` : `First mating: one of the ${a} and one of the ${b}`) : 'The first mating';
+      return { text, colour: MOOD.good };
+    }
     case 'groupDiet':
       return e.diet === 'meat'
         ? { text: `${GROUP_NAMES[e.group]} have turned to meat`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` }

@@ -27,6 +27,8 @@ export type WorldEventBody =
   | { readonly kind: 'generation'; readonly generation: number }
   /** The first kill of the run (killer and prey colour groups). */
   | { readonly kind: 'firstKill'; readonly killerGroup: number | null; readonly preyGroup: number | null }
+  /** The first child of mating (the two parents' colour groups). */
+  | { readonly kind: 'firstMating'; readonly groups: readonly [number, number] | null }
   /** An established colour group now eats mostly meat (mean carnivory >= MEAT_GROUP), or went back to plants. */
   | { readonly kind: 'groupDiet'; readonly group: number; readonly diet: 'meat' | 'plants' };
 
@@ -58,6 +60,7 @@ export class WorldEventDetector {
   private crashed = false;
   private extinct = false;
   private sawKill = false;
+  private sawMating = false;
   private readonly meatGroups = new Set<number>();
 
   /**
@@ -140,6 +143,16 @@ export class WorldEventDetector {
         kind: 'firstKill',
         killerGroup: kill ? groupIndexOf(kill.killerTag) : null,
         preyGroup: kill ? groupIndexOf(kill.preyTag) : null,
+      });
+    }
+
+    // The first mating (a resumed world that already had some reports none)
+    if (!this.sawMating && world.matingsTotal > 0) {
+      this.sawMating = true;
+      const mating = world.lastMating;
+      found.push({
+        kind: 'firstMating',
+        groups: mating ? [groupIndexOf(mating.tags[0]), groupIndexOf(mating.tags[1])] : null,
       });
     }
 
