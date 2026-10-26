@@ -164,7 +164,7 @@ export class SettingsView {
         ${segmented('Food', 'food', [['anywhere', 'Anywhere'], ['regions', 'Regions'], ['shifting', 'Shifting']], toggles.foodLayout)}
         ${segmented('Seasons', 'seasons', onOff, toggles.seasonsEnabled ? 'on' : 'off')}
         ${segmented('Windfalls', 'windfalls', onOff, toggles.windfallsEnabled ? 'on' : 'off')}
-        ${segmented('Newcomers', 'immigration', onOff, toggles.immigrationEnabled ? 'on' : 'off')}
+        ${segmented('Spontaneous generation', 'immigration', onOff, toggles.immigrationEnabled ? 'on' : 'off')}
         ${segmented('Plants', 'plants', [['off', 'Patches'], ['on', 'Evolving']], toggles.plantsEnabled ? 'on' : 'off')}
       </section>
       <section class="settings-group">

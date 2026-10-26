@@ -175,7 +175,7 @@ export class HistoryView {
       },
       {
         section: 'Look-alike groups & sharing',
-        label: 'Immigrants (total)',
+        label: 'Spontaneously generated (total)',
         fixedRange: null,
         value: (s) => s.immigrantsTotal,
         format: (s) => String(s.immigrantsTotal),

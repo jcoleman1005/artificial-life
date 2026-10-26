@@ -229,7 +229,7 @@ export class InspectorView {
             <h2><span class="tag-swatch" style="background: hsl(${organism.tag}, 85%, 60%)" aria-hidden="true"></span>${name.full}</h2>
             <div class="header-pre">
               ${energy > 0 ? describeDoing(organism, nameOf) : 'Died'} · ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°${
-                lineage.parentId === null && lineage.birthTick > 0 ? ` · immigrant (tick ${lineage.birthTick})` : ''
+                lineage.parentId === null && lineage.birthTick > 0 ? ` · spontaneously generated (tick ${lineage.birthTick})` : ''
               }${lineage.parentId ? ` · child of ${givenName(lineage.parentId)}` : ''}
             </div>
           </div>
