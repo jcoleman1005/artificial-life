@@ -307,6 +307,27 @@ function summarize(results: RunResult[], variants: string[]): string {
     });
     lines.push([key, ...means.map(fmt), ...diffs].join(' | '));
   }
+  // The ship-on gate in WORLD_RULES.md, against the first variant (the switch off).
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s.length === 0 ? NaN : s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  };
+  lines.push('', `Ship-on gate vs ${base}: median per-seed ratio (avgPop ≥ 0.8, leanLow ≥ 0.7); new extinctions (finalPop 0 where ${base} survived)`);
+  for (const v of variants.slice(1)) {
+    const ratios = (key: string) =>
+      byVariant(v).flatMap((r) => {
+        const b = results.find((x) => x.variant === base && x.seed === r.seed);
+        return b && key in r.metrics && b.metrics[key] > 0 ? [r.metrics[key] / b.metrics[key]] : [];
+      });
+    const extinct = byVariant(v)
+      .filter((r) => r.metrics.finalPop === 0 && (results.find((x) => x.variant === base && x.seed === r.seed)?.metrics.finalPop ?? 0) > 0)
+      .map((r) => r.seed);
+    const pop = median(ratios('avgPop'));
+    const lean = median(ratios('leanLow'));
+    // No leanLow when the run is shorter than a season; the gate then rests on the rest.
+    const pass = pop >= 0.8 && (Number.isNaN(lean) || lean >= 0.7) && extinct.length === 0;
+    lines.push(`${v}: avgPop ${fmt(pop)}, leanLow ${Number.isNaN(lean) ? 'n/a' : fmt(lean)}, new extinctions ${extinct.length ? `seeds ${extinct.join(',')}` : 'none'} → ${pass ? 'PASS' : 'FAIL'}`);
+  }
   return lines.join('\n');
 }
 
