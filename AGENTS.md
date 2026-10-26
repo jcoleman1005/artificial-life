@@ -54,6 +54,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.
+- World changes (prompts in `WORLD_PROMPTS.md`) follow `WORLD_RULES.md`.
 - Use `npm run experiment` for comparisons instead of writing one-off scripts, and `npm run fingerprint` to prove an engine optimization changes no outcome.
 - Experiment results: read the `.txt` summary in `docs/experiments/`, not the `.json`.
 

@@ -5,7 +5,17 @@ import type { SimulationConfig } from '../src/sim/types';
 // Prints a hash of the world state at intervals for both controllers, in the
 // original small world and in the default large one. Run before and after an
 // engine optimization: identical output means the change did not alter any
-// simulation outcome.  Usage: npm run fingerprint
+// simulation outcome.  Usage: npm run fingerprint [-- --set key=value ...]
+// --set applies config to every world, e.g. --set overgrazingEnabled=false to
+// check that a feature's switch off reproduces the pre-change fingerprint.
+const set: Partial<SimulationConfig> = {};
+const args = process.argv.slice(2);
+for (let i = 0; i < args.length; i++) {
+  if (args[i] !== '--set') continue;
+  const [k, raw] = (args[++i] ?? '').split('=');
+  const n = Number(raw);
+  (set as Record<string, unknown>)[k] = raw === 'true' ? true : raw === 'false' ? false : raw.trim() !== '' && !Number.isNaN(n) ? n : raw;
+}
 const worlds: Record<string, Partial<SimulationConfig>> = {
   small: { ...WORLD_SIZES.small, ...FOOD_LAYOUTS.anywhere },
   large: {},
@@ -13,7 +23,7 @@ const worlds: Record<string, Partial<SimulationConfig>> = {
 const out: string[] = [];
 for (const [name, overrides] of Object.entries(worlds)) {
   for (const controller of ['dials', 'brain'] as const) {
-    const w = new World({ ...overrides, seed: 'fingerprint', controller });
+    const w = new World({ ...overrides, ...set, seed: 'fingerprint', controller });
     const h = createHash('sha256');
     for (let t = 1; t <= 1500; t++) {
       w.step();

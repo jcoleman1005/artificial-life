@@ -88,5 +88,6 @@ There is no target outcome: new features go in on by default and the world is le
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
-- Fingerprints changed with the mobility merge, the new dial weight, and windfalls and memory on by default; record new ones (`npm run fingerprint`) before the next engine optimisation.
+- Fingerprint at defaults (2026-10-26; record a new one at each world-change merge). All four runs end with population 0 by tick 1500, so later samples hash only food patches, which weakens the check:
+  `small dials 2081c1db3e0536b2 · small brain dfe499a71afc9889 · large dials a59c5b7e5449b22d · large brain fa175790079db78b`
 - The S21 check (roadmap item 1) is still to do on the phone itself.
