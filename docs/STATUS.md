@@ -112,13 +112,13 @@ If Proxmox ever hosts it instead: an unprivileged Debian 13 LXC on `local-lvm`, 
 
 Not targets to hardcode: conditions to build so they *can* happen, then watch.
 
-- **Colour groups becoming separate species** (2026-10-25). Today reproduction is asexual, so a colour group is just a big family and "species" has no meaning yet. Likely recipe, none of it built:
+- **Colour groups becoming separate species** (2026-10-25). Likely recipe (step 2 built 2026-10-26, with the first half of step 3: who to mate with is left to evolve):
   1. Different ways to make a living: two food types with a digestion trade-off, so groups in different regions are pushed apart (overlaps roadmap item 8).
-  2. Sexual reproduction: two adjacent organisms mate and the child mixes both parents' genes, colour included (roadmap item 14).
+  2. ~~Sexual reproduction~~ (built 2026-10-26 as an option next to cloning; see AGENTS.md, Mating): two adjacent organisms that ask each other make a child that mixes both parents' genes, colour included. Whether sex catches on is left to evolve.
   3. Who mates with whom: an evolved preference for partners of similar colour, and/or weaker or infertile offspring from parents too far apart genetically. Mixed offspring that are bad at both foods would make choosy mating pay.
   4. Recognising species: group organisms by who can still interbreed (instead of fixed hue buckets), name them, colour by species, and log "a new species split off" events; later a family tree.
 
-  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Keep asexual reproduction as a setting. The build order is not yet agreed; the roadmap below is unchanged.
+  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection.
 
 ## Roadmap (agreed 2026-10-25; build in this order)
 
@@ -146,7 +146,7 @@ There is no target outcome: new features go in on by default and the world is le
 
 **Phase 4: slow burners on the always-on server**
 13. ~~The always-on Node.js server.~~ Built 2026-10-25 (moved ahead of Phases 2–3). Next: install it on the S21 (`docs/server.md`), then long brain runs (100k+ ticks).
-14. Sexual reproduction and mate preference (visible species splitting by colour; name colour groups in a way that scales to it).
+14. ~~Sexual reproduction and mate preference~~ (mating built 2026-10-26, ahead of order; partner preference is an evolvable brain input). Still to do: name colour groups in a way that scales to species.
 15. Pheromone trails, then individual recognition, then lifetime plasticity.
 
 **Phase 5: polish for the phone**

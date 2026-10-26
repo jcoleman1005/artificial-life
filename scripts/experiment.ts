@@ -49,6 +49,8 @@ interface Job {
 const SIGNAL_INPUTS = ['isSignal', 'signalOnFood', 'signalHunger', 'moveSignal', 'moveSignalAlike'] as const;
 /** ...and the hunting ones. */
 const HUNTING_INPUTS = ['isAttack', 'attackKillChance', 'attackAlike', 'attackFamily', 'attackHunger', 'moveCarrion'] as const;
+/** ...and the mating ones. */
+const MATING_INPUTS = ['isMate', 'mateFullness', 'mateAlike', 'mateFamily', 'mateReady'] as const;
 
 /** Reads a SavedWorld file (or a bare WorldState) and returns the world state. */
 function readWorldState(path: string): WorldState {
@@ -195,6 +197,11 @@ function runJob(job: Job): RunResult {
     kills: m.killsTotal - start.killsTotal,
     'killsOfStrangers%': (100 * (m.killsOfStrangersTotal - start.killsOfStrangersTotal)) / Math.max(1, m.killsTotal - start.killsTotal),
     'killsOfKin%': (100 * (m.killsOfKinTotal - start.killsOfKinTotal)) / Math.max(1, m.killsTotal - start.killsTotal),
+    matings: m.matingsTotal - start.matingsTotal,
+    'birthsFromMating%': (100 * (m.matingsTotal - start.matingsTotal)) / Math.max(1, m.birthsTotal - start.birthsTotal),
+    'matingsAlike%': (100 * (m.matingsAlikeTotal - start.matingsAlikeTotal)) / Math.max(1, m.matingsTotal - start.matingsTotal),
+    'matingsOfStrangers%': (100 * (m.matingsOfStrangersTotal - start.matingsOfStrangersTotal)) / Math.max(1, m.matingsTotal - start.matingsTotal),
+    'matingsParentChild%': (100 * (m.matingsInFamilyTotal - start.matingsInFamilyTotal)) / Math.max(1, m.matingsTotal - start.matingsTotal),
     carrionEaten: m.carrionEatenTotal - start.carrionEatenTotal,
     carnivory: m.averageCarnivory,
     meatEaters: m.meatEaters,
@@ -226,7 +233,7 @@ function runJob(job: Job): RunResult {
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
     ...Object.fromEntries(
-      [...SIGNAL_INPUTS, ...HUNTING_INPUTS].map((k) => [`b.${k}`, mean((o) => o.brain.skip[BRAIN_INPUTS.indexOf(k)])])
+      [...SIGNAL_INPUTS, ...HUNTING_INPUTS, ...MATING_INPUTS].map((k) => [`b.${k}`, mean((o) => o.brain.skip[BRAIN_INPUTS.indexOf(k)])])
     ),
     ...Object.fromEntries(POLICY_WEIGHT_KEYS.map((k) => [`w.${k}`, mean((o) => o.policy[k])])),
     ...Object.fromEntries(Object.entries(actions).map(([k, v]) => [`act.${k}%`, (100 * v) / actionTotal])),

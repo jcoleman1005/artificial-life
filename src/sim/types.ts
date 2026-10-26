@@ -53,6 +53,10 @@ export type ActionType =
   | 'ATTACK_SOUTH'
   | 'ATTACK_EAST'
   | 'ATTACK_WEST'
+  | 'MATE_NORTH'
+  | 'MATE_SOUTH'
+  | 'MATE_EAST'
+  | 'MATE_WEST'
   | 'REST';
 
 export interface LegalAction {
@@ -88,6 +92,14 @@ export interface LegalAction {
   readonly preyKillChance?: number;
   /** ATTACK only: the prey is the attacker's own child or parent. */
   readonly preyIsFamily?: boolean;
+  /** MATE only: the adjacent organism asked. A child is only made if it asks back the same tick. */
+  readonly mateId?: string;
+  /** MATE only: how alike the partner's tag looks (0..1). */
+  readonly mateSimilarity?: number;
+  /** MATE only: the partner is one's own child or parent. */
+  readonly mateIsFamily?: boolean;
+  /** MATE only: the partner has enough energy to reproduce (so could ask back). */
+  readonly mateReady?: boolean;
 }
 
 export interface PolicyWeights {
@@ -208,7 +220,9 @@ export type DecisionOutcome =
   | 'energy_too_low'
   | 'rested'
   /** An attack that did not kill (missed, or the prey got away). */
-  | 'missed';
+  | 'missed'
+  /** Asked a neighbour to mate and it did not ask back. */
+  | 'no_partner';
 
 export interface DecisionRecord {
   readonly tick: number;
@@ -223,6 +237,8 @@ export interface DecisionRecord {
 export interface LineageInfo {
   readonly id: string; // Clan / root ancestor lineage identifier
   readonly parentId: string | null;
+  /** The second parent, for a child of mating (it carries the first parent's lineage id). */
+  readonly mateId?: string;
   readonly generation: number;
   readonly birthTick: number;
 }
@@ -466,6 +482,7 @@ export interface SimulationConfig {
   predationEnabled: boolean; // Allow ATTACK (brain only): a kill turns the prey into carrion
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
+  sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
   immigrationEnabled: boolean; // Newcomers arrive during the run (off: only the founders and their descendants)
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
@@ -531,6 +548,15 @@ export interface WorldMetrics {
   killsTotal: number;
   killsOfStrangersTotal: number;
   killsOfKinTotal: number;
+  /**
+   * Children made by mating so far (the rest of birthsTotal are clones), and
+   * how the partners looked to each other: alike (kin cut-off), strangers, or
+   * parent and child.
+   */
+  matingsTotal: number;
+  matingsAlikeTotal: number;
+  matingsOfStrangersTotal: number;
+  matingsInFamilyTotal: number;
   /** Carrion meals eaten so far, and carrion energy lying in the world now. */
   carrionEatenTotal: number;
   carrionStock: number;

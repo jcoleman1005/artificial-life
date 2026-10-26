@@ -24,6 +24,8 @@ export class MetricsView {
     const kills = metrics.killsTotal ?? 0;
     const strangerShare = kills > 0 ? Math.round((100 * (metrics.killsOfStrangersTotal ?? 0)) / kills) : 0;
     const kinShare = kills > 0 ? Math.round((100 * (metrics.killsOfKinTotal ?? 0)) / kills) : 0;
+    const matings = metrics.matingsTotal ?? 0;
+    const matingAlikeShare = matings > 0 ? Math.round((100 * (metrics.matingsAlikeTotal ?? 0)) / matings) : 0;
 
     setHTMLPreservingDetails(
       this.container,
@@ -56,6 +58,10 @@ export class MetricsView {
         <div class="metric-card">
           <span class="m-label">Kills</span>
           <span class="m-val">${kills}${kills > 0 ? ` <small>(${strangerShare}% different colour, ${kinShare}% alike)</small>` : ''}</span>
+        </div>
+        <div class="metric-card">
+          <span class="m-label">Matings</span>
+          <span class="m-val">${matings}${matings > 0 ? ` <small>(${Math.round((100 * matings) / Math.max(1, birthsTotal))}% of births; ${matingAlikeShare}% alike pairs)</small>` : ''}</span>
         </div>
         <div class="metric-card">
           <span class="m-label">Diet</span>

@@ -23,6 +23,11 @@ export function describeDoing(org: OrganismView, nameOf: (id: string) => string 
     return ok ? `Giving food${to ? ` to ${to}` : ''}` : 'Tried to give food';
   }
   if (type.startsWith('REPRODUCE_')) return ok ? 'Had a baby' : 'Tried to have a baby';
+  if (type.startsWith('MATE_')) {
+    const partner = last.chosenAction.mateId ? nameOf(last.chosenAction.mateId) : 'a neighbour';
+    if (ok) return `Had a baby with ${partner}`;
+    return last.outcome === 'no_partner' ? `Courting ${partner}` : `Tried to have a baby with ${partner}`;
+  }
   if (type.startsWith('ATTACK_')) {
     const prey = last.chosenAction.preyId ? nameOf(last.chosenAction.preyId) : 'a neighbour';
     return ok ? `Killed ${prey}` : `Attacked ${prey} (missed)`;

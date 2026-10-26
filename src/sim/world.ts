@@ -1,4 +1,5 @@
 import { PRNG } from './prng';
+import { DIRECTION_OFFSETS } from './types';
 import type {
   ActionScore,
   CarrionPatch,
@@ -13,6 +14,8 @@ import type {
   WorldSnapshot,
 } from './types';
 import { createConfig } from './config';
+import { isParentOrChild } from './family';
+import { genomeOf, recombine } from './sex';
 import { senseEnvironment } from './sensors';
 import {
   createRandomPolicy,
@@ -102,6 +105,10 @@ const WORLD_COUNTERS = [
   'killsTotal',
   'killsOfStrangersTotal',
   'killsOfKinTotal',
+  'matingsTotal',
+  'matingsAlikeTotal',
+  'matingsOfStrangersTotal',
+  'matingsInFamilyTotal',
   'carrionEatenTotal',
   'carrionUnitsRotted',
 ] as const;
@@ -144,10 +151,17 @@ export class World {
   public killsTotal = 0;
   public killsOfStrangersTotal = 0;
   public killsOfKinTotal = 0;
+  /** Children made by mating, and how the pairs looked to each other (alike, strangers) or were related (parent and child). */
+  public matingsTotal = 0;
+  public matingsAlikeTotal = 0;
+  public matingsOfStrangersTotal = 0;
+  public matingsInFamilyTotal = 0;
   public carrionEatenTotal = 0;
   public carrionUnitsRotted = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
+  /** The latest mating, for observers (not saved). */
+  public lastMating: { readonly tick: number; readonly tags: readonly [number, number] } | null = null;
   /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
   public plantCounters: PlantCounters = newPlantCounters();
   /** Soil fertility and season region per cell, built on first use (terrain and regions never change). */
@@ -186,9 +200,14 @@ export class World {
     this.killsTotal = 0;
     this.killsOfStrangersTotal = 0;
     this.killsOfKinTotal = 0;
+    this.matingsTotal = 0;
+    this.matingsAlikeTotal = 0;
+    this.matingsOfStrangersTotal = 0;
+    this.matingsInFamilyTotal = 0;
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
     this.lastKill = null;
+    this.lastMating = null;
     this.plantCounters = newPlantCounters();
     this.soilField = null;
     this.nextOrganismSeq = 0;
@@ -736,6 +755,8 @@ export class World {
     const pendingSwaps = new Map<string, { mover: Organism; otherId: string }>();
     // Attacks land after all actions too, so prey that moved away escapes.
     const pendingAttacks: { attacker: Organism; preyId: string; chance: number }[] = [];
+    // Requests to mate, matched up after all actions: a child needs both to ask each other.
+    const pendingMatings: { organism: Organism; mateId: string }[] = [];
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
@@ -806,6 +827,16 @@ export class World {
           break;
         }
 
+        case 'MATE_NORTH':
+        case 'MATE_SOUTH':
+        case 'MATE_EAST':
+        case 'MATE_WEST': {
+          // Costs nothing unless the partner asks back (resolved below).
+          if (chosenAction.mateId) pendingMatings.push({ organism, mateId: chosenAction.mateId });
+          outcome = 'no_partner'; // until the partner asks back
+          break;
+        }
+
         case 'MOVE_NORTH':
         case 'MOVE_SOUTH':
         case 'MOVE_EAST':
@@ -868,58 +899,7 @@ export class World {
               birthBlocked.add(`${birth.x},${birth.y}`);
               this.birthDistanceSum += birth.distance;
 
-              this.nextOrganismSeq++;
-              const childId = `org-${this.nextOrganismSeq}`;
-              const childPolicy = mutatePolicy(
-                organism.policy,
-                this.config,
-                this.prng
-              );
-              const childTag = inheritTag(organism.tag, this.config, this.prng);
-              const childCapacity = inheritCarryCapacity(
-                organism.carryCapacity,
-                this.config,
-                this.prng
-              );
-              const childBrain = mutateBrain(organism.brain, this.config, this.prng);
-              const childAbilities = inheritAbilities(organism.abilities, this.config, this.prng);
-              const childDispersal = inheritDispersal(organism.dispersal, this.config, this.prng);
-              const childMemorySpan = inheritMemorySpan(organism.memorySpan, this.config, this.prng);
-              const childMemoryWeights = inheritMemoryWeights(organism.memoryWeights, this.config, this.prng);
-              const childCarnivory = inheritCarnivory(organism.carnivory, this.config, this.prng);
-
-              const child: Organism = {
-                id: childId,
-                x: birth.x,
-                y: birth.y,
-                energy: childEnergy,
-                policy: childPolicy,
-                tag: childTag,
-                carryCapacity: childCapacity,
-                abilities: childAbilities,
-                dispersal: childDispersal,
-                memorySpan: childMemorySpan,
-                memoryWeights: childMemoryWeights,
-                memory: newMemory(birth.x, birth.y),
-                brain: childBrain,
-                carnivory: childCarnivory,
-                kills: 0,
-                lineage: {
-                  id: organism.lineage.id,
-                  parentId: organism.id,
-                  generation: organism.lineage.generation + 1,
-                  birthTick: this.tick,
-                },
-                age: 0,
-                offspringCount: 0,
-                foodEatenCount: 0,
-                carriedFood: 0,
-                foodGiven: 0,
-                foodReceived: 0,
-                signalTick: -1,
-                recentHistory: [],
-              };
-
+              const child = this.makeChild(organism, null, birth, childEnergy);
               newBorns.push(child);
               this.birthsTotal++;
               outcome = 'success';
@@ -1009,6 +989,21 @@ export class World {
       }
     }
 
+    // Matings: pairs who asked each other (in id order, once per pair). Both
+    // stayed put this tick, so they are still side by side.
+    const asked = new Map(pendingMatings.map((m) => [m.organism.id, m.mateId]));
+    for (const { organism, mateId } of pendingMatings) {
+      if (organism.id > mateId || asked.get(mateId) !== organism.id) continue;
+      const partner = this.organisms.get(mateId);
+      if (!partner) continue;
+      if (!this.mate(organism, partner, birthBlocked, newBorns)) {
+        for (const o of [organism, partner]) {
+          const record = o.recentHistory[0];
+          if (record && record.tick === this.tick) o.recentHistory[0] = { ...record, outcome: 'energy_too_low' };
+        }
+      }
+    }
+
     // Family members trade places (only the mover pays the move cost)
     for (const { mover, otherId } of pendingSwaps.values()) {
       const other = this.organisms.get(otherId);
@@ -1084,6 +1079,130 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+  }
+
+  /**
+   * A newborn with energy `energy` at `birth`. A clone takes its parent's
+   * genes; a child of mating takes each gene from one parent or the other
+   * (see recombine). Either way the genes then mutate. The child belongs to
+   * the lineage of `parent`, the one it is born next to.
+   */
+  private makeChild(parent: Organism, mate: Organism | null, birth: { x: number; y: number }, energy: number): Organism {
+    const genes = mate ? recombine(genomeOf(parent), genomeOf(mate), this.prng) : genomeOf(parent);
+    this.nextOrganismSeq++;
+    const policy = mutatePolicy(genes.policy, this.config, this.prng);
+    const tag = inheritTag(genes.tag, this.config, this.prng);
+    const carryCapacity = inheritCarryCapacity(genes.carryCapacity, this.config, this.prng);
+    const brain = mutateBrain(genes.brain, this.config, this.prng);
+    const abilities = inheritAbilities(genes.abilities, this.config, this.prng);
+    const dispersal = inheritDispersal(genes.dispersal, this.config, this.prng);
+    const memorySpan = inheritMemorySpan(genes.memorySpan, this.config, this.prng);
+    const memoryWeights = inheritMemoryWeights(genes.memoryWeights, this.config, this.prng);
+    const carnivory = inheritCarnivory(genes.carnivory, this.config, this.prng);
+    return {
+      id: `org-${this.nextOrganismSeq}`,
+      x: birth.x,
+      y: birth.y,
+      energy,
+      policy,
+      tag,
+      carryCapacity,
+      abilities,
+      dispersal,
+      memorySpan,
+      memoryWeights,
+      memory: newMemory(birth.x, birth.y),
+      brain,
+      carnivory,
+      kills: 0,
+      lineage: {
+        id: parent.lineage.id,
+        parentId: parent.id,
+        ...(mate ? { mateId: mate.id } : {}),
+        generation: Math.max(parent.lineage.generation, mate?.lineage.generation ?? 0) + 1,
+        birthTick: this.tick,
+      },
+      age: 0,
+      offspringCount: 0,
+      foodEatenCount: 0,
+      carriedFood: 0,
+      foodGiven: 0,
+      foodReceived: 0,
+      signalTick: -1,
+      recentHistory: [],
+    };
+  }
+
+  /**
+   * Two organisms that asked each other this tick make one child. Each pays
+   * half the share of its energy a clone would get (reproductionEnergyFraction / 2)
+   * plus the reproduction tax, and the child gets both halves. It is born
+   * next to one parent picked at random (the other if that one has no free
+   * cell), dispersing as that parent's children do. Returns false, charging
+   * nothing, when either can't afford it or there is no room.
+   */
+  private mate(a: Organism, b: Organism, blocked: Set<string>, newBorns: Organism[]): boolean {
+    const { reproductionEnergyFraction, reproductionMetabolismTax: tax } = this.config;
+    const shareA = Math.floor((a.energy * reproductionEnergyFraction) / 2);
+    const shareB = Math.floor((b.energy * reproductionEnergyFraction) / 2);
+    if (a.energy <= shareA + tax || b.energy <= shareB + tax || shareA + shareB <= 0) return false;
+
+    const free = (o: Organism) =>
+      DIRECTION_OFFSETS.map(({ dx, dy }) => ({ x: o.x + dx, y: o.y + dy })).filter(
+        (c) =>
+          c.x >= 0 &&
+          c.y >= 0 &&
+          c.x < this.config.gridWidth &&
+          c.y < this.config.gridHeight &&
+          !this.obstacles.has(`${c.x},${c.y}`) &&
+          !blocked.has(`${c.x},${c.y}`)
+      );
+    const first = this.prng.next() < 0.5 ? a : b;
+    const second = first === a ? b : a;
+    let carrier = first;
+    let cells = free(first);
+    if (cells.length === 0) {
+      carrier = second;
+      cells = free(second);
+    }
+    if (cells.length === 0) return false;
+    const other = carrier === a ? b : a;
+    const carrierShare = carrier === a ? shareA : shareB;
+    const otherShare = carrier === a ? shareB : shareA;
+
+    const target = this.prng.choice(cells);
+    const birth = this.birthCell(carrier, target, carrier.energy - carrierShare - tax, blocked);
+    const carrierCost = carrierShare + tax + birth.extraCost;
+    const otherCost = otherShare + tax;
+    carrier.energy -= carrierCost;
+    other.energy -= otherCost;
+    blocked.add(`${birth.x},${birth.y}`);
+    this.birthDistanceSum += birth.distance;
+    this.birthsTotal++;
+    this.matingsTotal++;
+    const similarity = tagSimilarity(a.tag, b.tag);
+    if (similarity >= this.config.kinSimilarity) this.matingsAlikeTotal++;
+    if (similarity <= this.config.strangerSimilarity) this.matingsOfStrangersTotal++;
+    if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
+    this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
+
+    for (const [parent, cost] of [
+      [carrier, carrierCost],
+      [other, otherCost],
+    ] as const) {
+      parent.offspringCount++;
+      const record = parent.recentHistory[0];
+      if (record && record.tick === this.tick) {
+        parent.recentHistory[0] = {
+          ...record,
+          outcome: 'success',
+          energyDelta: Number((record.energyDelta - cost).toFixed(2)),
+          energyAfter: Number(parent.energy.toFixed(2)),
+        };
+      }
+    }
+    newBorns.push(this.makeChild(carrier, other, birth, carrierShare + otherShare));
+    return true;
   }
 
   /** Adds carrion energy to a cell (piling onto any already there, which then rots later). */
@@ -1333,6 +1452,10 @@ export class World {
       killsTotal: this.killsTotal,
       killsOfStrangersTotal: this.killsOfStrangersTotal,
       killsOfKinTotal: this.killsOfKinTotal,
+      matingsTotal: this.matingsTotal,
+      matingsAlikeTotal: this.matingsAlikeTotal,
+      matingsOfStrangersTotal: this.matingsOfStrangersTotal,
+      matingsInFamilyTotal: this.matingsInFamilyTotal,
       carrionEatenTotal: this.carrionEatenTotal,
       carrionStock: Math.round(Array.from(this.carrion.values()).reduce((a, c) => a + c.stock, 0)),
       averageCarnivory:
