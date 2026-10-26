@@ -95,7 +95,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   plantMutationStdDev: 0.08,
   seedRainInterval: 50,
   seedRainCount: 3,
-  overgrazingEnabled: true, // staying on a patch has a future cost (see docs/findings.md for the sweep)
+  overgrazingEnabled: false, // staying on a patch has a future cost; off because it failed the ship-on gate (docs/findings.md)
   overgrazingDamagePerBite: 0.02,
   overgrazingRecoveryRate: 0.005,
   overgrazingRestTicks: 50,

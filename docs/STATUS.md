@@ -33,6 +33,10 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
 
+## World changes (WORLD_RULES.md)
+
+- **Overgrazing** built 2026-10-26 (`overgrazingEnabled`, **off**: it failed the ship-on gate, B avgPop 0.61 / leanLow 0.22 of off; see `docs/findings.md`). Switch off reproduces the previous fingerprint exactly; overlay `Cell health`; `npm run sweep:overgrazing`; `npm run experiment -- --arm name=k:v,k:v` for multi-key arms; standard diagnostics are in the experiment output. Next: decide whether to try a softer setting or leave it off.
+
 ## Latest findings (details and all other results in `docs/findings.md`)
 
 - Squeezing past other organisms is what solved crowding (blocked moves 49.5% → 5.1%).
@@ -93,6 +97,6 @@ There is no target outcome: new features go in on by default and the world is le
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
 - Fingerprint (2026-10-26; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500 (dials 831, brain 390). Identical with `dnaEnabled=false`. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds:
-  `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`
+  `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb` (unchanged by overgrazing, which ships off; with `overgrazingEnabled=true` and the defaults: dials 70944708b0aff353, brain 5380fc4b64aaa433, brain extinct by tick 1500)
 - `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Shorten those tests or run them in their own pool if it becomes a nuisance.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

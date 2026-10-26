@@ -2,6 +2,32 @@
 
 Experiment results and engine notes, moved out of `docs/STATUS.md`. Raw outputs are in `docs/experiments/` (read the `.txt`, not the `.json`).
 
+## Overgrazing (2026-10-26; `docs/experiments/overgrazing.txt`, commit 6ac4da9)
+
+8 seeds × 10,000 ticks, immigration off, DNA at its default. Arms: **A** switch off; **B** on (damage 0.02/bite, recovery 0.005/tick after 50 rested ticks); **C** matched random (the same damage per bite lands on random fertile cells, not where bites happen).
+
+| | A off | B on | C matched |
+|---|---|---|---|
+| avgPop | 258 | 128 | 301 |
+| leanLow | 172 | 81 | 210 |
+| finalPop | 234 | 34 | 298 |
+| runs extinct by 10k | 5/8 | 6/8 | 3/8 |
+| births | 20145 | 7744 | 20487 |
+| plants (avg) / edible biomass (avg) | 1145 / 1142 | 1419 / 1174 | 1246 / 1056 |
+| grazed per tick | 9.0 | 3.3 | 9.0 |
+| blockedMoveFrac | 0.21 | 0.14 | 0.36 |
+| occupancyGini | 0.30 | 0.24 | 0.52 |
+
+**Gate: B fails** (median per-seed avgPop ratio 0.61, need 0.8; leanLow 0.22, need 0.7; new extinction in seed 5). **C also fails** on one new extinction (seed 4) though its population and lean lows hold (1.17, 1.03). So `overgrazingEnabled` ships **off**. Read: grazing-driven damage cut the population to about half and its lean lows to a fifth, while the same total damage scattered at random did not (C is slightly above A). That points at where the grazers are, not the loss of food, as the cause of the crash. Caution: only 8 seeds, and the runs diverge chaotically (the early sweep's population ratios ranged 0.3–2.5 from small parameter changes), so B vs C is suggestive, not proven. The matched arm's total damage per tick is tied to the bites of that tick, so C also shrinks with the population.
+
+- End-of-run `meanHealth` and `fractionDegraded` are useless here: in the runs that went extinct the ground recovers (B's 1.00 mean). Read health curves over time, not the end value. The experiment prints `A_off`'s health as 0.00 because it does not report it.
+- Other diagnostics (first runs of `blockedMoveFrac`, `timeInPatch`, `departureFoodLevel`, `occupancyGini`, `scoutFraction`, taken over the last 20% of each run) are in the `.txt`; B's longer `timeInPatch` (33 vs 9) comes with a much smaller population, so it is not yet a clean behaviour signal.
+- Perf (500-organism target; 400 founders with immigration, 1500 ticks, this container): 85–90 µs/organism-tick on vs 93–96 off, with different populations (282 vs 381). No measurable cost (the extra work is one 3,600-cell pass per tick); under 5% either way.
+
+Parameter sweep (`npm run sweep:overgrazing`, brain, plants on, seeds 1–3, 2,000 ticks). Target: a crowded patch degrades within about 300 ticks. The tick at which the first cell fell below health 0.5 depends almost only on damage per bite (organisms eat about one unit a tick where they stand): damage 0.05 → 80–90 ticks; 0.02 → 180–220 in every seed; 0.015 → 220–430; 0.01 → 330–490. Recovery (0.005, 0.01) and rest (20, 50) barely moved it, and whole-region means stayed above 0.8 in nearly every run (peak share of degraded cells 0.0–2.1%), so degradation is a hot-spot effect. Chosen: **damage 0.02** (first degraded cell within ~200 ticks in every seed), **rest 50 and recovery 0.005** (a bare cell needs about 200 rested ticks to recover, the same scale as a season's lean stretch; rest 50 had the most seeds reach 2% degraded cells). The population ratios in the sweep (0.24–2.5 against off) are noise from chaotic divergence and were not used to choose. A softer setting (0.01) might pass the gate but degrades a crowded patch in 330–490 ticks, outside the target; not tried at 8 seeds.
+
+Deviations: config keys are flat (`overgrazingEnabled`, ...), per `WORLD_RULES.md`, not `world.overgrazing = {...}`. Health is held per cell, not per patch, so it survives a plant dying and re-seeding. Windfall food does not damage cells. Plant upkeep is not scaled by health (only growth). No new sensor inputs or actions.
+
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
 | Question | Result |

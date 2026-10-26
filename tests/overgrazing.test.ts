@@ -4,7 +4,7 @@ import { CellHealth } from '../src/sim/grazing';
 import { PRNG } from '../src/sim/prng';
 import { createConfig } from '../src/sim/config';
 
-const small = { gridWidth: 30, gridHeight: 30, initialOrganisms: 15, initialFoodPatches: 20, seed: 7 } as const;
+const small = { overgrazingEnabled: true, gridWidth: 30, gridHeight: 30, initialOrganisms: 15, initialFoodPatches: 20, seed: 7 } as const;
 const state = (w: World) => JSON.stringify({ o: [...w.organisms.values()].map((o) => [o.id, o.x, o.y, o.energy]), f: [...w.foodPatches.values()] });
 
 describe('Overgrazing', () => {
