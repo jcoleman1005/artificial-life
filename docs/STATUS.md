@@ -92,7 +92,7 @@ There is no target outcome: new features go in on by default and the world is le
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
-- Fingerprint at defaults (2026-10-26, unchanged by the DNA Stage 1 merge; record a new one at each world-change merge). All four runs end with population 0 by tick 1500, so later samples hash only food patches, which weakens the check:
-  `small dials 2081c1db3e0536b2 · small brain dfe499a71afc9889 · large dials a59c5b7e5449b22d · large brain fa175790079db78b`
+- Fingerprint (2026-10-26; record a new one at each world-change merge). Its worlds run with immigration on (1 every 25 ticks); without it all four died out by tick 900. Identical on pre-DNA `b7668dd`, on the DNA Stage 1 merge, and with `dnaEnabled=false`. Population at ticks 500 / 1000 / 1500: small dials 631 / 636 / 24, small brain 505 / 623 / 6, large dials 280 / 581 / 398, large brain 320 / 504 / 770 (the small worlds dip near zero by 1500 but are refilled by immigrants):
+  `small dials c5b2b542f3c4eb8f · small brain b541460f20db2875 · large dials 623a161a72b0f1b9 · large brain 29f8596b5686f959`
 - `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Shorten those tests or run them in their own pool if it becomes a nuisance.
 - The S21 check (roadmap item 1) is still to do on the phone itself.
