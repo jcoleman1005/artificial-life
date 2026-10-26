@@ -1367,9 +1367,19 @@ export class World {
       averageCarnivory:
         organisms.length > 0 ? Number((organisms.reduce((a, o) => a + o.carnivory, 0) / organisms.length).toFixed(3)) : 0,
       meatEaters: organisms.filter((o) => o.carnivory >= 0.5).length,
+      genomeLength: this.genomeLength(organisms),
       season: this.worldSeason(),
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
     };
+  }
+
+  /** Genes per genome (mean, spread, longest) over the living, or null when no one has a genome. */
+  private genomeLength(organisms: readonly Organism[]): { mean: number; sd: number; max: number } | null {
+    const lengths = organisms.flatMap((o) => (o.genome ? [o.genome.length / 3] : []));
+    if (lengths.length === 0) return null;
+    const mean = lengths.reduce((a, l) => a + l, 0) / lengths.length;
+    const sd = Math.sqrt(lengths.reduce((a, l) => a + (l - mean) ** 2, 0) / lengths.length);
+    return { mean: Number(mean.toFixed(1)), sd: Number(sd.toFixed(1)), max: Math.max(...lengths) };
   }
 
   /**

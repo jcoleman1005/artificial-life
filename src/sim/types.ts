@@ -566,6 +566,8 @@ export interface WorldMetrics {
   /** Mean carnivory now, and how many organisms are mostly meat eaters (carnivory >= 0.5). */
   averageCarnivory: number;
   meatEaters: number;
+  /** Genes per genome now (mean, spread, longest), or null without DNA. */
+  genomeLength: { mean: number; sd: number; max: number } | null;
   /** Current season, or null when seasons are off. */
   season: 'plenty' | 'lean' | null;
   /** Plant population, or null when plants are off. */
