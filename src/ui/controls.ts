@@ -1,4 +1,4 @@
-import type { ColorMode } from '../render/renderer';
+import type { ColorMode, MotionStyle } from '../render/renderer';
 import type { FoodLayout, WorldSize } from '../sim/config';
 import type { SavedWorldInfo } from './saved-worlds';
 
@@ -12,6 +12,7 @@ export interface SettingsCallbacks {
   onReset: (seed: string | number) => void;
   onNewSeed: () => void;
   onColorModeChange: (mode: ColorMode) => void;
+  onMotionStyleChange: (style: MotionStyle) => void;
   onSharingChange: (enabled: boolean) => void;
   onSignalsChange: (enabled: boolean) => void;
   onDispersalChange: (enabled: boolean) => void;
@@ -178,6 +179,7 @@ export class SettingsView {
       <section class="settings-group">
         <h3>Display</h3>
         ${segmented('Colour by', 'color', [['tag', 'Tag'], ['lineage', 'Family'], ['diet', 'Diet']], 'tag')}
+        ${segmented('Motion', 'motion', [['smooth', 'Smooth'], ['fluid', 'Fluid']], 'fluid')}
       </section>
       <section class="settings-group">
         <h3>Run</h3>
@@ -286,6 +288,7 @@ export class SettingsView {
     this.bindSegment('memory', (v) => cb.onMemoryChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
+    this.bindSegment('motion', (v) => cb.onMotionStyleChange(v as MotionStyle));
 
     const seedInput = this.container.querySelector<HTMLInputElement>('#input-seed')!;
     // A whole number is used as a number, so typing 42 gives the same world as the default seed 42.

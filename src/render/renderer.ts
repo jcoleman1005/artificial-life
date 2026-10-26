@@ -6,6 +6,13 @@ import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
 
+/**
+ * How drawn positions follow true ones (display only): 'smooth' trails by a
+ * short fixed lag; 'fluid' follows like a soft spring paced to the tick
+ * rate, so step-rest-step reads as one continuous drift.
+ */
+export type MotionStyle = 'smooth' | 'fluid';
+
 /** What an organism's colour shows: its visible tag, its founding family, or its diet (green plants to red meat). */
 export type ColorMode = 'tag' | 'lineage' | 'diet';
 
@@ -29,6 +36,10 @@ const TRAIL_LENGTH = 12;
 const MOTION_SMOOTHING_MS = 70;
 /** A move longer than this (in cells) is drawn as a jump, not smoothed (e.g. a new world). */
 const MAX_SMOOTHED_JUMP = 4;
+/** Fluid motion: a blob settles into a new cell over about this many frame gaps (bounded below and above, in ms). */
+const FLUID_SETTLE_GAPS = 3;
+const FLUID_SETTLE_MIN_MS = 120;
+const FLUID_SETTLE_MAX_MS = 1200;
 
 /** Space at the canvas edges covered by overlays (sheet, playback pill). */
 export interface ViewInsets {
@@ -97,9 +108,12 @@ export class CanvasRenderer {
    * blob stepping back and forth every tick drifts instead of jittering.
    * Display only; the world is unaffected.
    */
-  private drawn = new Map<string, { x: number; y: number }>();
+  private drawn = new Map<string, { x: number; y: number; vx: number; vy: number }>();
   private lastRenderAt = 0;
   private motionSettled = true;
+  private motionStyle: MotionStyle = 'fluid';
+  /** The expected time between frames (ms), which paces fluid motion. */
+  private paceMs = 167;
   private progress = 1;
   // Zoom and pan: the world is drawn `zoom` times larger than the fitted size;
   // world pixel (viewX, viewY) sits at the canvas's top-left corner.
@@ -128,6 +142,15 @@ export class CanvasRenderer {
 
   public setWorld(world: WorldView): void {
     this.world = world;
+  }
+
+  public setMotionStyle(style: MotionStyle): void {
+    this.motionStyle = style;
+  }
+
+  /** The expected time between frames while playing, so fluid motion keeps pace with the speed. */
+  public setPace(ms: number): void {
+    this.paceMs = ms;
   }
 
   public setColorMode(mode: ColorMode): void {
@@ -287,20 +310,40 @@ export class CanvasRenderer {
     const now = performance.now();
     const dt = this.lastRenderAt > 0 ? Math.min(250, now - this.lastRenderAt) : 0;
     this.lastRenderAt = now;
+    const fluid = this.motionStyle === 'fluid';
+    // Smooth: exponential follow. Fluid: a critically damped spring (exact
+    // for any frame time), so blobs ease into and out of moves.
     const follow = 1 - Math.exp(-dt / MOTION_SMOOTHING_MS);
-    const next = new Map<string, { x: number; y: number }>();
+    const settleMs = Math.max(FLUID_SETTLE_MIN_MS, Math.min(FLUID_SETTLE_MAX_MS, FLUID_SETTLE_GAPS * this.paceMs));
+    const omega = 4 / settleMs;
+    const decay = Math.exp(-omega * dt);
+    const next = new Map<string, { x: number; y: number; vx: number; vy: number }>();
     let settled = true;
     for (const org of this.world.organisms.values()) {
       const [tx, ty] = this.gridPosition(org);
       const was = this.drawn.get(org.id);
       if (!was || Math.abs(tx - was.x) + Math.abs(ty - was.y) > MAX_SMOOTHED_JUMP) {
-        next.set(org.id, { x: tx, y: ty });
+        next.set(org.id, { x: tx, y: ty, vx: 0, vy: 0 });
         continue;
       }
-      const x = was.x + (tx - was.x) * follow;
-      const y = was.y + (ty - was.y) * follow;
-      if (Math.abs(tx - x) + Math.abs(ty - y) > 0.01) settled = false;
-      next.set(org.id, { x, y });
+      let x: number, y: number, vx: number, vy: number;
+      if (fluid) {
+        const dx = was.x - tx;
+        const dy = was.y - ty;
+        const kx = (was.vx + omega * dx) * dt;
+        const ky = (was.vy + omega * dy) * dt;
+        vx = (was.vx - omega * kx) * decay;
+        vy = (was.vy - omega * ky) * decay;
+        x = tx + (dx + kx) * decay;
+        y = ty + (dy + ky) * decay;
+      } else {
+        x = was.x + (tx - was.x) * follow;
+        y = was.y + (ty - was.y) * follow;
+        vx = 0;
+        vy = 0;
+      }
+      if (Math.abs(tx - x) + Math.abs(ty - y) > 0.01 || Math.abs(vx) + Math.abs(vy) > 0.0005) settled = false;
+      next.set(org.id, { x, y, vx, vy });
     }
     this.drawn = next;
     this.motionSettled = settled;

@@ -266,6 +266,7 @@ function onFrame(fromStep: boolean): void {
   else frameGapMs = expected;
   frameAt = now;
   glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? Math.min(1500, frameGapMs * 1.15) : 0;
+  renderer.setPace(fromStep ? STEP_ANIMATION_MS : frameGapMs);
   glideEased = fromStep;
   needsRender = true;
   if (!isRunning) refreshPanels();
@@ -379,6 +380,7 @@ const settingsView = new SettingsView(
     // These need a fresh world; the renderer resizes when the new terrain arrives.
     onWorldSizeChange: (size) => restart(sim.config.seed, WORLD_SIZES[size]),
     onFoodLayoutChange: (layout) => restart(sim.config.seed, FOOD_LAYOUTS[layout]),
+    onMotionStyleChange: (style) => renderer.setMotionStyle(style),
     onColorModeChange: (mode) => {
       renderer.setColorMode(mode);
       refreshPanels();
