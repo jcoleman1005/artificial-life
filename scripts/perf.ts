@@ -4,7 +4,8 @@ const variants = [
   ['dials', { controller: 'dials' }],
   ['brain', { controller: 'brain' }],
   ['brain + plants', { controller: 'brain', plantsEnabled: true }],
-  ['brain + DNA', { controller: 'brain', dnaEnabled: true }],
+  ['brain + DNA', { controller: 'brain', dnaEnabled: true, dnaVariationEnabled: false }],
+  ['brain + DNA + variation', { controller: 'brain', dnaEnabled: true, dnaVariationEnabled: true }],
 ] as const;
 for (const [name, overrides] of variants) {
   const w = new World({ seed: 42, ...overrides });

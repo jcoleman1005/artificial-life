@@ -88,6 +88,26 @@ export class PRNG {
   }
 
   /**
+   * A Poisson-distributed count with the given mean (exact: Knuth's product
+   * method, in chunks of at most 20 so exp(-mean) never underflows).
+   */
+  public nextPoisson(mean: number): number {
+    let count = 0;
+    let left = mean;
+    while (left > 0) {
+      const part = Math.min(left, 20);
+      left -= part;
+      const limit = Math.exp(-part);
+      let product = this.next();
+      while (product > limit) {
+        count++;
+        product *= this.next();
+      }
+    }
+    return count;
+  }
+
+  /**
    * Returns a random element from a non-empty array.
    */
   public choice<T>(array: readonly T[]): T {

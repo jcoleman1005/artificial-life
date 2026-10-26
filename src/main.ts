@@ -370,6 +370,7 @@ const settingsView = new SettingsView(
     immigrationEnabled: sim.config.immigrationEnabled,
     plantsEnabled: sim.config.plantsEnabled,
     memoryEnabled: sim.config.memoryEnabled,
+    dnaVariationEnabled: sim.config.dnaVariationEnabled,
     seasonsEnabled: sim.config.seasonLength > 0,
     controller: sim.config.controller,
     worldSize: 'large',
@@ -394,6 +395,7 @@ const settingsView = new SettingsView(
     onImmigrationChange: (enabled) => sim.setConfig({ immigrationEnabled: enabled }),
     onPlantsChange: (enabled) => restart(sim.config.seed, { plantsEnabled: enabled }),
     onMemoryChange: (enabled) => sim.setConfig({ memoryEnabled: enabled }),
+    onGenomeVariationChange: (enabled) => sim.setConfig({ dnaVariationEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
       sim.setConfig({ controller });
@@ -721,6 +723,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     immigrationEnabled: config.immigrationEnabled ?? false,
     plantsEnabled: config.plantsEnabled,
     memoryEnabled: config.memoryEnabled,
+    dnaVariationEnabled: config.dnaVariationEnabled ?? false,
     seasonsEnabled: config.seasonLength > 0,
     controller: config.controller,
     worldSize: config.gridWidth <= WORLD_SIZES.small.gridWidth ? 'small' : 'large',

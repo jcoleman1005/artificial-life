@@ -502,6 +502,15 @@ export interface SimulationConfig {
   abilityMutationStdDev: number; // Continuous abilities: how far an efficiency drifts when it mutates (with traitMutationRate)
   dnaSplitDiets: boolean; // With DNA: independent plant (herbivory) and meat (carnivory) efficiencies, each costing dietUpkeep, instead of the dietTradeoff
   dietUpkeep: number; // Split diets: energy per tick per unit of herbivory + carnivory
+  dnaVariationEnabled: boolean; // With DNA (Stage 2): mutation counts are Poisson-sampled, genes can be inserted, deleted and duplicated, and every gene costs dnaUpkeepPerGene
+  dnaInsertionRate: number; // Per gene per birth: a new random gene appears at a random position
+  dnaDeletionRate: number; // Per gene per birth: a gene is removed
+  dnaDuplicationRate: number; // Per gene per birth: a segment of 1 to dnaDuplicationMaxLength genes is copied and inserted elsewhere
+  dnaDuplicationMaxLength: number; // Longest duplicated segment (genes)
+  dnaKeyFlipFraction: number; // Share of point mutations that flip one bit of a gene's index field (retargeting it) instead of stepping its dose
+  dnaDosageCompensation: boolean; // A duplicated segment and its original each keep half the dose (summed traits), so a duplication changes nothing until the copies drift
+  dnaUpkeepPerGene: number; // Energy per tick per gene
+  dnaMaxGenes: number; // Insertions and duplications stop at this genome length (a safety rail for tick cost)
   seed: number | string;
 }
 
@@ -557,6 +566,8 @@ export interface WorldMetrics {
   /** Mean carnivory now, and how many organisms are mostly meat eaters (carnivory >= 0.5). */
   averageCarnivory: number;
   meatEaters: number;
+  /** Genes per genome now (mean, spread, longest), or null without DNA. */
+  genomeLength: { mean: number; sd: number; max: number } | null;
   /** Current season, or null when seasons are off. */
   season: 'plenty' | 'lean' | null;
   /** Plant population, or null when plants are off. */

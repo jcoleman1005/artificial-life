@@ -13,6 +13,7 @@
     "verify": "bash scripts/verify.sh",
     "fingerprint": "vite-node scripts/fingerprint.ts",
     "perf": "vite-node scripts/perf.ts",
+    "census": "vite-node scripts/census.ts --",
     "experiment": "vite-node scripts/experiment.ts --",
     "build:server": "vite build --ssr server/main.ts --outDir dist-server --emptyOutDir",
     "server": "npm run build && npm run build:server && node dist-server/main.js",
