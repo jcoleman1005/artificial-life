@@ -40,6 +40,10 @@ A genome is a `Uint32Array` of genes, three words each: `[key, low, high]`. `key
 
 Because Stage 1 is bit-identical, the gate is met by construction; switching it on by default only adds the genome's cost.
 
+## Stage 2 as built (`dnaVariationEnabled`, off by default pending its gate)
+
+Code: `mutateGenomeVariation`, `mutateOnce`, `genomeStats` in `src/sim/dna.ts`; census `npm run census`. Point-mutation counts are Poisson over the genome (each gene keeps its legacy rate); a point mutation steps the dose or, with `dnaKeyFlipFraction`, flips a bit of the gene's index. Insertion adds a random gene at a random position, deletion removes one, duplication copies 1 to `dnaDuplicationMaxLength` genes elsewhere (`dnaDosageCompensation` halves doses to make it neutral; off). Every gene costs `dnaUpkeepPerGene` per tick; `dnaMaxGenes` caps length. Loading a save no longer re-adds deleted skip genes (`upgradeGenome` takes the saved input count). Gate status: see `docs/STATUS.md`.
+
 ## Stage 1b proposals (each its own toggle and gate, after sign-off)
 
 ### 1b.1 Continuous movement abilities (`dnaContinuousAbilities`)
