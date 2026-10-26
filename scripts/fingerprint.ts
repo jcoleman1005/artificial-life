@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import { World } from '../src/sim/world';
-import { FOOD_LAYOUTS, WORLD_SIZES } from '../src/sim/config';
 import type { SimulationConfig } from '../src/sim/types';
-// Prints a hash of the world state at intervals for both controllers, in the
-// original small world and in the default large one. Run before and after an
+// Prints a hash of the world state at intervals for both controllers in the
+// default world. Run before and after an
 // engine optimization: identical output means the change did not alter any
 // simulation outcome.  Usage: npm run fingerprint [-- --set key=value ...]
 // --set applies config to every world, e.g. --set overgrazingEnabled=false to
@@ -16,16 +15,14 @@ for (let i = 0; i < args.length; i++) {
   const n = Number(raw);
   (set as Record<string, unknown>)[k] = raw === 'true' ? true : raw === 'false' ? false : raw.trim() !== '' && !Number.isNaN(n) ? n : raw;
 }
-// Immigration keeps every world populated for the whole run (without it all
-// four die out before tick 900, leaving later samples nothing to hash).
-const worlds: Record<string, Partial<SimulationConfig>> = {
-  small: { ...WORLD_SIZES.small, ...FOOD_LAYOUTS.anywhere, immigrationEnabled: true },
-  large: { immigrationEnabled: true },
-};
+// Seed '2' keeps both controllers' populations alive to tick 1500 (seed
+// 'fingerprint' and the small world died out by ~900, leaving later samples
+// nothing to hash). No immigration: the world survives on its own.
+const worlds: Record<string, Partial<SimulationConfig>> = { large: {} };
 const out: string[] = [];
 for (const [name, overrides] of Object.entries(worlds)) {
   for (const controller of ['dials', 'brain'] as const) {
-    const w = new World({ ...overrides, ...set, seed: 'fingerprint', controller });
+    const w = new World({ ...overrides, ...set, seed: '2', controller });
     const h = createHash('sha256');
     for (let t = 1; t <= 1500; t++) {
       w.step();
