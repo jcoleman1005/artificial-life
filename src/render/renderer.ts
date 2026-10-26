@@ -25,6 +25,10 @@ const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
 };
 /** Trail points kept per organism (one per frame). */
 const TRAIL_LENGTH = 12;
+/** How far behind its true position a blob is drawn (time constant of the smoothing). */
+const MOTION_SMOOTHING_MS = 70;
+/** A move longer than this (in cells) is drawn as a jump, not smoothed (e.g. a new world). */
+const MAX_SMOOTHED_JUMP = 4;
 
 /** Space at the canvas edges covered by overlays (sheet, playback pill). */
 export interface ViewInsets {
@@ -83,7 +87,19 @@ export class CanvasRenderer {
   private colorMode: ColorMode = 'tag';
   // Smooth movement: where each organism was before the latest tick, and how
   // far (0..1) the current frame is through that tick.
+  /** Where each organism's current glide starts, in cells (fractional when a glide was cut short). */
   private previousPositions = new Map<string, { x: number; y: number }>();
+  /** Glides ease in and out (a single step) or run at constant speed (playing, so moves flow into each other). */
+  private easedGlide = false;
+  /**
+   * Where each organism is drawn this frame, in cells: it follows its glide
+   * position with a short lag (MOTION_SMOOTHING_MS), so at high speeds a
+   * blob stepping back and forth every tick drifts instead of jittering.
+   * Display only; the world is unaffected.
+   */
+  private drawn = new Map<string, { x: number; y: number }>();
+  private lastRenderAt = 0;
+  private motionSettled = true;
   private progress = 1;
   // Zoom and pan: the world is drawn `zoom` times larger than the fitted size;
   // world pixel (viewX, viewY) sits at the canvas's top-left corner.
@@ -145,7 +161,7 @@ export class CanvasRenderer {
 
   /** True while a zoom animation still needs frames drawn. */
   public isAnimating(): boolean {
-    return this.zoomAnimation !== null;
+    return this.zoomAnimation !== null || !this.motionSettled;
   }
 
   public setInsets(insets: ViewInsets): void {
@@ -224,44 +240,77 @@ export class CanvasRenderer {
     this.viewY = clampAxis(this.viewY, gridHeight * this.cellSize, this.insets.top, vh);
   }
 
-  /** Call just before each world step, so moves can be drawn as glides. */
+  /**
+   * Call just before each new frame is applied, so moves can be drawn as
+   * glides. Each glide starts where the organism is on screen right now,
+   * even part-way through the previous glide, so a frame arriving a little
+   * early never makes it jump.
+   */
   public rememberPositions(): void {
-    this.previousPositions.clear();
+    const starts = new Map<string, { x: number; y: number }>();
     for (const org of this.world.organisms.values()) {
-      this.previousPositions.set(org.id, { x: org.x, y: org.y });
+      const [gx, gy] = this.gridPosition(org);
+      starts.set(org.id, { x: gx, y: gy });
     }
+    this.previousPositions = starts;
     if (this.overlay === 'trails') {
-      for (const [id, { x, y }] of this.previousPositions) {
+      for (const { id, x, y } of this.world.organisms.values()) {
         const trail = this.trails.get(id) ?? [];
         const last = trail[trail.length - 1];
         if (!last || last.x !== x || last.y !== y) trail.push({ x, y });
         if (trail.length > TRAIL_LENGTH) trail.shift();
         this.trails.set(id, trail);
       }
-      for (const id of this.trails.keys()) if (!this.previousPositions.has(id)) this.trails.delete(id);
+      for (const id of this.trails.keys()) if (!this.world.organisms.has(id)) this.trails.delete(id);
     }
   }
 
   /** Forget remembered positions (after a reset, ids restart from 1). */
   public clearMotion(): void {
     this.previousPositions.clear();
+    this.drawn.clear();
     this.trails.clear();
     this.heatmap = null;
     this.progress = 1;
   }
 
+  /** Where an organism is drawn, in cells: part-way along its latest glide. */
+  private gridPosition(org: OrganismView): [number, number] {
+    const prev = this.previousPositions.get(org.id);
+    if (!prev || this.progress >= 1) return [org.x, org.y];
+    const t = this.easedGlide ? easeInOut(this.progress) : this.progress;
+    return [prev.x + (org.x - prev.x) * t, prev.y + (org.y - prev.y) * t];
+  }
+
+  /** Moves every drawn position toward its glide position (once per frame). */
+  private updateDrawnPositions(): void {
+    const now = performance.now();
+    const dt = this.lastRenderAt > 0 ? Math.min(250, now - this.lastRenderAt) : 0;
+    this.lastRenderAt = now;
+    const follow = 1 - Math.exp(-dt / MOTION_SMOOTHING_MS);
+    const next = new Map<string, { x: number; y: number }>();
+    let settled = true;
+    for (const org of this.world.organisms.values()) {
+      const [tx, ty] = this.gridPosition(org);
+      const was = this.drawn.get(org.id);
+      if (!was || Math.abs(tx - was.x) + Math.abs(ty - was.y) > MAX_SMOOTHED_JUMP) {
+        next.set(org.id, { x: tx, y: ty });
+        continue;
+      }
+      const x = was.x + (tx - was.x) * follow;
+      const y = was.y + (ty - was.y) * follow;
+      if (Math.abs(tx - x) + Math.abs(ty - y) > 0.01) settled = false;
+      next.set(org.id, { x, y });
+    }
+    this.drawn = next;
+    this.motionSettled = settled;
+  }
+
   /** Pixel centre of an organism, part-way along its latest move. */
   private displayCentre(org: OrganismView): [number, number] {
-    const { cellSize } = this;
-    let gx = org.x;
-    let gy = org.y;
-    const prev = this.previousPositions.get(org.id);
-    if (prev && this.progress < 1) {
-      const t = easeInOut(this.progress);
-      gx = prev.x + (org.x - prev.x) * t;
-      gy = prev.y + (org.y - prev.y) * t;
-    }
-    return [(gx + 0.5) * cellSize, (gy + 0.5) * cellSize];
+    const drawn = this.drawn.get(org.id);
+    const [gx, gy] = drawn ? [drawn.x, drawn.y] : this.gridPosition(org);
+    return [(gx + 0.5) * this.cellSize, (gy + 0.5) * this.cellSize];
   }
 
   /** Screen position (CSS px, relative to the canvas) of an organism. */
@@ -305,8 +354,11 @@ export class CanvasRenderer {
   }
 
   /** Draws the world; `progress` (0..1) is how far through the latest tick to show movement. */
-  public render(progress = 1): void {
+  /** Draws the world with moves `progress` (0..1) of the way along; `eased` for a single step's glide. */
+  public render(progress = 1, eased = false): void {
     this.progress = Math.max(0, Math.min(1, progress));
+    this.easedGlide = eased;
+    this.updateDrawnPositions();
     if (this.zoomAnimation) {
       const { from, to, start } = this.zoomAnimation;
       const p = Math.min(1, (performance.now() - start) / ZOOM_ANIMATION_MS);

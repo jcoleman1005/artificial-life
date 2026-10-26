@@ -222,6 +222,9 @@ const BASE_TICKS_PER_SECOND = 6;
 const STEP_ANIMATION_MS = 250;
 let frameAt = 0;
 let glideMs = 0;
+let glideEased = false;
+/** Smoothed gap between frames while playing, so glides last as long as frames actually take to arrive. */
+let frameGapMs = 0;
 
 // The text panels are rebuilt from HTML, so while running they refresh at a
 // modest rate; the canvas still redraws every frame.
@@ -252,10 +255,18 @@ function onFrame(fromStep: boolean): void {
     const heat = sim.getHeatmap();
     if (heat && heat.kind === overlay) renderer.setHeatmap(heat.cells);
   }
-  frameAt = performance.now();
-  // From the server, frames come at most every frameIntervalMs, so glide over that long at least.
-  const frameGap = Math.max(1000 / (BASE_TICKS_PER_SECOND * speedMultiplier), sim.serverInfo?.frameIntervalMs ?? 0, 16);
-  glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? frameGap : 0;
+  const now = performance.now();
+  // Glide over the time frames really take to arrive (smoothed): the
+  // expected gap to start with (a tick, or the server's frame interval),
+  // then the measured one. A little longer than the gap, so organisms keep
+  // moving until the next frame instead of stopping and starting.
+  const expected = Math.max(1000 / (BASE_TICKS_PER_SECOND * speedMultiplier), sim.serverInfo?.frameIntervalMs ?? 0, 16);
+  const gap = now - frameAt;
+  if (isRunning && !fromStep && frameGapMs > 0 && gap < expected * 4) frameGapMs = frameGapMs * 0.8 + gap * 0.2;
+  else frameGapMs = expected;
+  frameAt = now;
+  glideMs = fromStep ? STEP_ANIMATION_MS : isRunning ? Math.min(1500, frameGapMs * 1.15) : 0;
+  glideEased = fromStep;
   needsRender = true;
   if (!isRunning) refreshPanels();
 }
@@ -328,6 +339,7 @@ const pill = new PlaybackPill($('#playback'), {
   onPlayPause: () => {
     lastPlaybackChange = performance.now();
     isRunning = !isRunning;
+    frameGapMs = 0;
     pill.setRunning(isRunning);
     if (isRunning) sim.play();
     else {
@@ -340,6 +352,7 @@ const pill = new PlaybackPill($('#playback'), {
   onSpeedChange: (speed) => {
     lastPlaybackChange = performance.now();
     speedMultiplier = speed;
+    frameGapMs = 0; // measure the new pace afresh
     sim.setSpeed(BASE_TICKS_PER_SECOND * speed);
     refreshPanels();
   },
@@ -456,7 +469,7 @@ function deselect(): void {
 function loop(timestamp: number): void {
   const glide = glideMs > 0 ? Math.min(1, (timestamp - frameAt) / glideMs) : 1;
   if (isRunning || glide < 1 || needsRender || renderer.isAnimating()) {
-    renderer.render(glide);
+    renderer.render(glide, glideEased);
   }
   if (isRunning && timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) refreshPanels();
   needsRender = false;
