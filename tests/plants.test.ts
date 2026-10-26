@@ -171,12 +171,14 @@ describe('Plants', () => {
     expect(restored.organisms.size).toBe(world.organisms.size);
   }, 60_000);
 
-  it('stay sound over a long run and repeat exactly with the same seed', () => {
-    const run = () => {
+  it('stay sound over a long run and repeat exactly with the same seed', async () => {
+    const run = async () => {
       const w = new World({ seed: 'plant-long', plantsEnabled: true, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
       for (let t = 0; t < 1000; t++) {
         w.step();
         if (t % 100 !== 0) continue;
+        // Yield to the event loop now and then, so vitest's worker RPC doesn't time out on a long synchronous run.
+        await new Promise((resolve) => setImmediate(resolve));
         for (const p of w.foodPatches.values()) {
           if (!p.plant) continue;
           expect(p.plant.biomass).toBeGreaterThanOrEqual(0);
@@ -187,8 +189,8 @@ describe('Plants', () => {
       }
       return w;
     };
-    const a = run();
-    const b = run();
+    const a = await run();
+    const b = await run();
     expect(JSON.stringify(Array.from(a.foodPatches.values()))).toBe(JSON.stringify(Array.from(b.foodPatches.values())));
     expect(a.getMetrics().plants!.count).toBeGreaterThan(0);
     expect(a.getMetrics().plants!.grazedTotal).toBeGreaterThan(0);

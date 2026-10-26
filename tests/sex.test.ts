@@ -3,6 +3,20 @@ import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
 import { BRAIN_HIDDEN, BRAIN_INPUTS, BRAIN_INPUT_COUNT, crossBrains, type Brain, type BrainInput } from '../src/sim/brain';
 import { isParentOf } from '../src/sim/family';
+import { createConfig } from '../src/sim/config';
+import {
+  GENE_WORDS,
+  GeneClass,
+  TraitId,
+  capGenome,
+  crossGenomes,
+  decodeOrganismDNA,
+  encodeOrganismDNA,
+  geneCount,
+  geneDose,
+  geneKey,
+  phenotypeOf,
+} from '../src/sim/dna';
 import type { Organism, PolicyWeights, SimulationConfig } from '../src/sim/types';
 
 const NEUTRAL: PolicyWeights = {
@@ -220,10 +234,10 @@ describe('Mating', () => {
     }
   });
 
-  it('mixes body traits and tags from both parents (without mutation)', () => {
+  it.each([true, false])('mixes body traits and tags from both parents (without mutation; dnaEnabled %s)', (dnaEnabled) => {
     const seen = { tag: new Set<number>(), carnivory: new Set<number>(), dispersal: new Set<number>() };
     for (let seed = 0; seed < 12; seed++) {
-      const world = quietWorld({ seed, reproductionThreshold: 40, ...NO_MUTATION });
+      const world = quietWorld({ seed, reproductionThreshold: 40, dnaEnabled, ...NO_MUTATION });
       const a = makeOrganism('a', 5, 5, { energy: 80, brain: ASKER, tag: 10, carnivory: 0.1, dispersal: 1 });
       const b = makeOrganism('b', 6, 5, { energy: 80, brain: ASKER, tag: 200, carnivory: 0.9, dispersal: 2 });
       addAll(world, a, b);
@@ -258,5 +272,157 @@ describe('Mating', () => {
     world.step();
     const move = child.recentHistory[0].scores.find((s) => s.action.type === 'MOVE_EAST')!.action;
     expect(move.swapRelation).toBe('parent');
+  });
+});
+
+/** A genome of the given (key, dose) genes, in order. */
+function genes(list: readonly [number, number][]): Uint32Array {
+  const view = new DataView(new ArrayBuffer(8));
+  const dna = new Uint32Array(list.length * GENE_WORDS);
+  list.forEach(([key, dose], g) => {
+    view.setFloat64(0, dose, true);
+    dna.set([key, view.getUint32(0, true), view.getUint32(4, true)], g * GENE_WORDS);
+  });
+  return dna;
+}
+
+/** The genes of a genome as [key, dose] pairs. */
+function pairs(dna: Uint32Array): [number, number][] {
+  return Array.from({ length: geneCount(dna) }, (_, g): [number, number] => [dna[g * GENE_WORDS], geneDose(dna, g * GENE_WORDS)]);
+}
+const ofKey = (dna: Uint32Array, key: number) => pairs(dna).filter(([k]) => k === key).map(([, d]) => d);
+
+// These run with DNA on (the default) and Stage 2 off (the default), so a
+// child's genome is the crossed genome plus the clone's per-gene mutation.
+describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual reproduction)', () => {
+  const tag = geneKey(GeneClass.trait, TraitId.tag);
+  const carry = geneKey(GeneClass.trait, TraitId.carryCapacity);
+  const onlyA = geneKey(GeneClass.trait, TraitId.memorySpan);
+  const onlyB = geneKey(GeneClass.trait, TraitId.carnivory);
+
+  it('takes each key from one parent: present in the child exactly when the picked parent has it', () => {
+    const a = genes([[tag, 10], [carry, 1], [onlyA, 3]]);
+    const b = genes([[tag, 200], [carry, 2], [onlyB, 0.5]]);
+    const seen = new Set<string>();
+    const prng = new PRNG(1);
+    for (let i = 0; i < 64; i++) {
+      const child = crossGenomes(a, b, prng);
+      const t = ofKey(child, tag);
+      const c = ofKey(child, carry);
+      expect([[10], [200]]).toContainEqual(t);
+      expect([[1], [2]]).toContainEqual(c);
+      expect([[], [3]]).toContainEqual(ofKey(child, onlyA));
+      expect([[], [0.5]]).toContainEqual(ofKey(child, onlyB));
+      seen.add(`${t[0]}|${c[0]}|${ofKey(child, onlyA).length}|${ofKey(child, onlyB).length}`);
+    }
+    expect(seen.size).toBe(16); // every combination of the four independent picks turns up
+  });
+
+  it('moves every copy of a duplicated key together', () => {
+    const a = genes([[tag, 10], [carry, 1], [tag, 20], [carry, 0.25], [tag, 30]]);
+    const b = genes([[carry, 2], [tag, 200]]);
+    const prng = new PRNG(2);
+    const outcomes = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const child = crossGenomes(a, b, prng);
+      const t = ofKey(child, tag);
+      const c = ofKey(child, carry);
+      expect([[10, 20, 30], [200]]).toContainEqual(t);
+      expect([[1, 0.25], [2]]).toContainEqual(c);
+      outcomes.add(`${t.length}${c.length}`);
+    }
+    expect(outcomes.size).toBe(4);
+  });
+
+  it('moves a hidden brain unit (incoming weights, bias, output weight) as one gene', () => {
+    const brain = (v: number): Brain => ({
+      skip: BRAIN_INPUTS.map(() => v),
+      hidden: new Array<number>(BRAIN_HIDDEN * BRAIN_INPUT_COUNT).fill(v),
+      hiddenBias: new Array<number>(BRAIN_HIDDEN).fill(v),
+      out: new Array<number>(BRAIN_HIDDEN).fill(v),
+      outBias: v,
+    });
+    const org = (v: number) => phenotypeOf(makeOrganism(`o${v}`, 0, 0, { brain: brain(v), memoryWeights: new Array<number>(30).fill(0) }));
+    // Parent a lacks unit 0's output weight: if unit 0 comes from a, the child lacks it too (decodes to 0).
+    const outKey = geneKey(GeneClass.brainOut, 0);
+    const a = genes(pairs(encodeOrganismDNA(org(1))).filter(([k]) => k !== outKey));
+    const b = encodeOrganismDNA(org(-1));
+    const config = createConfig();
+    const prng = new PRNG(3);
+    const unit0FromA = new Set<boolean>();
+    for (let i = 0; i < 20; i++) {
+      const child = decodeOrganismDNA(crossGenomes(a, b, prng), config).brain;
+      for (let h = 0; h < BRAIN_HIDDEN; h++) {
+        const v = child.hiddenBias[h];
+        expect([1, -1]).toContain(v);
+        expect(child.hidden.slice(h * BRAIN_INPUT_COUNT, (h + 1) * BRAIN_INPUT_COUNT).every((w) => w === v)).toBe(true);
+        expect(child.out[h]).toBe(h === 0 && v === 1 ? 0 : v);
+        if (h === 0) unit0FromA.add(v === 1);
+      }
+      // Direct connections still cross one by one.
+      expect(new Set(child.skip).size).toBe(2);
+    }
+    expect(unit0FromA.size).toBe(2);
+  });
+
+  it('caps the child at dnaMaxGenes, after mutation', () => {
+    expect(geneCount(capGenome(genes([[tag, 1], [carry, 1], [tag, 2]]), 2))).toBe(2);
+    // 60 silent genes (an unknown gene class) per parent, different keys in each.
+    const silent = (from: number) => Array.from({ length: 60 }, (_, i): [number, number] => [((7 << 16) | (from + i)) >>> 0, 0]);
+    const parent = (id: string, x: number, from: number): Organism => {
+      const o = makeOrganism(id, x, 5, { energy: 80, brain: ASKER, memoryWeights: new Array<number>(30).fill(0) });
+      return { ...o, genome: genes([...pairs(encodeOrganismDNA(phenotypeOf(o))), ...silent(from)]) };
+    };
+    const own = geneCount(encodeOrganismDNA(phenotypeOf(parent('p', 0, 0))));
+    const cap = own + 5; // the crossed genome carries ~60 of the 120 silent genes
+    const world = quietWorld({ reproductionThreshold: 40, dnaMaxGenes: cap });
+    addAll(world, parent('a', 5, 0), parent('b', 6, 1000));
+    world.step();
+    const child = Array.from(world.organisms.values()).find((o) => o.id !== 'a' && o.id !== 'b')!;
+    expect(geneCount(child.genome!)).toBe(cap);
+    expect(decodeOrganismDNA(child.genome!, world.config)).toEqual(phenotypeOf(child));
+  });
+
+  it('is seeded: the same world mates to the same child genome; the child is what its genome decodes to', () => {
+    const run = () => {
+      const world = quietWorld({ reproductionThreshold: 40 });
+      addAll(
+        world,
+        makeOrganism('a', 5, 5, { energy: 80, brain: ASKER, tag: 10, carnivory: 0.1, dispersal: 2, memoryWeights: new Array<number>(30).fill(0.5) }),
+        makeOrganism('b', 6, 5, {
+          energy: 80,
+          brain: ASKER,
+          tag: 200,
+          carnivory: 0.9,
+          abilities: { diagonal: 1, squeeze: 1, leap: 0 },
+          memoryWeights: new Array<number>(30).fill(-0.5),
+        })
+      );
+      world.step();
+      return { world, child: Array.from(world.organisms.values()).find((o) => o.id !== 'a' && o.id !== 'b')! };
+    };
+    const first = run();
+    const second = run();
+    expect(first.child.genome).toBeDefined();
+    expect(Array.from(second.child.genome!)).toEqual(Array.from(first.child.genome!));
+    expect(decodeOrganismDNA(first.child.genome!, first.world.config)).toEqual(phenotypeOf(first.child));
+    const x = first.child.genome!;
+    expect(Array.from(crossGenomes(x, second.child.genome!, new PRNG(5)))).toEqual(Array.from(crossGenomes(x, second.child.genome!, new PRNG(5))));
+  });
+
+  it('with Stage 2 off, gives the same child as mating with DNA off (same picks, same PRNG draws)', () => {
+    const child = (dnaEnabled: boolean, seed: number) => {
+      const world = quietWorld({ seed, reproductionThreshold: 40, dnaEnabled, brainMutationRate: 0.5, traitMutationRate: 0.5, abilityMutationRate: 0.5 });
+      const brain = (v: number): Brain => ({ ...brainWith({ isMate: 100 }), hidden: new Array<number>(BRAIN_HIDDEN * BRAIN_INPUT_COUNT).fill(v), out: new Array<number>(BRAIN_HIDDEN).fill(v) });
+      addAll(
+        world,
+        makeOrganism('a', 5, 5, { energy: 80, brain: brain(0.01), tag: 10, carryCapacity: 1, dispersal: 2, memoryWeights: new Array<number>(30).fill(0.5) }),
+        makeOrganism('b', 6, 5, { energy: 80, brain: brain(-0.01), tag: 200, carnivory: 0.9, memorySpan: 4, abilities: { diagonal: 1, squeeze: 0, leap: 1 }, memoryWeights: new Array<number>(30).fill(-0.5) })
+      );
+      world.step();
+      const c = Array.from(world.organisms.values()).find((o) => o.id !== 'a' && o.id !== 'b')!;
+      return { phenotype: phenotypeOf(c), policy: c.policy, rng: world.prng.getState() };
+    };
+    for (let seed = 0; seed < 6; seed++) expect(child(true, seed)).toEqual(child(false, seed));
   });
 });

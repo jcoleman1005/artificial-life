@@ -17,7 +17,7 @@ Code: `src/sim/dna.ts`; tests: `tests/dna.test.ts`.
 | `carnivory` | trait 4 | 0 | `clamp(Σ dose, 0, 1)` |
 | `abilities.diagonal / squeeze / leap` | traits 5, 6, 7 | 0 | binary: `clamp(round(Σ dose), 0, 1)`; dose 1 gives the ability |
 | register weights (`memoryWeights`, 30) | traits 10–39 | 0 | Σ dose |
-| brain weights (skip 47, hidden 6 × 47, hidden bias 6, out 6, out bias 1) | brain gene classes 1–5 | 0 (no connection) | Σ dose |
+| brain weights (skip 52, hidden 6 × 52, hidden bias 6, out 6, out bias 1) | brain gene classes 1–5 | 0 (no connection) | Σ dose |
 
 Traits 8–9 are reserved. Not in the genome: the policy dials (still inherited directly; open question whether to add them), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
 
@@ -43,6 +43,20 @@ Because Stage 1 is bit-identical, the gate is met by construction; switching it 
 ## Stage 2 as built (`dnaVariationEnabled`, off by default pending its gate)
 
 Code: `mutateGenomeVariation`, `mutateOnce`, `genomeStats` in `src/sim/dna.ts`; census `npm run census`. Point-mutation counts are Poisson over the genome (each gene keeps its legacy rate); a point mutation steps the dose or, with `dnaKeyFlipFraction`, flips a bit of the gene's index. Insertion adds a random gene at a random position, deletion removes one, duplication copies 1 to `dnaDuplicationMaxLength` genes elsewhere (`dnaDosageCompensation` halves doses to make it neutral; off). Every gene costs `dnaUpkeepPerGene` per tick; `dnaMaxGenes` caps length. Loading a save no longer re-adds deleted skip genes (`upgradeGenome` takes the saved input count). Gate status: see `docs/STATUS.md`.
+
+## Sexual reproduction (decided 2026-10-26: cross genomes by key)
+
+Mating (`sexEnabled`; see `docs/decisions.md`, Mating) makes a child from two parents. With DNA on, their genomes are crossed by key; code `crossGenomes` and `capGenome` in `src/sim/dna.ts`, used by `World.inheritBody`; tests in `tests/sex.test.ts` ("Mating with DNA").
+
+- **Groups.** Every gene belongs to one inheritance group: its key, except that a hidden brain unit's genes (all its incoming weights, its bias and its output weight: brain classes 2, 3 and 4 with that unit number) form one group, as in the pre-DNA `crossBrains`.
+- **Pick.** For each group present in either parent, one parent is picked at random (one seeded PRNG draw per group, in order of first appearance in the carrier's genome, then in the mate's). The child takes all of that parent's genes in the group: every copy of a duplicated key travels together, and if the picked parent lacks the key the child lacks it too. Genome length therefore varies naturally once Stage 2 has made genomes differ.
+- **Layout.** The child follows the carrier's gene order (the carrier is the parent the child is born next to). A group picked from the carrier keeps its genes where the carrier has them; a key picked from the mate puts all the mate's copies where the carrier first has that key; keys only the mate has follow at the end in the mate's order. Two Stage 1 genomes share one layout, so the child has that layout with each gene's dose from one parent: with Stage 2 off this is the pre-DNA per-trait mixing (each trait, each direct connection and each register weight from one parent; each hidden unit whole).
+- **Then mutation**, exactly the clone path: legacy per-gene mutation (`mutateGenome`), or the Stage 2 operators when `dnaVariationEnabled` (`mutateGenomeVariation`). The result is capped at `dnaMaxGenes` (genes past the cap are dropped from the end; crossing two long genomes can exceed it, mutation alone cannot), and the child is what the genome decodes to.
+- **Parents without a genome** (DNA switched on mid-run, or split diets switched on) are encoded on the spot, as for clones.
+- **Not in the genome:** the policy dials are mixed per dial (each dial whole from one parent), then mutate as for clones. PRNG order for a child of mating: dial picks, dial mutation, genome group picks, genome mutation.
+- **DNA off:** the phenotype recombination (`recombine` in `src/sim/sex.ts`) is kept: each trait whole from one parent, a hidden unit as one gene, then legacy inheritance. Its picks are drawn in genome order, so with Stage 2 off a DNA world and a legacy world stay bit-identical with mating too (tested; fingerprint identical with `dnaEnabled=false`). With Stage 2 on, genomes differ in layout and the two no longer match, as for clones.
+
+Brain inputs: mating appended five inputs (`isMate`, `mateFullness`, `mateAlike`, `mateFamily`, `mateReady`; 47 → 52). Hidden gene indices are `(unit << 8) | input`, so every older gene keeps its meaning; a genome or save without genes for the new inputs decodes them as no connection, and `upgradeGenome` adds head-start direct-connection genes for inputs past the save's input count (`upgradeBrain` does the same for saved brains).
 
 ## Stage 1b proposals (each its own toggle and gate, after sign-off)
 

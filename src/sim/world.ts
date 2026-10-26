@@ -15,7 +15,7 @@ import type {
 } from './types';
 import { createConfig } from './config';
 import { isParentOrChild } from './family';
-import { genomeOf, recombine } from './sex';
+import { heritableOf, mixPolicies, recombine } from './sex';
 import { senseEnvironment } from './sensors';
 import {
   createRandomPolicy,
@@ -45,7 +45,7 @@ import {
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
-import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
+import { capGenome, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -408,32 +408,43 @@ export class World {
   }
 
   /**
-   * A child's inherited body and brain: with DNA, decoded from the parent's
-   * genome after mutation (encoded first if the parent has none yet);
-   * otherwise each trait inherited directly. Both draw from the PRNG in the
-   * same order, so they give the same child.
+   * An organism's genome as a parent passes it on: its own, or encoded on the
+   * spot if it has none yet (DNA switched on mid-run). A parent from before
+   * split diets were on gets a herbivory gene that keeps its plant yield.
    */
-  private inheritBody(parent: Readonly<Organism>): Phenotype & { genome?: Uint32Array } {
+  private parentGenome(o: Readonly<Organism>): Uint32Array {
+    const needsHerbivory = splitDiets(this.config) && o.herbivory === undefined;
+    if (o.genome && !needsHerbivory) return o.genome;
+    return encodeOrganismDNA({ ...phenotypeOf(o), ...(needsHerbivory ? { herbivory: herbivoryOf(o, this.config) } : {}) });
+  }
+
+  /**
+   * A child's inherited body and brain. With DNA: the parent's genome (or,
+   * for a child of mating, the two parents' genomes crossed by key, see
+   * crossGenomes) goes through the clone mutation path, is capped at
+   * dnaMaxGenes, and the child is what it decodes to. Without DNA each trait
+   * is inherited directly, for a child of mating from the two parents'
+   * traits mixed by recombine. Both paths draw from the PRNG in the same
+   * order (with Stage 2 off), so they give the same child.
+   */
+  private inheritBody(parent: Readonly<Organism>, mate: Readonly<Organism> | null = null): Phenotype & { genome?: Uint32Array } {
     const { config, prng } = this;
     if (config.dnaEnabled) {
-      // A parent from before split diets were on gets a herbivory gene that keeps its plant yield.
-      const needsHerbivory = splitDiets(config) && parent.herbivory === undefined;
-      const parentGenome =
-        parent.genome && !needsHerbivory
-          ? parent.genome
-          : encodeOrganismDNA({ ...phenotypeOf(parent), ...(needsHerbivory ? { herbivory: herbivoryOf(parent, config) } : {}) });
-      const genome = config.dnaVariationEnabled ? mutateGenomeVariation(parentGenome, config, prng) : mutateGenome(parentGenome, config, prng);
+      const start = mate ? crossGenomes(this.parentGenome(parent), this.parentGenome(mate), prng) : this.parentGenome(parent);
+      const mutated = config.dnaVariationEnabled ? mutateGenomeVariation(start, config, prng) : mutateGenome(start, config, prng);
+      const genome = capGenome(mutated, config.dnaMaxGenes);
       return { ...decodeOrganismDNA(genome, config), genome };
     }
+    const genes = mate ? recombine(heritableOf(parent), heritableOf(mate), prng) : parent;
     return {
-      tag: inheritTag(parent.tag, config, prng),
-      carryCapacity: inheritCarryCapacity(parent.carryCapacity, config, prng),
-      brain: mutateBrain(parent.brain, config, prng),
-      abilities: inheritAbilities(parent.abilities, config, prng),
-      dispersal: inheritDispersal(parent.dispersal, config, prng),
-      memorySpan: inheritMemorySpan(parent.memorySpan, config, prng),
-      memoryWeights: inheritMemoryWeights(parent.memoryWeights, config, prng),
-      carnivory: inheritCarnivory(parent.carnivory, config, prng),
+      tag: inheritTag(genes.tag, config, prng),
+      carryCapacity: inheritCarryCapacity(genes.carryCapacity, config, prng),
+      brain: mutateBrain(genes.brain, config, prng),
+      abilities: inheritAbilities(genes.abilities, config, prng),
+      dispersal: inheritDispersal(genes.dispersal, config, prng),
+      memorySpan: inheritMemorySpan(genes.memorySpan, config, prng),
+      memoryWeights: inheritMemoryWeights(genes.memoryWeights, config, prng),
+      carnivory: inheritCarnivory(genes.carnivory, config, prng),
     };
   }
 
@@ -1130,17 +1141,17 @@ export class World {
 
   /**
    * A newborn with energy `energy` at `birth`. A clone takes its parent's
-   * genes; a child of mating takes each gene from one parent or the other
-   * (see recombine). Either way the genes then mutate. The child belongs to
-   * the lineage of `parent`, the one it is born next to.
+   * genes. A child of mating takes each policy dial whole from one parent or
+   * the other (mixPolicies); with DNA its body and brain come from the two
+   * genomes crossed by key (crossGenomes), without DNA each trait whole from
+   * one parent (recombine). Either way the genes then mutate as a clone's do. The child
+   * belongs to the lineage of `parent`, the one it is born next to.
    */
   private makeChild(parent: Organism, mate: Organism | null, birth: { x: number; y: number }, energy: number): Organism {
-    const mixed = mate ? recombine(genomeOf(parent), genomeOf(mate), this.prng) : null;
+    const policySource = mate ? mixPolicies(parent.policy, mate.policy, this.prng) : parent.policy;
     this.nextOrganismSeq++;
-    const policy = mutatePolicy(mixed ? mixed.policy : parent.policy, this.config, this.prng);
-    // A clone mutates its parent's body (through its genome with DNA on); a
-    // child of mating mutates the mixed body, re-encoded when DNA is on.
-    const inherited = this.inheritBody(mixed ? { ...parent, ...mixed, genome: undefined } : parent);
+    const policy = mutatePolicy(policySource, this.config, this.prng);
+    const inherited = this.inheritBody(parent, mate);
     return {
       id: `org-${this.nextOrganismSeq}`,
       x: birth.x,

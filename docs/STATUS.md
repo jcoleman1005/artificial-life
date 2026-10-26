@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-26._
+_Last updated: 2026-10-26 (mating merged onto DNA)._
 
 ## Branches
 
@@ -32,6 +32,8 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 ## In progress: DNA (2026-10-26)
 
 Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
+
+**Mating with genomes (2026-10-26):** a child of mating gets its genome by crossing its parents' genomes by key (each key's copies, or a whole hidden brain unit, from one parent), then the clone's mutation path, capped at `dnaMaxGenes` (`docs/specs/dna.md`, Sexual reproduction). Not yet measured: the branch's mating experiment ran before DNA.
 
 **Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. Seeds 1 and 8 go extinct early.
 
@@ -95,7 +97,9 @@ There is no target outcome: new features go in on by default and the world is le
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
-- Fingerprint (2026-10-26; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500 (dials 831, brain 390). Identical with `dnaEnabled=false`. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds:
+- Fingerprint (2026-10-26, after mating merged; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500 (dials 460, brain 616). Identical with `dnaEnabled=false`:
+  `large dials c51ecae8de0bdec2 · large brain 9ec109d2b13d06ad`
+  With `--set sexEnabled=false`: `large dials c51ecae8de0bdec2 · large brain 434963fe33ba72a1`. This is not the pre-mating value below: the five appended brain inputs add PRNG draws (30 more hidden weights per founder brain, 35 more per-gene mutation rolls per birth), so every world's random stream shifts. Main with five zero-valued inputs appended gives exactly this sexEnabled=false output, so the inputs, not mating, account for the difference. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds. Before mating (main at d466b28; dials 831, brain 390):
   `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`
-- `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Shorten those tests or run them in their own pool if it becomes a nuisance.
+- `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Since 2026-10-26 the long plants run yields to the event loop every 100 ticks, which cleared it here; do the same for any other long synchronous test that trips it.
 - The S21 check (roadmap item 1) is still to do on the phone itself.
