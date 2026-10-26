@@ -36,6 +36,9 @@ import {
   inheritDispersal,
   metabolismCost,
   plantYield,
+  moveEnergyCost,
+  splitDiets,
+  herbivoryOf,
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
@@ -348,8 +351,13 @@ export class World {
     const dispersal = founderDispersal(this.config, this.prng);
     const memorySpan = founderMemorySpan(this.config, this.prng);
     const memoryWeights = founderMemoryWeights(this.prng);
-    const carnivory = founderCarnivory(this.prng);
-    const drawn: Phenotype = { tag, carryCapacity, brain, abilities, dispersal, memorySpan, memoryWeights, carnivory };
+    // Split diets: founders are full plant eaters with no taste for meat.
+    const split = splitDiets(this.config);
+    const carnivory = split ? 0 : founderCarnivory(this.prng);
+    const drawn: Phenotype = {
+      tag, carryCapacity, brain, abilities, dispersal, memorySpan, memoryWeights, carnivory,
+      ...(split ? { herbivory: 1 } : {}),
+    };
     // With DNA, the founder is what its encoded genome decodes to.
     const genome = this.config.dnaEnabled ? encodeOrganismDNA(drawn) : undefined;
     const phenotype = genome ? decodeOrganismDNA(genome, this.config) : drawn;
@@ -389,7 +397,13 @@ export class World {
   private inheritBody(parent: Readonly<Organism>): Phenotype & { genome?: Uint32Array } {
     const { config, prng } = this;
     if (config.dnaEnabled) {
-      const genome = mutateGenome(parent.genome ?? encodeOrganismDNA(phenotypeOf(parent)), config, prng);
+      // A parent from before split diets were on gets a herbivory gene that keeps its plant yield.
+      const needsHerbivory = splitDiets(config) && parent.herbivory === undefined;
+      const parentGenome =
+        parent.genome && !needsHerbivory
+          ? parent.genome
+          : encodeOrganismDNA({ ...phenotypeOf(parent), ...(needsHerbivory ? { herbivory: herbivoryOf(parent, config) } : {}) });
+      const genome = mutateGenome(parentGenome, config, prng);
       return { ...decodeOrganismDNA(genome, config), genome };
     }
     return {
@@ -850,12 +864,15 @@ export class World {
         case 'LEAP_WEST': {
           // Diagonals cost more (longer step); squeezing past a stranger and
           // leaping cost more again. Nothing is paid for a move that fails.
-          const { moveCost } = this.config;
-          const cost = isLeapAction(chosenAction.type)
-            ? moveCost * this.config.leapCostMultiplier
-            : moveCost *
-              (isDiagonalMove(chosenAction.type) ? this.config.diagonalMoveCost : 1) *
-              (chosenAction.swapRelation === 'squeeze' ? this.config.squeezeCostMultiplier : 1);
+          const cost = moveEnergyCost(
+            organism.abilities,
+            {
+              leap: isLeapAction(chosenAction.type),
+              diagonal: isDiagonalMove(chosenAction.type),
+              squeeze: chosenAction.swapRelation === 'squeeze',
+            },
+            this.config
+          );
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;

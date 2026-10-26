@@ -2,7 +2,14 @@ import type { PRNG } from './prng';
 import { BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, mutateWeight, type Brain } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
-import { inheritCarnivory, inheritCarryCapacity, inheritDispersal } from './traits';
+import {
+  continuousAbilities,
+  inheritAbilityEfficiency,
+  inheritCarnivory,
+  inheritCarryCapacity,
+  inheritDispersal,
+  splitDiets,
+} from './traits';
 import type { Abilities, Organism, SimulationConfig } from './types';
 
 /**
@@ -38,7 +45,7 @@ export const GeneClass = {
 } as const;
 export type GeneClass = (typeof GeneClass)[keyof typeof GeneClass];
 
-/** Trait ids (GeneClass.trait). 8–9 are reserved; 10–39 are the memory register weights. */
+/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights. */
 export const TraitId = {
   tag: 0,
   carryCapacity: 1,
@@ -48,6 +55,8 @@ export const TraitId = {
   diagonal: 5,
   squeeze: 6,
   leap: 7,
+  /** Split diets only (Stage 1b.2). */
+  herbivory: 8,
   memoryWeight0: 10,
 } as const;
 
@@ -59,6 +68,8 @@ export interface Phenotype {
   readonly memorySpan: number;
   readonly memoryWeights: readonly number[];
   readonly carnivory: number;
+  /** Split diets only. */
+  readonly herbivory?: number;
   readonly abilities: Abilities;
   readonly brain: Brain;
 }
@@ -70,6 +81,7 @@ export const ABSENT_DEFAULTS = {
   dispersal: 1,
   memorySpan: 0,
   carnivory: 0,
+  herbivory: 0,
   abilities: { diagonal: 0, squeeze: 0, leap: 0 },
 } as const;
 
@@ -119,6 +131,7 @@ export function encodeOrganismDNA(p: Readonly<Phenotype>): Uint32Array {
   add(GeneClass.trait, TraitId.memorySpan, p.memorySpan);
   p.memoryWeights.forEach((w, i) => add(GeneClass.trait, TraitId.memoryWeight0 + i, w));
   add(GeneClass.trait, TraitId.carnivory, p.carnivory);
+  if (p.herbivory !== undefined) add(GeneClass.trait, TraitId.herbivory, p.herbivory);
 
   const dna = new Uint32Array(genes.length * GENE_WORDS);
   genes.forEach(([key, dose], g) => writeGene(dna, g * GENE_WORDS, key, dose));
@@ -215,7 +228,10 @@ export function decodeOrganismDNA(dna: ArrayLike<number>, config: Readonly<Simul
   }
 
   const trait = (id: number, absent: number) => (traits.has(id) ? traits.values[id] : absent);
-  const binary = (id: number) => (clamp(Math.round(trait(id, 0)), 0, 1) === 1 ? 1 : 0);
+  // Binary: 0 or 1. Continuous (Stage 1b.1): the efficiency itself, in [0, 1].
+  const ability = continuousAbilities(config)
+    ? (id: number) => clamp(trait(id, 0), 0, 1)
+    : (id: number) => (clamp(Math.round(trait(id, 0)), 0, 1) === 1 ? 1 : 0);
   return {
     tag: circularMeanHue(tags),
     carryCapacity: clamp(Math.round(trait(TraitId.carryCapacity, ABSENT_DEFAULTS.carryCapacity)), 0, config.maxCarryCapacity),
@@ -223,7 +239,8 @@ export function decodeOrganismDNA(dna: ArrayLike<number>, config: Readonly<Simul
     memorySpan: clamp(Math.round(trait(TraitId.memorySpan, ABSENT_DEFAULTS.memorySpan)), 0, config.maxMemorySpan),
     memoryWeights: traits.values.slice(TraitId.memoryWeight0, TraitId.memoryWeight0 + MEMORY_WEIGHT_COUNT),
     carnivory: clamp(trait(TraitId.carnivory, ABSENT_DEFAULTS.carnivory), 0, 1),
-    abilities: { diagonal: binary(TraitId.diagonal), squeeze: binary(TraitId.squeeze), leap: binary(TraitId.leap) },
+    ...(splitDiets(config) ? { herbivory: clamp(trait(TraitId.herbivory, ABSENT_DEFAULTS.herbivory), 0, 1) } : {}),
+    abilities: { diagonal: ability(TraitId.diagonal), squeeze: ability(TraitId.squeeze), leap: ability(TraitId.leap) },
     brain: {
       skip: skip.values,
       hidden: hidden.values,
@@ -265,10 +282,12 @@ function mutateDose(key: number, dose: number, config: Readonly<SimulationConfig
     case TraitId.memorySpan:
       return inheritMemorySpan(dose, config, prng);
     case TraitId.carnivory:
+    case TraitId.herbivory:
       return inheritCarnivory(dose, config, prng);
     case TraitId.diagonal:
     case TraitId.squeeze:
     case TraitId.leap:
+      if (continuousAbilities(config)) return inheritAbilityEfficiency(dose, config, prng);
       return prng.next() < config.abilityMutationRate ? 1 - dose : dose;
     default:
       return dose; // reserved ids are copied unchanged
@@ -277,8 +296,11 @@ function mutateDose(key: number, dose: number, config: Readonly<SimulationConfig
 
 /** The phenotype fields of an organism (what encodeOrganismDNA reads). */
 export function phenotypeOf(o: Readonly<Organism>): Phenotype {
-  const { tag, carryCapacity, dispersal, memorySpan, memoryWeights, carnivory, abilities, brain } = o;
-  return { tag, carryCapacity, dispersal, memorySpan, memoryWeights, carnivory, abilities, brain };
+  const { tag, carryCapacity, dispersal, memorySpan, memoryWeights, carnivory, abilities, brain, herbivory } = o;
+  return {
+    tag, carryCapacity, dispersal, memorySpan, memoryWeights, carnivory, abilities, brain,
+    ...(herbivory === undefined ? {} : { herbivory }),
+  };
 }
 
 /**
