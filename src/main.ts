@@ -353,6 +353,7 @@ const settingsView = new SettingsView(
     signalsEnabled: sim.config.signalsEnabled,
     dispersalEnabled: sim.config.dispersalEnabled,
     windfallsEnabled: sim.config.windfallsEnabled,
+    immigrationEnabled: sim.config.immigrationEnabled,
     plantsEnabled: sim.config.plantsEnabled,
     memoryEnabled: sim.config.memoryEnabled,
     seasonsEnabled: sim.config.seasonLength > 0,
@@ -375,6 +376,7 @@ const settingsView = new SettingsView(
     onSignalsChange: (enabled) => sim.setConfig({ signalsEnabled: enabled }),
     onDispersalChange: (enabled) => sim.setConfig({ dispersalEnabled: enabled }),
     onWindfallsChange: (enabled) => sim.setConfig({ windfallsEnabled: enabled }),
+    onImmigrationChange: (enabled) => sim.setConfig({ immigrationEnabled: enabled }),
     onPlantsChange: (enabled) => restart(sim.config.seed, { plantsEnabled: enabled }),
     onMemoryChange: (enabled) => sim.setConfig({ memoryEnabled: enabled }),
     onControllerChange: (controller) => {
@@ -701,6 +703,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     signalsEnabled: config.signalsEnabled,
     dispersalEnabled: config.dispersalEnabled,
     windfallsEnabled: config.windfallsEnabled,
+    immigrationEnabled: config.immigrationEnabled ?? false,
     plantsEnabled: config.plantsEnabled,
     memoryEnabled: config.memoryEnabled,
     seasonsEnabled: config.seasonLength > 0,

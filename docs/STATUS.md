@@ -27,7 +27,7 @@ _Last updated: 2026-10-25._
 
 ## What exists
 
-- 60×60 grid world (the old 30×30 world is a preset) with obstacles, food patches, lean/plenty seasons (800-tick cycle, last 40% lean), and immigration (1 founder every 25 ticks).
+- 60×60 grid world (the old 30×30 world is a preset) with obstacles, food patches, lean/plenty seasons (800-tick cycle, last 40% lean), and immigration (1 founder every 25 ticks; off by default since 2026-10-26, Settings → World → Newcomers).
 - Food grows only in 4 fertile regions (radius 8), spread over the world and never cut off by the edge (since 2026-10-25; before that they could clump, e.g. seed 42 had all four in the west half). **Every finding below predates this layout change**; rerun before relying on exact numbers. By default their seasons are staggered by a quarter cycle each, so a lean season sweeps from region to region.
 - Movement abilities (from `feature/mobility`), each an inherited body trait: diagonal steps (1.4× cost), squeezing past a non-family organism that stays put (2× cost), and leaping over a neighbour (2.5× cost). By default each founder gets one ability or none (`founderAbilities: 'one'`), abilities flip at birth with `abilityMutationRate` (0.02), and each held ability costs `abilityUpkeep` (0.03) per tick, so selection can show which pays. Without an ability, movement is classic 4-way. Moves sense whether the target is occupied (`avoidOccupied` dial, brain `moveOccupied`).
 - Organisms: energy, inherited tag (tribe colour), inherited carry capacity (with upkeep), food carrying and giving (need-aware, graded by tag similarity), parental care, childhood parent-following, family pass-through, and signals (a SIGNAL action others within 8 cells sense the next tick; meaning left to evolution).

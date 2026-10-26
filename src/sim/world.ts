@@ -1268,8 +1268,8 @@ export class World {
 
     // 3. Immigration: newcomers with random tags and policies arrive in
     // random free cells, so look-alike groups are not just families.
-    const { immigrationInterval, immigrationCount } = this.config;
-    if (immigrationInterval > 0 && this.tick > 0 && this.tick % immigrationInterval === 0) {
+    const { immigrationEnabled, immigrationInterval, immigrationCount } = this.config;
+    if (immigrationEnabled && immigrationInterval > 0 && this.tick > 0 && this.tick % immigrationInterval === 0) {
       const occupied = new Set<string>();
       for (const o of this.organisms.values()) occupied.add(`${o.x},${o.y}`);
       let arrived = 0;

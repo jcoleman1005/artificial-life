@@ -466,6 +466,7 @@ export interface SimulationConfig {
   predationEnabled: boolean; // Allow ATTACK (brain only): a kill turns the prey into carrion
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
+  immigrationEnabled: boolean; // Newcomers arrive during the run (off: only the founders and their descendants)
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
   seasonLength: number; // Ticks per plenty + lean cycle (0 = no seasons)

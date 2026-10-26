@@ -615,7 +615,7 @@ describe('Food-first head starts (evolvable)', () => {
 
 describe('Immigration', () => {
   it('adds founders with new lineages at the configured interval', () => {
-    const world = emptyWorld({ immigrationInterval: 10, immigrationCount: 2 });
+    const world = emptyWorld({ immigrationEnabled: true, immigrationInterval: 10, immigrationCount: 2 });
     for (let t = 0; t < 30; t++) world.step();
     expect(world.immigrantsTotal).toBe(6);
     const lineages = new Set(Array.from(world.organisms.values(), (o) => o.lineage.id));
@@ -627,10 +627,17 @@ describe('Immigration', () => {
   });
 
   it('is off when the interval is 0', () => {
-    const world = emptyWorld({ immigrationInterval: 0 });
+    const world = emptyWorld({ immigrationEnabled: true, immigrationInterval: 0 });
     for (let t = 0; t < 60; t++) world.step();
     expect(world.immigrantsTotal).toBe(0);
     expect(world.organisms.size).toBe(0);
+  });
+
+  it('is off by default: only the founders and their descendants', () => {
+    const world = emptyWorld({ immigrationInterval: 10 });
+    expect(world.config.immigrationEnabled).toBe(false);
+    for (let t = 0; t < 60; t++) world.step();
+    expect(world.immigrantsTotal).toBe(0);
   });
 });
 

@@ -79,6 +79,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   predationEnabled: true,
   attackCost: 2,
   bitePowerMin: 0.2,
+  immigrationEnabled: false, // watch only the founders and their descendants
   immigrationInterval: 25,
   immigrationCount: 1,
   seasonLength: 800,
