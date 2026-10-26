@@ -12,6 +12,7 @@ import type {
   WorldSnapshot,
 } from './types';
 import { createConfig } from './config';
+import { hashString } from './state-hash';
 import { senseEnvironment } from './sensors';
 import {
   createRandomPolicy,
@@ -365,6 +366,18 @@ export class World {
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
     };
+  }
+
+  /**
+   * A hash of everything that decides the world's future: settings, random
+   * number generator, counters, terrain, food and plants, and organisms.
+   * Two worlds with the same hash continue identically. The trend history is
+   * left out (it only records the past). Costs about as much as a snapshot,
+   * so call it now and then, not every tick.
+   */
+  public stateHash(): string {
+    const { history: _history, ...state } = this.exportState();
+    return hashString(JSON.stringify(state));
   }
 
   /** A world that continues exactly from a saved state. */

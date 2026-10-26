@@ -1,4 +1,5 @@
 import type { PRNG } from './prng';
+import { founderGenes, geneKeys, inheritGenes, type GeneTable } from './genes';
 import type {
   FoodPatch,
   FoodRegion,
@@ -17,16 +18,8 @@ import type {
  * to selection. See docs/specs/plants.md.
  */
 
-interface TraitRange {
-  readonly min: number;
-  readonly max: number;
-  /** Founders and seed rain draw uniformly from this range. */
-  readonly founderMin: number;
-  readonly founderMax: number;
-}
-
 /** Bounds of each trait, and the founder ranges (centred near the classic food supply). */
-export const PLANT_TRAITS: Readonly<Record<PlantTrait, TraitRange>> = {
+export const PLANT_TRAITS: GeneTable<PlantTrait> = {
   growthRate: { min: 0.01, max: 1, founderMin: 0.1, founderMax: 0.35 },
   maxBiomass: { min: 1, max: 20, founderMin: 5, founderMax: 11 },
   seedSize: { min: 0.2, max: 4, founderMin: 0.5, founderMax: 2 },
@@ -36,7 +29,7 @@ export const PLANT_TRAITS: Readonly<Record<PlantTrait, TraitRange>> = {
   leanDormancy: { min: 0, max: 1, founderMin: 0, founderMax: 0.5 },
 };
 
-export const PLANT_TRAIT_KEYS = Object.keys(PLANT_TRAITS) as PlantTrait[];
+export const PLANT_TRAIT_KEYS = geneKeys(PLANT_TRAITS);
 
 export const PLANT_DEATH_CAUSES: readonly PlantDeathCause[] = ['grazed', 'shaded', 'lean', 'starved'];
 
@@ -49,29 +42,13 @@ export const DORMANCY_SAVING = 0.8;
 /** A plant that dies within this many ticks of being eaten counts as grazed out. */
 const GRAZED_WINDOW = 2;
 
-const round4 = (v: number) => Number(v.toFixed(4));
-
 export function founderGenome(prng: PRNG): PlantGenome {
-  const genome = {} as Record<PlantTrait, number>;
-  for (const key of PLANT_TRAIT_KEYS) {
-    const r = PLANT_TRAITS[key];
-    genome[key] = round4(prng.nextFloat(r.founderMin, r.founderMax));
-  }
-  return genome;
+  return founderGenes(PLANT_TRAITS, prng);
 }
 
 /** A seed's genome: the parent's, each trait shifted now and then and kept in range. */
 export function inheritGenome(parent: PlantGenome, config: Readonly<SimulationConfig>, prng: PRNG): PlantGenome {
-  const genome = {} as Record<PlantTrait, number>;
-  for (const key of PLANT_TRAIT_KEYS) {
-    const r = PLANT_TRAITS[key];
-    let v = parent[key];
-    if (prng.next() < config.plantMutationRate) {
-      v += prng.nextGaussian(0, config.plantMutationStdDev * (r.max - r.min));
-    }
-    genome[key] = round4(Math.max(r.min, Math.min(r.max, v)));
-  }
-  return genome;
+  return inheritGenes(PLANT_TRAITS, parent, prng, { rate: config.plantMutationRate, sd: config.plantMutationStdDev });
 }
 
 /**

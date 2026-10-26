@@ -47,7 +47,8 @@ _Last updated: 2026-10-25._
 - Saved worlds: exact snapshots (a restored world continues bit-identically, tested through JSON). Auto-save in the browser, resumed automatically on open ("Start fresh" to discard); branch points to jump back to (Settings → Saved worlds); save to / load from a file (~2 MB at ~400 organisms).
 - **Evolving plants** (`plantsEnabled`, on by default; Settings → World → Plants: Evolving). Food becomes a population of plants with a 7-trait inherited genome (growth rate, maximum size, seed size, seeding threshold, seed dispersal, root share, lean dormancy). They grow by soil, light, shade and size, pay upkeep, store roots, go dormant in lean seasons, set seed, and die when grazed bare, shaded out or starved; seed rain replaces patch spawning. Drawn as leaf rosettes in their strategy's colour (greyed while dormant, dots as seedlings) with berries for edible units; tap a plant for its genome; a Plants section in Trends, CSV columns and experiment metrics. Spec and as-built rules: `docs/specs/plants.md`. Plant updates cost ~0.4 ms/tick for ~1,000 plants.
 - **Always-on server** (`server/`, `docs/server.md`): one world for every viewer, running whether or not anyone watches; saved to `data/world.json` every 5 minutes, on shutdown and on play/pause/speed changes, with hourly gzip backups (48 kept, plus one before any reset or load); resumes as it was on restart. The page detects it and streams the world (Server-Sent Events, gzip, ~10 frames/s per viewer) instead of running a worker; served from anywhere else it runs its own world as before. Playback and settings changes from one viewer show on all; selection, tabs and overlays are per viewer. Options for port, speed cap, watch-only and more; a Termux:Boot script for the S21.
-- 155 deterministic tests.
+- Gene registry (`src/sim/genes.ts`, used by plant genes) and `World.stateHash()` (2026-10-26).
+- 170 deterministic tests.
 
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
@@ -138,7 +139,12 @@ There is no target outcome: new features go in on by default and the world is le
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
 **Phase 3: big coevolution (long runs; needs the server)**
-10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). Next: plant events in the feed, then Phase 2 (defence with an organism sense for plant colour, seed bank, seeds carried by organisms).
+10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). **Plan agreed 2026-10-26** (from the user's second plants spec; reshape the existing plants rather than rewrite them, keep whole food units, keep plants on by default):
+    1. ~~`stateHash` and a small gene registry.~~ Done 2026-10-26.
+    2. Stage 1 additions: shared gene budget, grazing that can kill with a `regrowth` gene, maximum age, locked-genes mode, per-region gene means and a plant diversity index; recalibrate against classic food.
+    3. Stage 2: plant `defense`, organism `detox` (inherited, with upkeep), a last-bite-yield sense, then the coevolution probe (one tick's plants in another tick's world).
+    4. Stage 3: plant `hue` and an organism `plantHue` sense (a possible route to colour groups splitting).
+    Also still open: plant events in the feed; seed bank and seeds carried by organisms.
 11. Growth and size, then bite.
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
