@@ -1,5 +1,5 @@
 import './style.css';
-import type { Organism } from './sim/types';
+import type { FoodPatch, Organism } from './sim/types';
 import type { OrganismView } from './sim/protocol';
 import { SimulationClient } from './ui/simulation-client';
 import { CanvasRenderer } from './render/renderer';
@@ -166,6 +166,14 @@ let lastSelectedId: string | null = null;
 // Last known state of the selected organism, kept to show it after it dies.
 let lastSelectedSnapshot: OrganismView | null = null;
 let lastSelectedDetail: Organism | null = null;
+// A selected plant (with plants on): shown in the inspector, kept after it dies.
+let selectedPlantId: string | null = null;
+let lastPlantPatch: FoodPatch | null = null;
+
+function findPlant(id: string): FoodPatch | undefined {
+  for (const patch of sim.foodPatches.values()) if (patch.plant?.id === id) return patch;
+  return undefined;
+}
 
 const nameOf = (id: string): string | null => (sim.organisms.has(id) ? givenName(id) : null);
 
@@ -302,6 +310,13 @@ function refreshPanels(): void {
     } else if (tab === 'trends') {
       historyView.render(sim.getHistorySamples());
     } else {
+      const plantPatch = selectedPlantId ? findPlant(selectedPlantId) : undefined;
+      if (plantPatch) lastPlantPatch = plantPatch;
+      if (selectedPlantId && lastPlantPatch) {
+        inspectorView.renderPlant(lastPlantPatch, sim.tick, plantPatch !== undefined);
+        lastPanelRefresh = performance.now();
+        return;
+      }
       const detail = shown?.detail;
       inspectorView.render(detail ? (shown.alive ? detail : { ...detail, energy: 0 }) : undefined, sim.config, nameOf);
     }
@@ -338,6 +353,7 @@ const settingsView = new SettingsView(
     signalsEnabled: sim.config.signalsEnabled,
     dispersalEnabled: sim.config.dispersalEnabled,
     windfallsEnabled: sim.config.windfallsEnabled,
+    plantsEnabled: sim.config.plantsEnabled,
     memoryEnabled: sim.config.memoryEnabled,
     seasonsEnabled: sim.config.seasonLength > 0,
     controller: sim.config.controller,
@@ -359,6 +375,7 @@ const settingsView = new SettingsView(
     onSignalsChange: (enabled) => sim.setConfig({ signalsEnabled: enabled }),
     onDispersalChange: (enabled) => sim.setConfig({ dispersalEnabled: enabled }),
     onWindfallsChange: (enabled) => sim.setConfig({ windfallsEnabled: enabled }),
+    onPlantsChange: (enabled) => restart(sim.config.seed, { plantsEnabled: enabled }),
     onMemoryChange: (enabled) => sim.setConfig({ memoryEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
@@ -387,9 +404,32 @@ function restart(seed: string | number, config?: Partial<typeof sim.config>): vo
   lastSelectedId = null;
   lastSelectedSnapshot = null;
   lastSelectedDetail = null;
+  clearPlant();
+}
+
+function clearPlant(): void {
+  selectedPlantId = null;
+  lastPlantPatch = null;
+  renderer.setSelectedPlant(null);
+}
+
+function selectPlant(patch: FoodPatch): void {
+  if (lastSelectedId) {
+    sim.select(null);
+    lastSelectedId = null;
+    lastSelectedSnapshot = null;
+    lastSelectedDetail = null;
+  }
+  selectedPlantId = patch.plant?.id ?? null;
+  lastPlantPatch = patch;
+  renderer.setSelectedPlant(selectedPlantId);
+  sheet.show('organism');
+  refreshPanels();
+  needsRender = true;
 }
 
 function select(org: OrganismView): void {
+  clearPlant();
   sim.select(org.id);
   lastSelectedId = org.id;
   lastSelectedSnapshot = org;
@@ -401,6 +441,7 @@ function select(org: OrganismView): void {
 }
 
 function deselect(): void {
+  clearPlant();
   sim.select(null);
   lastSelectedId = null;
   lastSelectedSnapshot = null;
@@ -438,8 +479,15 @@ function handleTap(clientX: number, clientY: number): void {
       bestDist = d;
     }
   }
-  if (best) select(best);
-  else if (lastSelectedId) deselect();
+  if (best) {
+    select(best);
+    return;
+  }
+  // No organism within reach: a plant in the tapped cell, if any.
+  const cell = renderer.clientToGrid(clientX, clientY);
+  const patch = cell ? sim.foodPatches.get(`${cell.x},${cell.y}`) : undefined;
+  if (patch?.plant) selectPlant(patch);
+  else if (lastSelectedId || selectedPlantId) deselect();
 }
 
 let dragFrom: { x: number; y: number } | null = null;
@@ -653,6 +701,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     signalsEnabled: config.signalsEnabled,
     dispersalEnabled: config.dispersalEnabled,
     windfallsEnabled: config.windfallsEnabled,
+    plantsEnabled: config.plantsEnabled,
     memoryEnabled: config.memoryEnabled,
     seasonsEnabled: config.seasonLength > 0,
     controller: config.controller,

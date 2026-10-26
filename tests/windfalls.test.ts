@@ -5,6 +5,7 @@ import type { SimulationConfig } from '../src/sim/types';
 /** An empty world (no organisms, no ordinary food) with windfalls every 50 ticks. */
 function windfallWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    plantsEnabled: false,
     seed: 'windfall',
     gridWidth: 30,
     gridHeight: 30,

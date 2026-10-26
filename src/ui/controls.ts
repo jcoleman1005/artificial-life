@@ -16,6 +16,7 @@ export interface SettingsCallbacks {
   onSignalsChange: (enabled: boolean) => void;
   onDispersalChange: (enabled: boolean) => void;
   onWindfallsChange: (enabled: boolean) => void;
+  onPlantsChange: (enabled: boolean) => void;
   onMemoryChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
@@ -35,6 +36,7 @@ export interface ExperimentToggles {
   signalsEnabled: boolean;
   dispersalEnabled: boolean;
   windfallsEnabled: boolean;
+  plantsEnabled: boolean;
   memoryEnabled: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
@@ -155,11 +157,12 @@ export class SettingsView {
     ];
     container.innerHTML = `
       <section class="settings-group">
-        <h3>World <small>size and food restart the run</small></h3>
+        <h3>World <small>size, food and plants restart the run</small></h3>
         ${segmented('Size', 'world', [['small', '30×30'], ['large', '60×60']], toggles.worldSize)}
         ${segmented('Food', 'food', [['anywhere', 'Anywhere'], ['regions', 'Regions'], ['shifting', 'Shifting']], toggles.foodLayout)}
         ${segmented('Seasons', 'seasons', onOff, toggles.seasonsEnabled ? 'on' : 'off')}
         ${segmented('Windfalls', 'windfalls', onOff, toggles.windfallsEnabled ? 'on' : 'off')}
+        ${segmented('Plants', 'plants', [['off', 'Patches'], ['on', 'Evolving']], toggles.plantsEnabled ? 'on' : 'off')}
       </section>
       <section class="settings-group">
         <h3>Behaviour <small>takes effect next tick</small></h3>
@@ -220,6 +223,7 @@ export class SettingsView {
     set('signals', t.signalsEnabled ? 'on' : 'off');
     set('dispersal', t.dispersalEnabled ? 'on' : 'off');
     set('windfalls', t.windfallsEnabled ? 'on' : 'off');
+    set('plants', t.plantsEnabled ? 'on' : 'off');
     set('memory', t.memoryEnabled ? 'on' : 'off');
     set('controller', t.controller);
   }
@@ -273,6 +277,7 @@ export class SettingsView {
     this.bindSegment('signals', (v) => cb.onSignalsChange(v === 'on'));
     this.bindSegment('dispersal', (v) => cb.onDispersalChange(v === 'on'));
     this.bindSegment('windfalls', (v) => cb.onWindfallsChange(v === 'on'));
+    this.bindSegment('plants', (v) => cb.onPlantsChange(v === 'on'));
     this.bindSegment('memory', (v) => cb.onMemoryChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));

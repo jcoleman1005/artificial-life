@@ -163,6 +163,7 @@ describe('Artificial Life Core Mechanics', () => {
 
   it('4. Finite food consumption and regeneration', () => {
     const world = new World({
+      plantsEnabled: false,
       seed: 99,
       gridWidth: 10,
       gridHeight: 10,

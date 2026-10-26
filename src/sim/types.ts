@@ -307,6 +307,71 @@ export interface FoodPatch {
   readonly region?: number;
   /** Windfalls only: the tick it rots away. Windfall patches never regrow. */
   readonly expiresAt?: number;
+  /** With plantsEnabled: the plant growing here (stock is its whole edible units). */
+  readonly plant?: Plant;
+}
+
+/**
+ * A plant's inherited life-history numbers. Plants make no decisions; these
+ * numbers set how they grow, store, seed and spread, and they evolve.
+ */
+export interface PlantGenome {
+  /** Growth per tick in full soil and light, before shade. Fast plants pay more upkeep. */
+  readonly growthRate: number;
+  /** Largest size (edible biomass plus roots). */
+  readonly maxBiomass: number;
+  /** Biomass a seedling starts with; each seed costs this much from the seed budget. */
+  readonly seedSize: number;
+  /** Fraction of maxBiomass the plant must reach before it sets seed. */
+  readonly seedThreshold: number;
+  /** How far (cells, in each direction) its seeds can land. */
+  readonly dispersal: number;
+  /** Fraction of growth stored as inedible roots. */
+  readonly rootShare: number;
+  /** In a lean season: how much growth stops, how much biomass moves into roots, and how much upkeep falls (0..1). */
+  readonly leanDormancy: number;
+}
+
+export type PlantTrait = keyof PlantGenome;
+
+export type PlantDeathCause = 'grazed' | 'shaded' | 'lean' | 'starved';
+
+/** A plant: one individual of the plant population, rooted in one cell. */
+export interface Plant {
+  readonly id: string;
+  /** Founder (or seed-rain) ancestor this plant descends from. */
+  readonly lineageId: string;
+  readonly parentId: string | null;
+  readonly generation: number;
+  readonly birthTick: number;
+  readonly genome: PlantGenome;
+  /** Edible biomass; organisms see and eat its whole units. */
+  biomass: number;
+  /** Inedible reserve: keeps the plant alive when grazed bare or through lean times. */
+  roots: number;
+  /** Growth set aside for seeds; a seed is released each time it reaches seedSize. */
+  seedBudget: number;
+  seedsReleased: number;
+  /** The last tick an organism ate or picked up a unit of it (-1 if never). */
+  lastGrazedTick: number;
+  /** In a lean season and mostly dormant (leanDormancy at least 0.5). */
+  dormant: boolean;
+}
+
+/** Plant population statistics (null in WorldMetrics when plants are off). */
+export interface PlantMetrics {
+  count: number;
+  /** Plants with less than one edible unit. */
+  seedlings: number;
+  dormant: number;
+  edibleBiomass: number;
+  roots: number;
+  traits: Record<PlantTrait, { mean: number; sd: number }>;
+  deaths: Record<PlantDeathCause, number>;
+  seedsReleasedTotal: number;
+  seedRainTotal: number;
+  /** Units of plant eaten or picked up by organisms. */
+  grazedTotal: number;
 }
 
 /** What a dead organism leaves behind: food only meat eaters get much from. Never regrows. */
@@ -406,6 +471,16 @@ export interface SimulationConfig {
   seasonLength: number; // Ticks per plenty + lean cycle (0 = no seasons)
   leanFraction: number; // Fraction of each cycle that is lean (at the end)
   leanSlowdown: number; // During lean, food regrows this many times slower and no patches spawn
+  plantsEnabled: boolean; // Food is a population of evolving plants instead of fixed patches
+  plantUpkeep: number; // Plant upkeep per tick per unit of size (biomass + roots)
+  growthCostFactor: number; // Upkeep per tick per unit of growthRate (times vigour), paid whatever the light
+  shadeStrength: number; // Growth falls by this times the share of the 8 neighbouring cells holding a plant
+  marginFertility: number; // Soil outside the fertile regions (inside = 1)
+  seedAllocation: number; // Share of growth a mature plant puts into seeds
+  plantMutationRate: number; // Probability each plant trait mutates in a seed
+  plantMutationStdDev: number; // Size of a plant trait mutation, as a fraction of the trait's range
+  seedRainInterval: number; // Every N ticks seeds with random genomes land (0 = off)
+  seedRainCount: number; // Seeds per seed rain
   seed: number | string;
 }
 
@@ -463,6 +538,8 @@ export interface WorldMetrics {
   meatEaters: number;
   /** Current season, or null when seasons are off. */
   season: 'plenty' | 'lean' | null;
+  /** Plant population, or null when plants are off. */
+  plants: PlantMetrics | null;
 }
 
 export interface WorldSnapshot {

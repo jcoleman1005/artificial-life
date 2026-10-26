@@ -1,5 +1,7 @@
 import { POLICY_WEIGHT_KEYS, type HistorySample, type PolicyWeightKey } from '../sim/history';
 import { WEIGHT_MAX, WEIGHT_MIN } from '../sim/policy';
+import { PLANT_TRAITS, PLANT_TRAIT_KEYS } from '../sim/plants';
+import type { PlantTrait } from '../sim/types';
 
 // Chart ink. The series blue is validated against the card surface
 // (#141d26) for lightness, chroma, and >= 3:1 contrast.
@@ -32,6 +34,18 @@ const WEIGHT_LABELS: Record<PolicyWeightKey, string> = {
   avoidOccupied: 'Avoid occupied cells',
   leapEagerness: 'Leap eagerness',
 };
+
+const PLANT_TRAIT_LABELS: Record<PlantTrait, string> = {
+  growthRate: 'Growth rate',
+  maxBiomass: 'Maximum size',
+  seedSize: 'Seed size',
+  seedThreshold: 'Seeding threshold',
+  dispersal: 'Seed dispersal',
+  rootShare: 'Root share',
+  leanDormancy: 'Lean dormancy',
+};
+
+const PLANT_SECTION = 'Plants (when Food = Plants)';
 
 /** Trend section for the dial weights, collapsed while the brain is in charge. */
 const DIAL_SECTION = 'Inherited weights (dials)';
@@ -75,6 +89,9 @@ function strangerKillShare(s: HistorySample, prev?: HistorySample): number {
   const kills = (s.killsTotal ?? 0) - (prev.killsTotal ?? 0);
   return kills > 0 ? ((s.killsOfStrangersTotal ?? 0) - (prev.killsOfStrangersTotal ?? 0)) / kills : 0;
 }
+const plantsGrazedOutPer100Ticks = ratePer100((s) => s.plants?.deathsGrazed ?? 0);
+const plantsLostLeanPer100Ticks = ratePer100((s) => s.plants?.deathsLean ?? 0);
+const plantsStarvedPer100Ticks = ratePer100((s) => (s.plants?.deathsShaded ?? 0) + (s.plants?.deathsStarved ?? 0));
 
 /** Share of signals sent while standing on food, between two samples. */
 function signalsOnFoodShare(s: HistorySample, prev?: HistorySample): number {
@@ -281,6 +298,53 @@ export class HistoryView {
         spread: (s) => s.hiddenStrength.sd,
         format: (s) => `${s.hiddenStrength.mean.toFixed(2)} ± ${s.hiddenStrength.sd.toFixed(2)}`,
       },
+      {
+        section: PLANT_SECTION,
+        label: 'Plants',
+        fixedRange: null,
+        value: (s) => s.plants?.count ?? 0,
+        format: (s) => (s.plants ? `${s.plants.count} · ${s.plants.dormant} dormant` : 'off'),
+      },
+      {
+        section: PLANT_SECTION,
+        label: 'Edible biomass (grey = roots)',
+        fixedRange: null,
+        value: (s) => s.plants?.edibleBiomass ?? 0,
+        reference: (s) => s.plants?.roots ?? 0,
+        format: (s) => (s.plants ? `${Math.round(s.plants.edibleBiomass)} · roots ${Math.round(s.plants.roots)}` : 'off'),
+      },
+      {
+        section: PLANT_SECTION,
+        label: 'Plants grazed out',
+        fixedRange: null,
+        value: plantsGrazedOutPer100Ticks,
+        format: (s, prev) => `${plantsGrazedOutPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      {
+        section: PLANT_SECTION,
+        label: 'Plants lost in lean seasons',
+        fixedRange: null,
+        value: plantsLostLeanPer100Ticks,
+        format: (s, prev) => `${plantsLostLeanPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      {
+        section: PLANT_SECTION,
+        label: 'Plants shaded out or starved',
+        fixedRange: null,
+        value: plantsStarvedPer100Ticks,
+        format: (s, prev) => `${plantsStarvedPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      ...PLANT_TRAIT_KEYS.map(
+        (key): Panel => ({
+          section: PLANT_SECTION,
+          label: PLANT_TRAIT_LABELS[key],
+          fixedRange: [PLANT_TRAITS[key].min, PLANT_TRAITS[key].max],
+          value: (s) => s.plants?.traits[key].mean ?? 0,
+          spread: (s) => s.plants?.traits[key].sd ?? 0,
+          format: (s) =>
+            s.plants ? `${s.plants.traits[key].mean.toFixed(2)} ± ${s.plants.traits[key].sd.toFixed(2)}` : 'off',
+        })
+      ),
       ...POLICY_WEIGHT_KEYS.map(
         (key): Panel => ({
           section: DIAL_SECTION,

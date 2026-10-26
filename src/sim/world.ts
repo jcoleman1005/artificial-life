@@ -48,6 +48,17 @@ import {
   newMemory,
   updateMemory,
 } from './memory';
+import {
+  SoilField,
+  computePlantMetrics,
+  createPlant,
+  founderGenome,
+  grazePlant,
+  newPlantCounters,
+  plantAt,
+  stepPlants,
+  type PlantCounters,
+} from './plants';
 
 /**
  * Everything needed to continue a world exactly where it was: settings,
@@ -69,6 +80,8 @@ export interface WorldState {
   readonly carrion?: readonly CarrionPatch[];
   readonly organisms: readonly Organism[];
   readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
+  /** Plant totals (absent in saves from before plants). */
+  readonly plantCounters?: PlantCounters;
 }
 
 const WORLD_COUNTERS = [
@@ -135,6 +148,10 @@ export class World {
   public carrionUnitsRotted = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
+  /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
+  public plantCounters: PlantCounters = newPlantCounters();
+  /** Soil fertility and season region per cell, built on first use (terrain and regions never change). */
+  private soilField: SoilField | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -172,6 +189,8 @@ export class World {
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
     this.lastKill = null;
+    this.plantCounters = newPlantCounters();
+    this.soilField = null;
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -235,27 +254,28 @@ export class World {
   }
 
   /**
-   * Places food regions as discs at random centres, kept apart where
-   * possible. Each gets an evenly spaced season phase, used when seasons are
-   * staggered. Draws nothing from the PRNG when regions are off.
+   * Places food regions as discs spread over the world: each centre is the
+   * one of 30 random candidates farthest from the regions already placed,
+   * and centres keep a radius (at most a quarter of the world) from the edge
+   * so no region is cut off. Each gets an evenly spaced season phase, used
+   * when seasons are staggered. Draws nothing from the PRNG when regions are off.
    */
   private createFoodRegions(): void {
     const { foodRegionCount: count, foodRegionRadius: radius, gridWidth, gridHeight } = this.config;
+    const marginX = Math.floor(Math.min(radius, gridWidth / 4));
+    const marginY = Math.floor(Math.min(radius, gridHeight / 4));
     for (let i = 0; i < count; i++) {
       let best: { x: number; y: number } | null = null;
       let bestGap = -Infinity;
-      // Up to 20 tries for a centre at least 1.5 radii from the others;
-      // otherwise the try farthest from its nearest neighbour.
-      for (let attempt = 0; attempt < 20; attempt++) {
-        const x = this.prng.nextInt(0, gridWidth - 1);
-        const y = this.prng.nextInt(0, gridHeight - 1);
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const x = this.prng.nextInt(marginX, gridWidth - 1 - marginX);
+        const y = this.prng.nextInt(marginY, gridHeight - 1 - marginY);
         let gap = Infinity;
         for (const r of this.foodRegions) gap = Math.min(gap, Math.hypot(r.x - x, r.y - y));
         if (gap > bestGap) {
           best = { x, y };
           bestGap = gap;
         }
-        if (gap >= radius * 1.5) break;
       }
       this.foodRegions.push({ ...best!, radius, seasonPhase: i / count });
     }
@@ -288,6 +308,12 @@ export class World {
     }
     const key = `${x},${y}`;
     if (this.obstacles.has(key) || this.foodPatches.has(key)) return false;
+    if (this.config.plantsEnabled) {
+      // A founder plant instead of a patch, starting with the patch's stock.
+      const plant = createPlant(this.plantCounters, founderGenome(this.prng), this.config.foodPatchInitialStock, this.tick, null);
+      plantAt(this.foodPatches, this.soil(), gridWidth, x, y, plant);
+      return true;
+    }
     this.foodPatches.set(key, {
       x,
       y,
@@ -296,6 +322,12 @@ export class World {
       ...(region === undefined ? {} : { region }),
     });
     return true;
+  }
+
+  /** Soil fertility and season regions, built once the terrain and regions exist. */
+  private soil(): SoilField {
+    this.soilField ??= new SoilField(this.config, this.foodRegions, this.obstacles);
+    return this.soilField;
   }
 
   /**
@@ -360,10 +392,11 @@ export class World {
       counters: Object.fromEntries(WORLD_COUNTERS.map((k) => [k, this[k]])) as Record<WorldCounter, number>,
       obstacles: Array.from(this.obstacles),
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
-      foodPatches: Array.from(this.foodPatches.values(), (p) => ({ ...p })),
+      foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
       organisms: Array.from(this.organisms.values(), (o) => clone({ ...o, recentHistory: o.recentHistory.slice(0, 1) })),
       history: this.history.exportState(),
+      plantCounters: { ...this.plantCounters },
     };
   }
 
@@ -383,7 +416,9 @@ export class World {
     world.foodRegions.length = 0;
     world.foodRegions.push(...state.foodRegions.map((r) => ({ ...r })));
     world.foodPatches.clear();
-    for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, { ...p });
+    for (const p of state.foodPatches) world.foodPatches.set(`${p.x},${p.y}`, clone(p));
+    world.plantCounters = { ...newPlantCounters(), ...state.plantCounters };
+    world.soilField = null;
     world.carrion.clear();
     for (const c of state.carrion ?? []) world.carrion.set(`${c.x},${c.y}`, { ...c });
     world.organisms.clear();
@@ -723,8 +758,10 @@ export class World {
               plantYield(organism, this.config)
             );
             organism.energy += energyGain;
-            if (fromPatch) patch.stock -= 1;
-            else organism.carriedFood -= 1;
+            if (fromPatch) {
+              patch.stock -= 1;
+              grazePlant(patch, this.tick, this.plantCounters);
+            } else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
             outcome = 'success';
@@ -897,6 +934,7 @@ export class World {
           const patch = this.foodPatches.get(`${organism.x},${organism.y}`);
           if (patch && patch.stock > 0 && organism.carriedFood < organism.carryCapacity) {
             patch.stock -= 1;
+            grazePlant(patch, this.tick, this.plantCounters);
             organism.carriedFood += 1;
             outcome = 'success';
           } else {
@@ -1177,9 +1215,24 @@ export class World {
       }
     }
 
-    // 1. Food patch stock regeneration (windfalls never regrow)
+    // 1a. Plants grow, seed and die in place of classic regrowth and spawning.
+    if (this.config.plantsEnabled) {
+      stepPlants({
+        config: this.config,
+        tick: this.tick,
+        prng: this.prng,
+        obstacles: this.obstacles,
+        patches: this.foodPatches,
+        field: this.soil(),
+        regionLean,
+        worldLean,
+        counters: this.plantCounters,
+      });
+    }
+
+    // 1b. Food patch stock regeneration (windfalls never regrow)
     // Lean regrowth ticks are a subset of plenty ones (a multiple of the interval).
-    if (this.tick > 0 && this.tick % foodRegenInterval === 0) {
+    if (!this.config.plantsEnabled && this.tick > 0 && this.tick % foodRegenInterval === 0) {
       const regrowsLean = this.tick % leanRegrowInterval === 0;
       for (const patch of this.foodPatches.values()) {
         if (patch.expiresAt !== undefined) continue;
@@ -1192,7 +1245,7 @@ export class World {
 
     // 2. Food patch spawning (only where it is not lean)
     const anyPlenty = this.foodRegions.length > 0 ? regionLean.includes(false) : !worldLean;
-    if (anyPlenty && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
+    if (!this.config.plantsEnabled && anyPlenty && this.tick > 0 && this.tick % foodSpawnInterval === 0) {
       let spawned = 0;
       let attempts = 0;
       while (
@@ -1286,6 +1339,7 @@ export class World {
         organisms.length > 0 ? Number((organisms.reduce((a, o) => a + o.carnivory, 0) / organisms.length).toFixed(3)) : 0,
       meatEaters: organisms.filter((o) => o.carnivory >= 0.5).length,
       season: this.worldSeason(),
+      plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
     };
   }
 

@@ -84,6 +84,16 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   seasonLength: 800,
   leanFraction: 0.4,
   leanSlowdown: 8,
+  plantsEnabled: true,
+  plantUpkeep: 0.01,
+  growthCostFactor: 0.1, // fast growth loses where light × soil × open space is below this
+  shadeStrength: 0.5,
+  marginFertility: 0.2,
+  seedAllocation: 0.5,
+  plantMutationRate: 0.2,
+  plantMutationStdDev: 0.08,
+  seedRainInterval: 50,
+  seedRainCount: 3,
   seed: 42,
 };
 

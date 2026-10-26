@@ -6,6 +6,7 @@ import { regionSeasonAt } from '../src/sim/seasons';
 /** A world with regions but no organisms, so only food changes. */
 function regionWorld(overrides = {}): World {
   return new World({
+    plantsEnabled: false,
     seed: 'regions',
     initialOrganisms: 0,
     immigrationInterval: 0,
@@ -27,6 +28,22 @@ describe('Food regions', () => {
     for (const patch of world.foodPatches.values()) {
       const region = world.foodRegions[patch.region!];
       expect(Math.hypot(patch.x - region.x, patch.y - region.y)).toBeLessThanOrEqual(region.radius);
+    }
+  });
+
+  it('spreads regions out and keeps them inside the world', () => {
+    for (const seed of [1, 2, 3, 42]) {
+      const world = new World({ seed, initialOrganisms: 0 });
+      const { gridWidth, gridHeight, foodRegionRadius: radius } = world.config;
+      for (const r of world.foodRegions) {
+        expect(r.x).toBeGreaterThanOrEqual(radius);
+        expect(r.y).toBeGreaterThanOrEqual(radius);
+        expect(r.x).toBeLessThanOrEqual(gridWidth - 1 - radius);
+        expect(r.y).toBeLessThanOrEqual(gridHeight - 1 - radius);
+        for (const other of world.foodRegions) {
+          if (other !== r) expect(Math.hypot(r.x - other.x, r.y - other.y)).toBeGreaterThan(radius * 2);
+        }
+      }
     }
   });
 

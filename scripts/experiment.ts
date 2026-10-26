@@ -30,6 +30,7 @@ import { POLICY_WEIGHT_KEYS, abilityShares } from '../src/sim/history';
 import { BRAIN_INPUTS, brainDrift, hiddenStrength } from '../src/sim/brain';
 import { unitDirectionOf } from '../src/sim/directions';
 import { seasonAt } from '../src/sim/seasons';
+import { PLANT_TRAIT_KEYS, computePlantMetrics } from '../src/sim/plants';
 import type { SimulationConfig } from '../src/sim/types';
 
 type ConfigValue = string | number | boolean;
@@ -99,6 +100,9 @@ function runJob(job: Job): RunResult {
   // Signals, over the last 20%: how often organisms on food signal compared
   // with how often anyone signals (does a signal say "food here"?), and
   // whether moves made with a signal in range head toward it.
+  // Plants (when on): standing crop over the run.
+  let plantSum = 0;
+  let edibleSum = 0;
   // Windfalls: how often organisms standing on windfall food signal.
   const sig = { sent: 0, sentOnFood: 0, decisions: 0, onFood: 0, onFoodSent: 0, onWindfall: 0, onWindfallSent: 0, movesWithSignal: 0, movesToward: 0 };
   const onWindfall = new Set<string>();
@@ -113,6 +117,13 @@ function runJob(job: Job): RunResult {
     world.step();
     const n = world.organisms.size;
     popSum += n;
+    if (world.config.plantsEnabled) {
+      for (const p of world.foodPatches.values()) {
+        if (!p.plant) continue;
+        plantSum++;
+        edibleSum += p.plant.biomass;
+      }
+    }
     if (world.foodRegions.length > 0) {
       for (const o of world.organisms.values()) {
         const region = world.foodRegions.findIndex((r) => Math.hypot(o.x - r.x, o.y - r.y) <= r.radius);
@@ -211,6 +222,7 @@ function runJob(job: Job): RunResult {
     ...Object.fromEntries(
       Object.entries(abilityShares([...world.organisms.values()])).map(([k, v]) => [`ability.${k}`, v])
     ),
+    ...(world.config.plantsEnabled ? plantResults(world, plantSum / job.ticks, edibleSum / job.ticks, job.ticks) : {}),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
     ...Object.fromEntries(
@@ -220,6 +232,25 @@ function runJob(job: Job): RunResult {
     ...Object.fromEntries(Object.entries(actions).map(([k, v]) => [`act.${k}%`, (100 * v) / actionTotal])),
   };
   return { seed: job.seed, variant: job.variant, metrics };
+}
+
+/** Plant measurements: standing crop, production, grazing, deaths by cause and final trait means. */
+function plantResults(world: World, avgPlants: number, avgEdible: number, ticks: number): Record<string, number> {
+  const c = world.plantCounters;
+  const p = computePlantMetrics(world.foodPatches, c);
+  return {
+    avgPlants,
+    avgEdible,
+    finalPlants: p.count,
+    edibleGrownPerTick: c.edibleGrownTotal / ticks,
+    grazedPerTick: c.grazedTotal / ticks,
+    seedRain: c.seedRainTotal,
+    'plantDeaths.grazed': c.deathsGrazed,
+    'plantDeaths.shaded': c.deathsShaded,
+    'plantDeaths.lean': c.deathsLean,
+    'plantDeaths.starved': c.deathsStarved,
+    ...Object.fromEntries(PLANT_TRAIT_KEYS.map((k) => [`plant.${k}`, p.traits[k].mean])),
+  };
 }
 
 const fmt = (v: number) => (Math.abs(v) >= 100 ? v.toFixed(0) : Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2));
