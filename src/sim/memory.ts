@@ -1,4 +1,5 @@
 import type { PRNG } from './prng';
+import { mutateWeight } from './brain';
 import type { SensedEntity, SensedInputs, SimulationConfig } from './types';
 
 /**
@@ -22,7 +23,6 @@ export const MEMORY_REGISTERS = 3;
 export const REGISTER_INPUTS = ['energy', 'carried', 'crowding', 'foodHere', 'foodSeen', 'signalHeard'] as const;
 const REGISTER_FAN_IN = REGISTER_INPUTS.length + MEMORY_REGISTERS + 1; // senses, registers, bias
 export const MEMORY_WEIGHT_COUNT = MEMORY_REGISTERS * REGISTER_FAN_IN;
-const WEIGHT_LIMIT = 40;
 
 export interface RememberedPlace {
   readonly x: number;
@@ -64,11 +64,7 @@ export function founderMemoryWeights(prng: PRNG): number[] {
 
 /** A child's register weights: each mutates with the brain's rate and size. */
 export function inheritMemoryWeights(parent: readonly number[], config: Readonly<SimulationConfig>, prng: PRNG): number[] {
-  return parent.map((w) => {
-    if (prng.next() >= config.brainMutationRate) return w;
-    const next = w + prng.nextGaussian(0, config.brainMutationStdDev);
-    return Number(Math.max(-WEIGHT_LIMIT, Math.min(WEIGHT_LIMIT, next)).toFixed(4));
-  });
+  return parent.map((w) => mutateWeight(w, config, prng));
 }
 
 function recallPlace(place: RememberedPlace | { x: number; y: number } | null, x: number, y: number, freshness: number): Recalled | null {

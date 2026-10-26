@@ -95,6 +95,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   plantMutationStdDev: 0.08,
   seedRainInterval: 50,
   seedRainCount: 3,
+  dnaEnabled: false, // Stage 1 is behaviour-neutral; on once the equivalence gate is signed off (docs/specs/dna.md)
   seed: 42,
 };
 

@@ -39,6 +39,7 @@ import {
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
+import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -78,11 +79,14 @@ export interface WorldState {
   readonly foodPatches: readonly FoodPatch[];
   /** Absent in saves from before carrion. */
   readonly carrion?: readonly CarrionPatch[];
-  readonly organisms: readonly Organism[];
+  readonly organisms: readonly SavedOrganism[];
   readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
   /** Plant totals (absent in saves from before plants). */
   readonly plantCounters?: PlantCounters;
 }
+
+/** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
+export type SavedOrganism = Omit<Organism, 'genome'> & { readonly genome?: readonly number[] };
 
 const WORLD_COUNTERS = [
   'birthsTotal',
@@ -345,21 +349,19 @@ export class World {
     const memorySpan = founderMemorySpan(this.config, this.prng);
     const memoryWeights = founderMemoryWeights(this.prng);
     const carnivory = founderCarnivory(this.prng);
+    const drawn: Phenotype = { tag, carryCapacity, brain, abilities, dispersal, memorySpan, memoryWeights, carnivory };
+    // With DNA, the founder is what its encoded genome decodes to.
+    const genome = this.config.dnaEnabled ? encodeOrganismDNA(drawn) : undefined;
+    const phenotype = genome ? decodeOrganismDNA(genome, this.config) : drawn;
     return {
       id: `org-${this.nextOrganismSeq}`,
       x,
       y,
       energy: this.config.initialEnergy,
       policy,
-      tag,
-      carryCapacity,
-      abilities,
-      dispersal,
-      memorySpan,
-      memoryWeights,
+      ...phenotype,
+      ...(genome ? { genome } : {}),
       memory: newMemory(x, y),
-      brain,
-      carnivory,
       kills: 0,
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
@@ -379,6 +381,30 @@ export class World {
   }
 
   /**
+   * A child's inherited body and brain: with DNA, decoded from the parent's
+   * genome after mutation (encoded first if the parent has none yet);
+   * otherwise each trait inherited directly. Both draw from the PRNG in the
+   * same order, so they give the same child.
+   */
+  private inheritBody(parent: Readonly<Organism>): Phenotype & { genome?: Uint32Array } {
+    const { config, prng } = this;
+    if (config.dnaEnabled) {
+      const genome = mutateGenome(parent.genome ?? encodeOrganismDNA(phenotypeOf(parent)), config, prng);
+      return { ...decodeOrganismDNA(genome, config), genome };
+    }
+    return {
+      tag: inheritTag(parent.tag, config, prng),
+      carryCapacity: inheritCarryCapacity(parent.carryCapacity, config, prng),
+      brain: mutateBrain(parent.brain, config, prng),
+      abilities: inheritAbilities(parent.abilities, config, prng),
+      dispersal: inheritDispersal(parent.dispersal, config, prng),
+      memorySpan: inheritMemorySpan(parent.memorySpan, config, prng),
+      memoryWeights: inheritMemoryWeights(parent.memoryWeights, config, prng),
+      carnivory: inheritCarnivory(parent.carnivory, config, prng),
+    };
+  }
+
+  /**
    * A copy of the full state (organisms keep only their latest decision,
    * which is all the simulation and the page use).
    */
@@ -394,7 +420,10 @@ export class World {
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
-      organisms: Array.from(this.organisms.values(), (o) => clone({ ...o, recentHistory: o.recentHistory.slice(0, 1) })),
+      organisms: Array.from(this.organisms.values(), (o) => {
+        const { genome, ...rest } = o;
+        return { ...clone({ ...rest, recentHistory: o.recentHistory.slice(0, 1) }), ...(genome ? { genome: Array.from(genome) } : {}) };
+      }),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
     };
@@ -422,9 +451,10 @@ export class World {
     world.carrion.clear();
     for (const c of state.carrion ?? []) world.carrion.set(`${c.x},${c.y}`, { ...c });
     world.organisms.clear();
-    for (const o of state.organisms) {
+    for (const { genome, ...o } of state.organisms) {
       world.organisms.set(o.id, {
         ...clone(o),
+        ...(genome ? { genome: upgradeGenome(genome) } : {}),
         brain: upgradeBrain(clone(o.brain)),
         carnivory: o.carnivory ?? 0,
         kills: o.kills ?? 0,
@@ -875,18 +905,7 @@ export class World {
                 this.config,
                 this.prng
               );
-              const childTag = inheritTag(organism.tag, this.config, this.prng);
-              const childCapacity = inheritCarryCapacity(
-                organism.carryCapacity,
-                this.config,
-                this.prng
-              );
-              const childBrain = mutateBrain(organism.brain, this.config, this.prng);
-              const childAbilities = inheritAbilities(organism.abilities, this.config, this.prng);
-              const childDispersal = inheritDispersal(organism.dispersal, this.config, this.prng);
-              const childMemorySpan = inheritMemorySpan(organism.memorySpan, this.config, this.prng);
-              const childMemoryWeights = inheritMemoryWeights(organism.memoryWeights, this.config, this.prng);
-              const childCarnivory = inheritCarnivory(organism.carnivory, this.config, this.prng);
+              const inherited = this.inheritBody(organism);
 
               const child: Organism = {
                 id: childId,
@@ -894,15 +913,8 @@ export class World {
                 y: birth.y,
                 energy: childEnergy,
                 policy: childPolicy,
-                tag: childTag,
-                carryCapacity: childCapacity,
-                abilities: childAbilities,
-                dispersal: childDispersal,
-                memorySpan: childMemorySpan,
-                memoryWeights: childMemoryWeights,
+                ...inherited,
                 memory: newMemory(birth.x, birth.y),
-                brain: childBrain,
-                carnivory: childCarnivory,
                 kills: 0,
                 lineage: {
                   id: organism.lineage.id,

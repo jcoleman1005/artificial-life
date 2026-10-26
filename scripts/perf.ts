@@ -1,9 +1,10 @@
-// Engine speed for both controllers, and the brain with plants, over 3000 ticks (includes a boom).  Usage: npm run perf
+// Engine speed for both controllers, the brain with plants and with DNA, over 3000 ticks (includes a boom).  Usage: npm run perf
 import { World } from '../src/sim/world';
 const variants = [
   ['dials', { controller: 'dials' }],
   ['brain', { controller: 'brain' }],
   ['brain + plants', { controller: 'brain', plantsEnabled: true }],
+  ['brain + DNA', { controller: 'brain', dnaEnabled: true }],
 ] as const;
 for (const [name, overrides] of variants) {
   const w = new World({ seed: 42, ...overrides });

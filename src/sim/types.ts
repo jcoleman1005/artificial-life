@@ -272,6 +272,12 @@ export interface Organism {
   kills: number;
   /** Inherited neural controller, used when config.controller is 'brain'. */
   readonly brain: Brain;
+  /**
+   * With dnaEnabled: the genome its body and brain were decoded from (see
+   * dna.ts); children inherit it with mutation. Absent otherwise, and in
+   * organisms from before it was switched on (encoded at their next birth).
+   */
+  readonly genome?: Uint32Array;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
   carriedFood: number;
   /** Cumulative food units given to and received from other organisms. */
@@ -482,6 +488,7 @@ export interface SimulationConfig {
   plantMutationStdDev: number; // Size of a plant trait mutation, as a fraction of the trait's range
   seedRainInterval: number; // Every N ticks seeds with random genomes land (0 = off)
   seedRainCount: number; // Seeds per seed rain
+  dnaEnabled: boolean; // Inherited traits and weights live in a genome the phenotype is decoded from (Stage 1: behaviour-neutral)
   seed: number | string;
 }
 
