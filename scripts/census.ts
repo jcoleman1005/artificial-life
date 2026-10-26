@@ -272,7 +272,7 @@ async function main() {
   }));
   console.log(`${mutations} mutations over ${seeds.length} evolved worlds (${ticks} ticks), ${arenas} arenas × ${window} ticks per test`);
   const started = Date.now();
-  const results = await Promise.all(
+  const settled = await Promise.allSettled(
     jobs.map(
       (job) =>
         new Promise<WorkerResult>((resolve, reject) => {
@@ -289,6 +289,7 @@ async function main() {
         })
     )
   );
+  const results = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : (console.log(`  skipped: ${String(r.reason)}`), [])));
   const records = results.flatMap((r) => r.records);
   const weights = Object.fromEntries(KINDS.map((k) => [k, results.reduce((a, r) => a + r.perBirth[k], 0) / results.length])) as Record<MutationKind, number>;
   const lines = [
