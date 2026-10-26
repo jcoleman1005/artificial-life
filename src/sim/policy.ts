@@ -143,7 +143,7 @@ export function getLegalActions(
     { type: 'MOVE_EAST', dx: 1, dy: 0 },
     { type: 'MOVE_WEST', dx: -1, dy: 0 },
   ];
-  if (config.diagonalMoves && organism.abilities.diagonal === 1) {
+  if (config.diagonalMoves && organism.abilities.diagonal > 0) {
     candidateMoves.push(
       { type: 'MOVE_NORTHEAST', dx: 1, dy: -1 },
       { type: 'MOVE_NORTHWEST', dx: -1, dy: -1 },
@@ -170,7 +170,7 @@ export function getLegalActions(
         ? 'child'
         : occupant && organism.lineage.parentId === occupant.id
           ? 'parent'
-          : occupant && config.squeezeEnabled && organism.abilities.squeeze === 1
+          : occupant && config.squeezeEnabled && organism.abilities.squeeze > 0
             ? 'squeeze'
             : undefined;
 
@@ -185,7 +185,7 @@ export function getLegalActions(
 
   // 1b. Leaps: an organism with the leap ability can jump over an adjacent
   // organism (orthogonally) into the free cell beyond it.
-  if (config.leapEnabled && organism.abilities.leap === 1) {
+  if (config.leapEnabled && organism.abilities.leap > 0) {
     const candidateLeaps: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'LEAP_NORTH', dx: 0, dy: -1 },
       { type: 'LEAP_SOUTH', dx: 0, dy: 1 },

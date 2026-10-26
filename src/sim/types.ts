@@ -268,10 +268,23 @@ export interface Organism {
    * 0 is a pure plant eater.
    */
   readonly carnivory: number;
+  /**
+   * With split diets (dnaEnabled + dnaSplitDiets): plant-eating efficiency,
+   * 0..1. Plant food yields foodEnergyYield × herbivory, carnivory becomes the
+   * independent meat-eating efficiency, and both cost dietUpkeep per tick.
+   * Absent otherwise.
+   */
+  readonly herbivory?: number;
   /** Organisms this one has killed. */
   kills: number;
   /** Inherited neural controller, used when config.controller is 'brain'. */
   readonly brain: Brain;
+  /**
+   * With dnaEnabled: the genome its body and brain were decoded from (see
+   * dna.ts); children inherit it with mutation. Absent otherwise, and in
+   * organisms from before it was switched on (encoded at their next birth).
+   */
+  readonly genome?: Uint32Array;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
   carriedFood: number;
   /** Cumulative food units given to and received from other organisms. */
@@ -283,7 +296,9 @@ export interface Organism {
 }
 
 /**
- * Inherited movement abilities, each 1 (has it) or 0. They only work in
+ * Inherited movement abilities, each 1 (has it) or 0; with continuous
+ * abilities (dnaEnabled + dnaContinuousAbilities) an efficiency in [0, 1],
+ * held when above 0, that lowers the move's cost and scales its upkeep. They only work in
  * worlds where the matching config switch is on, and each one held there
  * costs abilityUpkeep energy per tick.
  */
@@ -482,6 +497,11 @@ export interface SimulationConfig {
   plantMutationStdDev: number; // Size of a plant trait mutation, as a fraction of the trait's range
   seedRainInterval: number; // Every N ticks seeds with random genomes land (0 = off)
   seedRainCount: number; // Seeds per seed rain
+  dnaEnabled: boolean; // Inherited traits and weights live in a genome the phenotype is decoded from (Stage 1: behaviour-neutral)
+  dnaContinuousAbilities: boolean; // With DNA: abilities are efficiencies in [0, 1] (cost and upkeep scale with them) instead of 0/1
+  abilityMutationStdDev: number; // Continuous abilities: how far an efficiency drifts when it mutates (with traitMutationRate)
+  dnaSplitDiets: boolean; // With DNA: independent plant (herbivory) and meat (carnivory) efficiencies, each costing dietUpkeep, instead of the dietTradeoff
+  dietUpkeep: number; // Split diets: energy per tick per unit of herbivory + carnivory
   seed: number | string;
 }
 

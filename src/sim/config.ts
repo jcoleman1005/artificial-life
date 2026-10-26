@@ -95,6 +95,11 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   plantMutationStdDev: 0.08,
   seedRainInterval: 50,
   seedRainCount: 3,
+  dnaEnabled: true, // Stage 1 is bit-identical to DNA off (docs/specs/dna.md)
+  dnaContinuousAbilities: false, // Stage 1b.1 (needs dnaEnabled)
+  abilityMutationStdDev: 0.1,
+  dnaSplitDiets: false, // Stage 1b.2 (needs dnaEnabled)
+  dietUpkeep: 0.05, // a founder plant eater (herbivory 1) pays a fifth of base metabolism
   seed: 42,
 };
 

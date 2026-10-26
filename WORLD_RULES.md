@@ -3,7 +3,7 @@
 Each prompt says "Follow WORLD_RULES.md" instead of repeating this.
 
 ## Process
-1. One change per session, committed in order to `claude/new-session-9qwa4f` with a `world:` commit prefix. Use per-change branches only if push access to them is added. There is no DNA build here; if DNA work lands on another branch, world changes will need rebasing onto it.
+1. One change per session, committed in order to `claude/new-session-9qwa4f` with a `world:` commit prefix. Use per-change branches only if push access to them is added. DNA Stage 1 is on `main` (`dnaEnabled`, on by default; `docs/specs/dna.md`). Build world changes on top of it, and merge `main` in again if more DNA work lands there.
 2. Read `AGENTS.md` and `docs/STATUS.md` instead of re-exploring the repo; read a feature's entry in `docs/decisions.md` before changing it.
 3. First reply: a short plan only (files touched, new state, risks, anything ambiguous). Then implement.
 4. When done: run `npm run verify`, run the experiment, record the findings in `docs/findings.md`, commit, and **stop for review**. Keep chat output short; never print long logs, only summary tables.
@@ -19,7 +19,7 @@ Each prompt says "Follow WORLD_RULES.md" instead of repeating this.
 - **UI:** if the change adds a spatial field, add an overlay layer for it that reads on a ~390px phone screen. Any visual effect is render-only and must not touch sim state.
 
 ## Experiments
-- Use `npm run experiment` (headless, paired by seed): **8 seeds x 10k ticks** (`--seeds 1-8 --ticks 10000`, the defaults) unless the prompt says otherwise, against the current build.
+- Use `npm run experiment` (headless, paired by seed): **8 seeds x 10k ticks** (`--seeds 1-8 --ticks 10000`, the defaults) unless the prompt says otherwise, against the current build: `dnaEnabled` at its default and the Stage 1b DNA toggles (`dnaContinuousAbilities`, `dnaSplitDiets`) off, so the change's own effect is isolated.
 - The main comparison is the feature's switch on vs off (`--compare <feature>Enabled=false,true`). Every prompt also lists a **matched control arm** that removes the mechanism but keeps something else equal (total food lost, total area, etc.). That arm matters most, since it separates the mechanism from a plain change in food or mortality.
 - Output: the `.txt` summary (and `--json` if needed) in `docs/experiments/`, with the exact command and git commit.
 - `docs/findings.md`: arm table, two sentences on what it shows, deviations. Report null results plainly.

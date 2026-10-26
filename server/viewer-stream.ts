@@ -83,9 +83,13 @@ function merge(older: Frame, newer: Frame): Frame {
   };
 }
 
-/** JSON for the wire: typed arrays (heatmaps) become plain arrays, rounded to keep them small. */
+/** JSON for the wire: typed arrays (heatmaps, genomes) become plain arrays; heatmaps are rounded to keep them small. */
 export function encodeMessage(message: FromWorker): string {
   return JSON.stringify(message, (_key, value: unknown) =>
-    value instanceof Float32Array ? Array.from(value, (v) => Math.round(v * 1000) / 1000) : value
+    value instanceof Float32Array
+      ? Array.from(value, (v) => Math.round(v * 1000) / 1000)
+      : value instanceof Uint32Array
+        ? Array.from(value)
+        : value
   );
 }

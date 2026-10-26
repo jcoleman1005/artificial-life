@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-25._
+_Last updated: 2026-10-26._
 
 ## Branches
 
@@ -28,6 +28,10 @@ _Last updated: 2026-10-25._
 ## What exists (summary)
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce asexually and, with the brain, hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
+
+## In progress: DNA (2026-10-26)
+
+Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
 
 ## Latest findings (details and all other results in `docs/findings.md`)
 
@@ -88,6 +92,7 @@ There is no target outcome: new features go in on by default and the world is le
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
-- Fingerprint at defaults (2026-10-26; record a new one at each world-change merge). All four runs end with population 0 by tick 1500, so later samples hash only food patches, which weakens the check:
+- Fingerprint at defaults (2026-10-26, unchanged by the DNA Stage 1 merge; record a new one at each world-change merge). All four runs end with population 0 by tick 1500, so later samples hash only food patches, which weakens the check:
   `small dials 2081c1db3e0536b2 · small brain dfe499a71afc9889 · large dials a59c5b7e5449b22d · large brain fa175790079db78b`
+- `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Shorten those tests or run them in their own pool if it becomes a nuisance.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

@@ -151,13 +151,16 @@ export function upgradeBrain(brain: Brain): Brain {
   return { ...brain, skip: [...brain.skip, ...HEAD_START_SKIP.slice(old)], hidden };
 }
 
+/** One inherited weight (brain or memory register): mutates with probability brainMutationRate. */
+export function mutateWeight(w: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
+  if (prng.next() >= config.brainMutationRate) return w;
+  const next = w + prng.nextGaussian(0, config.brainMutationStdDev);
+  return Number(Math.max(-WEIGHT_LIMIT, Math.min(WEIGHT_LIMIT, next)).toFixed(4));
+}
+
 /** A child's brain: each weight mutates with probability brainMutationRate. */
 export function mutateBrain(parent: Brain, config: Readonly<SimulationConfig>, prng: PRNG): Brain {
-  const mutate = (w: number): number => {
-    if (prng.next() >= config.brainMutationRate) return w;
-    const next = w + prng.nextGaussian(0, config.brainMutationStdDev);
-    return Number(Math.max(-WEIGHT_LIMIT, Math.min(WEIGHT_LIMIT, next)).toFixed(4));
-  };
+  const mutate = (w: number): number => mutateWeight(w, config, prng);
   return {
     skip: parent.skip.map(mutate),
     hidden: parent.hidden.map(mutate),
