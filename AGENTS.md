@@ -53,6 +53,8 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - DNA Stage 2 (`dnaVariationEnabled`, off until its gate is finished): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.
 - Snapshots: `exportState()` / `fromState()` restore bit-identically; `SavedWorld` format; browser auto-save, branch points, files.
 - Experiments can start from a saved world (`--from saved.json`).
+- Gene registry (`src/sim/genes.ts`): table-driven plant-trait genes (ranges, founders, mutation, clamping, budgets, locking); organism genomes live in `dna.ts`.
+- `World.stateHash()`: hash of the snapshot minus trend history; equal hashes continue identically.
 - Always-on server (`server/`): one shared `SimulationHost`, SSE out, POST in, saves to `data/world.json`; not safe public unless `--watch-only`.
 
 ## Working notes

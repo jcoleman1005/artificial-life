@@ -27,7 +27,7 @@ _Last updated: 2026-10-26._
 
 ## What exists (summary)
 
-A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce asexually and, with the brain, hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
+A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce asexually and, with the brain, hunt. Plant traits use a table-driven gene registry (`src/sim/genes.ts`), and `World.stateHash()` hashes everything that decides a world's future (both 2026-10-26). The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
 
 ## Life-history genes (built and merged 2026-10-26)
 
@@ -79,7 +79,12 @@ There is no target outcome: new features go in on by default and the world is le
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
 **Phase 3: big coevolution (long runs; needs the server)**
-10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). Next: plant events in the feed, then Phase 2 (defence with an organism sense for plant colour, seed bank, seeds carried by organisms).
+10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). **Plan agreed 2026-10-26** (from the user's second plants spec; reshape the existing plants rather than rewrite them, keep whole food units, keep plants on by default):
+    1. ~~`stateHash` and a small gene registry.~~ Done 2026-10-26 (`src/sim/genes.ts` for plant traits, separate from the organism DNA in `src/sim/dna.ts`; fingerprint unchanged).
+    2. Stage 1 additions: shared gene budget, grazing that can kill with a `regrowth` gene, maximum age, locked-genes mode, per-region gene means and a plant diversity index; recalibrate against classic food.
+    3. Stage 2: plant `defense`, organism `detox` (inherited, with upkeep), a last-bite-yield sense, then the coevolution probe (one tick's plants in another tick's world).
+    4. Stage 3: plant `hue` and an organism `plantHue` sense (a possible route to colour groups splitting).
+    Also still open: plant events in the feed; seed bank and seeds carried by organisms.
 11. Growth and size, then bite.
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
