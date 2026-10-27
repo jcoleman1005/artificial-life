@@ -56,7 +56,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` off.
 - DNA mating: genomes cross by key (each key's copies from one parent; a hidden unit travels whole), then the clone mutation path, capped at `dnaMaxGenes`; dials mix per dial (2026-10-26).
 - DNA Stage 2 (`dnaVariationEnabled`, off until its gate is finished): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.
-- DNA Stage 3 (`dnaGrowableBrain`, off until its gate is reviewed): genome compiled to a sparse brain circuit, up to `dnaMaxInternal` hidden units, modulo-mapped keys, pruning, `dnaUpkeepPerConnection` (2026-10-27).
+- DNA Stage 3 (`dnaGrowableBrain`, off until its gate is reviewed): genome compiled to a sparse brain circuit, up to `dnaMaxInternal` hidden units, flipped keys land only on new units (else silent), pruning, `dnaUpkeepPerConnection` (2026-10-27).
 - Snapshots: `exportState()` / `fromState()` restore bit-identically; `SavedWorld` format; browser auto-save, branch points, files.
 - Experiments can start from a saved world (`--from saved.json`).
 - Gene registry (`src/sim/genes.ts`): table-driven plant-trait genes (ranges, founders, mutation, clamping, budgets, locking); organism genomes live in `dna.ts`.
