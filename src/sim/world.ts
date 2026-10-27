@@ -56,11 +56,9 @@ import {
   founderLife,
   inheritLife,
   investmentOf,
-  isTorpid,
   lifeForConfig,
   lifeMatchesConfig,
   torporUpkeepFactor,
-  torporWakeRadius,
   LIFE_GENES,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
@@ -575,7 +573,7 @@ export class World {
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
-      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, child: World.saveOrganism(e.child) })),
+      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child: World.saveOrganism(e.child) })),
       organisms: Array.from(this.organisms.values(), (o) => World.saveOrganism(o)),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
@@ -627,7 +625,7 @@ export class World {
     world.eggs.clear();
     for (const e of state.eggs ?? []) {
       const child = World.restoreOrganism(e.child, world.config);
-      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, child });
+      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child });
     }
     world.history.importState(state.history);
     world.selectedOrganismId = null;
@@ -732,10 +730,6 @@ export class World {
       /** A move that trades places with this child or parent instead. */
       swapWithId?: string;
       reproTargetKey?: string;
-      /** In torpor this tick: no decision is made, and upkeep is reduced. */
-      torpid?: boolean;
-      /** Torpor ends this tick (food near, or the timer ran out): it acts normally and pays the wake cost. */
-      waking?: boolean;
       approved: boolean;
       outcome: DecisionOutcome;
     }
@@ -744,27 +738,9 @@ export class World {
 
     for (const org of sortedLiving) {
       const sensed = senseEnvironment(org, snapshot, this.config);
-      // Torpor: a torpid organism makes no decision until food is near (closer
-      // the deeper it sleeps) or its timer runs out.
-      let torpid = false;
-      let waking = false;
-      if (this.config.torporEnabled && isTorpid(org)) {
-        const radius = torporWakeRadius(org, this.config);
-        const foodNear =
-          sensed.currentCellFood > 0 || (sensed.nearestFood !== null && sensed.nearestFood.distance <= radius);
-        waking = foodNear || (org.torpor ?? 0) <= 1;
-        torpid = !waking;
-      }
-      let chosenAction: LegalAction;
-      let scores: ActionScore[];
-      if (torpid) {
-        chosenAction = { type: 'REST', target: { x: org.x, y: org.y } };
-        scores = [];
-      } else {
-        const legalActions = getLegalActions(org, snapshot, this.config, sensed);
-        const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
-        ({ chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng));
-      }
+      const legalActions = getLegalActions(org, snapshot, this.config, sensed);
+      const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
+      const { chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng);
 
       let moveTargetKey: string | undefined;
       let swapWithId: string | undefined;
@@ -792,8 +768,6 @@ export class World {
         moveTargetKey,
         swapWithId,
         reproTargetKey,
-        ...(torpid ? { torpid } : {}),
-        ...(waking ? { waking } : {}),
         approved: true,
         outcome: 'success',
       });
@@ -964,16 +938,15 @@ export class World {
       let outcome = item.outcome;
       // Base metabolism, plus the upkeep of carry capacity
       let metabolism = metabolismCost(organism, this.config);
-      if (item.torpid) metabolism *= torporUpkeepFactor(organism, this.config);
+      // Resting saves upkeep in proportion to torpor depth.
+      if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);
       let energyDelta = -metabolism;
       organism.energy -= metabolism;
-      if (item.waking) {
-        // Coming out of torpor costs energy, more the deeper it was.
+      if (this.config.torporEnabled && organism.rested && chosenAction.type !== 'REST') {
+        // Acting right after a rest costs energy to wake, more the deeper the rest.
         const wakeCost = this.config.torporWakeCost * (organism.torporDepth ?? 0);
         organism.energy -= wakeCost;
         energyDelta -= wakeCost;
-        organism.torpor = 0;
-        organism.restStreak = 0;
       }
 
       switch (chosenAction.type) {
@@ -1100,17 +1073,17 @@ export class World {
         case 'REPRODUCE_WEST': {
           if (approved && chosenAction.target) {
             const childEnergy = Math.floor(organism.energy * investmentOf(organism, this.config));
-            const totalReproCost = childEnergy + this.config.reproductionMetabolismTax;
-            // An egg costs extra to lay. The roll is drawn whenever the parent can lay eggs at all.
-            const lays = this.config.eggsEnabled && (organism.eggRate ?? 0) > 0 && this.prng.next() < (organism.eggRate ?? 0);
-            const eggCost = lays ? this.config.eggExtraCost : 0;
+            const eggAlloc = this.config.eggsEnabled ? (organism.eggAllocation ?? organism.eggRate ?? 0) : 0;
+            const lays = eggAlloc > 0;
+            const eggCost = lays ? Math.round(this.config.eggExtraCost * eggAlloc) : 0;
+            const totalReproCost = childEnergy + this.config.reproductionMetabolismTax + eggCost;
 
-            if (organism.energy > totalReproCost + eggCost && childEnergy > 0) {
+            if (organism.energy > totalReproCost && childEnergy > 0) {
               // Where the child lands: next to the parent, or (with
               // dispersal) any free cell up to the parent's dispersal
               // distance it can afford, picked at random.
-              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost - eggCost, birthBlocked);
-              const birthCost = totalReproCost + birth.extraCost + eggCost;
+              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost, birthBlocked);
+              const birthCost = totalReproCost + birth.extraCost;
               organism.energy -= birthCost;
               organism.offspringCount++;
               energyDelta -= birthCost;
@@ -1122,7 +1095,7 @@ export class World {
               if (this.config.metabolismGeneEnabled) organism.nextBirthTick = this.tick + birthCooldownOf(organism, this.config);
               if (lays) {
                 // Counted as a birth when it hatches.
-                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, child });
+                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, shell: eggCost, child });
                 this.eggsLaidTotal++;
               } else {
                 newBorns.push(child);
@@ -1184,20 +1157,7 @@ export class World {
         }
       }
 
-      if (this.config.torporEnabled) {
-        if (item.torpid) {
-          organism.torpor = (organism.torpor ?? 0) - 1;
-        } else if (chosenAction.type === 'REST' && (organism.torporDepth ?? 0) > 0) {
-          // Resting long enough sets torpor in.
-          organism.restStreak = (organism.restStreak ?? 0) + 1;
-          if (organism.restStreak >= this.config.torporEntryTicks) {
-            organism.torpor = this.config.torporTimer;
-            organism.restStreak = 0;
-          }
-        } else {
-          organism.restStreak = 0;
-        }
-      }
+      if (this.config.torporEnabled) organism.rested = chosenAction.type === 'REST';
 
       // Fat is drawn on when energy runs low.
       if (this.config.fatEnabled && (organism.fat ?? 0) > 0) {
@@ -1438,15 +1398,33 @@ export class World {
     if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
     this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
 
-    const clutch = clutchSizeOf(carrier, config);
-    const perChild = pool / clutch;
+    const f = clutchSizeOf(carrier, config);
+    const N = Math.floor(f);
+    const remainder = f - N;
+    const targetCount = N + (remainder > 0 && this.prng.next() < remainder ? 1 : 0);
+
+    const maxViable = Math.floor(pool / config.minViableChildEnergy);
+    const viableCount = Math.min(targetCount, maxViable);
+
     let born = 0;
-    if (perChild < config.minViableChildEnergy) {
+    if (viableCount === 0) {
       this.clutchesFailedTotal++;
+      this.matingChildrenLostTotal += targetCount;
+      this.matingEnergyLostTotal += pool;
     } else {
-      for (let k = 0; k < clutch; k++) {
+      const perChild = viableCount === targetCount ? pool / targetCount : config.minViableChildEnergy;
+      const poolAllocated = perChild * viableCount;
+      const heatSurplus = pool - poolAllocated;
+      this.matingEnergyLostTotal += heatSurplus;
+
+      for (let k = 0; k < viableCount; k++) {
         if (k > 0) cells = free(carrier);
-        if (cells.length === 0) break; // no room for the rest
+        if (cells.length === 0) {
+          const unplaced = viableCount - born;
+          this.matingChildrenLostTotal += unplaced;
+          this.matingEnergyLostTotal += perChild * unplaced;
+          break; // no room for the rest
+        }
         const target = this.prng.choice(cells);
         const birth = this.birthCell(carrier, target, carrier.energy, blocked);
         carrier.energy -= birth.extraCost;
@@ -1456,11 +1434,10 @@ export class World {
         newBorns.push(this.makeChild(carrier, other, birth, perChild));
         born++;
       }
+      this.matingChildrenLostTotal += (targetCount - viableCount);
     }
     this.birthsTotal += born;
     this.matingChildrenTotal += born;
-    this.matingChildrenLostTotal += clutch - born;
-    this.matingEnergyLostTotal += pool - perChild * born;
 
     for (const parent of [carrier, other]) {
       parent.offspringCount += born;
@@ -1485,9 +1462,9 @@ export class World {
   }
 
   /**
-   * Eggs decay with a small chance each tick (drawn for every egg), and hatch
-   * when food is within eggHatchRadius and the cell is free. A hatchling
-   * starts with eggHatchEfficiency of the egg's energy.
+   * Eggs decay when their protective shell is depleted, and hatch when plenty
+   * conditions and food patch stock are near. A hatchling starts with
+   * eggHatchEfficiency of the egg's energy.
    */
   private stepEggs(): void {
     if (this.eggs.size === 0) return;
@@ -1495,10 +1472,15 @@ export class World {
     let occupied: Set<string> | null = null;
     for (const [id, egg] of Array.from(this.eggs)) {
       if (this.prng.next() < eggDecayChance) {
-        this.eggs.delete(id);
-        this.eggsDecayedTotal++;
-        continue;
+        if (egg.shell > 0) {
+          egg.shell -= 1;
+        } else {
+          this.eggs.delete(id);
+          this.eggsDecayedTotal++;
+          continue;
+        }
       }
+      if (this.isCellLean(egg.x, egg.y)) continue;
       if (!this.foodWithin(egg.x, egg.y, eggHatchRadius)) continue;
       if (occupied === null) {
         occupied = new Set();
@@ -1518,6 +1500,18 @@ export class World {
         memory: newMemory(egg.x, egg.y),
       });
     }
+  }
+
+  /** Whether the cell at (x, y) is currently in a lean season. */
+  private isCellLean(x: number, y: number): boolean {
+    if (this.config.seasonLength <= 0) return false;
+    if (this.foodRegions.length === 0 || !this.config.staggeredSeasons) {
+      return seasonAt(this.tick, this.config)?.season === 'lean';
+    }
+    const idx = y * this.config.gridWidth + x;
+    const regIdx = this.soil().region[idx];
+    const r = regIdx >= 0 ? this.foodRegions[regIdx] : undefined;
+    return regionSeasonAt(this.tick, r, this.config)?.season === 'lean';
   }
 
   /** Whether any food patch with stock lies within `radius` cells (square) of a cell. */
@@ -1818,11 +1812,12 @@ export class World {
       investment: mean(c.investmentGeneEnabled, (o) => o.investment ?? c.reproductionEnergyFraction),
       fatCapacity: mean(c.fatEnabled, (o) => o.fatCapacity ?? 0),
       torporDepth: mean(c.torporEnabled, (o) => o.torporDepth ?? 0),
-      eggRate: mean(c.eggsEnabled, (o) => o.eggRate ?? 0),
+      eggAllocation: mean(c.eggsEnabled, (o) => o.eggAllocation ?? o.eggRate ?? 0),
+      eggRate: mean(c.eggsEnabled, (o) => o.eggAllocation ?? o.eggRate ?? 0),
       metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
       clutchSize: mean(c.clutchGeneEnabled, (o) => o.clutchSize ?? 1),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
-      torpid: c.torporEnabled ? organisms.filter(isTorpid).length : null,
+      resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,
       eggsLaidTotal: this.eggsLaidTotal,
       eggsHatchedTotal: this.eggsHatchedTotal,

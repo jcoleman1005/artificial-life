@@ -11,3 +11,4 @@ coverage/
 *.tsbuildinfo
 dist-server/
 data/
+.worktrees/

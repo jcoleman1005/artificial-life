@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27 (DNA Stage 3: growable brain)._
+_Last updated: 2026-10-27 (DNA Stage 3: growable brain; torpor reworked into rest efficiency)._
 
 ## Branches
 
@@ -39,7 +39,7 @@ Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled
 
 **Mating with genomes (2026-10-26):** a child of mating gets its genome by crossing its parents' genomes by key (each key's copies, or a whole hidden brain unit, from one parent), then the clone's mutation path, capped at `dnaMaxGenes` (`docs/specs/dna.md`, Sexual reproduction). Not yet measured: the branch's mating experiment ran before DNA.
 
-**Mating rule and clutch gene (2026-10-27):** a mating needs both parents at their own threshold; each pays own energy × own investment plus the tax; the carrier's clutch gene (trait 46, `clutchGeneEnabled`, on, founders 1, 1–6) sets how many children share the two shares; below `minViableChildEnergy` (10) per child the clutch fails and the energy is lost (Stats → Matings counts failed clutches and lost children). Matings lay no eggs. Unmeasured: the mating experiment (`docs/experiments/sex.txt`) predates DNA, the life-history genes and this rule.
+**Mating rule and clutch gene (2026-10-27; refactored to continuous fecundity and sequential allocation):** a mating needs both parents at their own threshold; each pays own energy × own investment plus the tax; the carrier's clutch gene (trait 46, `clutchGeneEnabled`, on, founders 1, 1–6, step 0.2) sets the continuous resource partition slider $f \in [1.0, 6.0]$ ($\lfloor f \rfloor$ full children plus remainder probability of a marginal child). Viable count is calculated sequentially: $\min(N_{\text{target}}, \lfloor \text{pool} / \text{minViableChildEnergy} \rfloor)$. If all target children are viable, each gets $\text{pool} / N_{\text{target}}$; if only partial children are viable, each gets $\text{minViableChildEnergy}$ and sub-viable remainder is dissipated as metabolic heat (`matingEnergyLostTotal`), eliminating the catastrophic cliff. Matings lay no eggs.
 
 **Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. (Seeds 1 and 8 are left out because they go extinct early; see below.)
 
@@ -116,6 +116,7 @@ There is no target outcome: new features go in on by default and the world is le
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
+- Torpor rework (2026-10-27, branch `claude/gifted-einstein-g1s4q4`): no coma; REST discounts upkeep by depth, acting after a REST pays the wake fee. Default fingerprint is now `large dials 4bea032e1d870c9e · large brain 0f412f7bb4910340` (pop 738 / 508, births 4513 / 5569); the values below predate it (torpor switch off still matches them). Rerun the torpor gate (`--compare torporEnabled=false,true`) before trusting the old result.
 - Fingerprint (2026-10-27, mating with the clutch rule merged onto main 22568b4; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500. Default (life-history genes, clutch gene and mating on; identical with `dnaEnabled=false`):
   `large dials 3fa33dea90586dc6 · large brain 9936b113220393eb` (pop 520 / 490, births 2614 / 3358)
   - `--set clutchGeneEnabled=false`: `large dials a675c39e63a44fae · large brain 0e608eeb54d8c786`. The dials never mate, so the clutch gene's only effect on them is its mutation roll at every birth: without it they match main plus the five brain inputs (below). The brain differs because matings still happen under the new rule.

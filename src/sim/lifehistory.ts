@@ -10,7 +10,7 @@ import type { Organism, SimulationConfig } from './types';
  * - threshold:  a low threshold gives more, poorer children (a flat tax each).
  * - investment: a rich child leaves the parent poorer.
  * - fat:        upkeep per unit of capacity, and a share of stored food is lost.
- * - torpor:     deeper saves more upkeep but wakes more slowly and costs energy to wake.
+ * - torpor:     deeper rests save more upkeep but cost energy to act on the tick after a rest.
  * - eggs:       extra energy to lay, a decay chance, and a hatchling smaller than the egg.
  * - metabolism: a fast rate pays more upkeep and breeds sooner; a slow one pays less and waits longer.
  * - clutch:     children per mating (matings only); the pair's energy is split among them, and a
@@ -20,7 +20,7 @@ import type { Organism, SimulationConfig } from './types';
  * fixed value applies, so the world is bit-identical to one without the gene.
  */
 
-export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggRate' | 'metabolicRate' | 'clutchSize';
+export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggAllocation' | 'metabolicRate' | 'clutchSize';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -72,7 +72,7 @@ export const LIFE_GENES: readonly LifeGene[] = [
     max: () => 1,
   },
   {
-    field: 'eggRate',
+    field: 'eggAllocation',
     traitId: 44,
     enabled: (c) => c.eggsEnabled,
     founder: (c) => c.eggFounder,
@@ -167,9 +167,9 @@ export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold'>>, c: Re
 export const investmentOf = (o: Readonly<Pick<Organism, 'investment'>>, c: Readonly<SimulationConfig>): number =>
   o.investment ?? c.reproductionEnergyFraction;
 
-/** Children per mating: the clutch gene rounded, at least 1; 1 without the gene. */
+/** Children per mating: continuous fecundity partition, at least clutchMin (1); 1 without the gene. */
 export const clutchSizeOf = (o: Readonly<Pick<Organism, 'clutchSize'>>, c: Readonly<SimulationConfig>): number =>
-  c.clutchGeneEnabled ? Math.max(1, Math.round(o.clutchSize ?? 1)) : 1;
+  c.clutchGeneEnabled ? Math.max(c.clutchMin, o.clutchSize ?? 1) : 1;
 
 export const metabolicRateOf = (o: Readonly<Pick<Organism, 'metabolicRate'>>, c: Readonly<SimulationConfig>): number =>
   c.metabolismGeneEnabled ? (o.metabolicRate ?? 1) : 1;
@@ -182,12 +182,6 @@ export function birthCooldownOf(o: Readonly<Pick<Organism, 'metabolicRate'>>, c:
 export const fatRoom = (o: Readonly<Pick<Organism, 'fatCapacity' | 'fat'>>, c: Readonly<SimulationConfig>): number =>
   c.fatEnabled ? Math.max(0, (o.fatCapacity ?? 0) - (o.fat ?? 0)) : 0;
 
-/** Upkeep multiplier while torpid: 1 awake, falling to 1 − torporSaving at full depth. */
+/** Upkeep multiplier on a tick spent resting: 1 awake, falling to 1 − torporSaving at full depth. */
 export const torporUpkeepFactor = (o: Readonly<Pick<Organism, 'torporDepth'>>, c: Readonly<SimulationConfig>): number =>
   1 - c.torporSaving * (o.torporDepth ?? 0);
-
-/** How far (Manhattan) food can be and still wake a torpid organism: deeper means deafer, 0 is only the cell underfoot. */
-export const torporWakeRadius = (o: Readonly<Pick<Organism, 'torporDepth'>>, c: Readonly<SimulationConfig>): number =>
-  Math.floor(c.sensingRadius * (1 - (o.torporDepth ?? 0)));
-
-export const isTorpid = (o: Readonly<Pick<Organism, 'torpor'>>): boolean => (o.torpor ?? 0) > 0;

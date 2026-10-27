@@ -127,10 +127,8 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   torporEnabled: true,
   torporFounder: 0.1,
   torporStep: 0.1,
-  torporEntryTicks: 3,
-  torporSaving: 0.9, // a fully torpid organism pays a tenth of its upkeep
+  torporSaving: 0.9, // a full-depth rest pays a tenth of its upkeep
   torporWakeCost: 4,
-  torporTimer: 60,
   eggsEnabled: true,
   eggFounder: 0.1,
   eggStep: 0.1,
@@ -145,9 +143,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   metabolismMax: 1.5,
   birthCooldown: 12,
   // Clutch size (matings only). Founders 1. Max 6: the carrier's 4 free neighbours plus a little
-  // dispersal room, and at founder values 6 children get under minViableChildEnergy each.
+  // dispersal room.
   clutchGeneEnabled: true,
-  clutchStep: 1,
+  clutchStep: 0.2,
   clutchMin: 1,
   clutchMax: 6,
   // 10: two birth taxes; ~40 ticks of base upkeep; 40% of a meal (foodEnergyYield 25); a third of a
