@@ -313,7 +313,8 @@ describe('DNA Stage 1b.1: continuous abilities (dnaContinuousAbilities)', () => 
 });
 
 describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
-  const on = createConfig({ dnaSplitDiets: true });
+  // Meat-digestion gene off here: the test pins the plain diet formulas.
+  const on = createConfig({ dnaSplitDiets: true, carnivoreGeneEnabled: false });
 
   it('plant yield is foodEnergyYield × herbivory, carrion carrionBite × carnivory, upkeep dietUpkeep × (h + c)', () => {
     const o = { ...legacyOrganisms()[0], herbivory: 0.8, carnivory: 0.3 };

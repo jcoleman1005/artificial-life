@@ -42,6 +42,8 @@ Five foundational physical and energetic architecture genes (`size`, `sensingRad
 - `digestiveEfficiency`: scales plant and carrion food extraction yield ($0.5 \dots 1.5\times$); charges continuous gut organ upkeep per tick.
 - `energyReserveCap`: fat storage decoupled from structural body size; loaded fat applies dynamic kinetic drag to movement costs ($\text{drag} = 1 + \text{dragCoeff} \times \frac{\text{fat}}{\text{fatCapacity} + E_{\max}}$).
 
+**Meat digestion gene (2026-10-27):** `carnivoreEfficiency` (trait 50, `carnivoreGeneEnabled`, on) scales energy from carrion bites and eggs; meat eaters can now eat eggs (counted in `eggsEatenTotal`). Founders 0.5 halve early carrion meals (switch off = old world). Not yet measured: run `--compare carnivoreGeneEnabled=false,true` and check egg predation against eggs-off.
+
 ## In progress: DNA (2026-10-26)
 
 Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled`; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain (not the dials) are decoded from a genome, bit-identical to a legacy world. Stage 1b is built as two toggles, off by default, with gates in `docs/experiments/dna-1b*.txt` (continuous abilities: met; split diets: plant eaters met, meat eaters not yet seen in 3,000 ticks). Both await the user's review of their gates; meanwhile Stage 2 was built on top (below).

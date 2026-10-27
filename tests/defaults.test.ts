@@ -36,6 +36,8 @@ describe('Default world', () => {
       sizeGeneEnabled: DEFAULT_CONFIG.sizeGeneEnabled,
       sensingGeneEnabled: DEFAULT_CONFIG.sensingGeneEnabled,
       digestiveGeneEnabled: DEFAULT_CONFIG.digestiveGeneEnabled,
+      carnivoreGeneEnabled: DEFAULT_CONFIG.carnivoreGeneEnabled,
+      carnivoreFounder: DEFAULT_CONFIG.carnivoreFounder,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -69,6 +71,9 @@ describe('Default world', () => {
       sizeGeneEnabled: true,
       sensingGeneEnabled: true,
       digestiveGeneEnabled: true,
+      // Meat digestion: on, founders at half so selection can go either way (Parameter log).
+      carnivoreGeneEnabled: true,
+      carnivoreFounder: 0.5,
     });
   });
 

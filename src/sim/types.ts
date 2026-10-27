@@ -319,6 +319,8 @@ export interface Organism {
   readonly sensingRadius?: number;
   /** Nutrient extraction efficiency (digestiveGeneEnabled). Scales energy absorbed from plant and carrion meals; charges gut organ upkeep. */
   readonly digestiveEfficiency?: number;
+  /** Protein digestion (carnivoreGeneEnabled), 0..1. Scales energy gained from carrion bites, which is where a kill's energy ends up. */
+  readonly carnivoreEfficiency?: number;
   /** Fat held now (state; only with fatEnabled). */
   fat?: number;
   /** Chose REST last tick, so acting now pays the wake cost (state; only with torporEnabled). */
@@ -641,6 +643,12 @@ export interface SimulationConfig {
   digestiveMin: number;
   digestiveMax: number;
   digestiveUpkeepRate: number; // Upkeep per tick per unit of digestive efficiency
+  carnivoreGeneEnabled: boolean; // Meat digestion evolves (0..1 scale on energy from carrion meals; charges upkeep scaled by diet)
+  carnivoreFounder: number;
+  carnivoreStep: number;
+  carnivoreMin: number;
+  carnivoreMax: number;
+  carnivoreUpkeepRate: number; // Upkeep per tick per unit of (carnivoreEfficiency × carnivory)
   fatDragCoeff: number; // Dynamic movement drag multiplier based on fat stored
   dnaVariationEnabled: boolean; // With DNA (Stage 2): mutation counts are Poisson-sampled, genes can be inserted, deleted and duplicated, and every gene costs dnaUpkeepPerGene
   dnaInsertionRate: number; // Per gene per birth: a new random gene appears at a random position
@@ -753,6 +761,7 @@ export interface LifeMetrics {
   size: number | null;
   sensingRadius: number | null;
   digestiveEfficiency: number | null;
+  carnivoreEfficiency: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
@@ -761,6 +770,7 @@ export interface LifeMetrics {
   eggsLaidTotal: number;
   eggsHatchedTotal: number;
   eggsDecayedTotal: number;
+  eggsEatenTotal: number;
 }
 
 export interface WorldSnapshot {
@@ -778,6 +788,8 @@ export interface WorldSnapshot {
   readonly foodGrid: Int32Array;
   /** Carrion energy in each cell (0 when none). */
   readonly carrionGrid: Float32Array;
+  /** Energy held by eggs, by cell (absent in hand-built snapshots). */
+  readonly eggGrid?: Float32Array;
   /** Index into `organisms` of the organism in each cell, or -1. */
   readonly organismGrid: Int32Array;
   /** Indices into `organisms` of those that signalled last tick. */

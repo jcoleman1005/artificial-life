@@ -171,6 +171,12 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   digestiveMax: 1.5,
   digestiveUpkeepRate: 0.04,
   fatDragCoeff: 0.5,
+  carnivoreGeneEnabled: true,
+  carnivoreFounder: 0.5, // half of a carrion meal absorbed at the start, so selection can move it either way
+  carnivoreStep: 0.05,
+  carnivoreMin: 0,
+  carnivoreMax: 1,
+  carnivoreUpkeepRate: 0.04,
   dnaVariationEnabled: false, // Stage 2 (needs dnaEnabled; docs/specs/dna.md)
   dnaInsertionRate: 0.001,
   dnaDeletionRate: 0.001,

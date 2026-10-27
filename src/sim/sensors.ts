@@ -26,7 +26,7 @@ export function senseEnvironment(
 
   // Current cell food (grids are indexed y * width + x)
   const currentCellFood = snapshot.foodGrid[y * width + x];
-  const currentCellCarrion = snapshot.carrionGrid[y * width + x];
+  const currentCellCarrion = snapshot.carrionGrid[y * width + x] + (snapshot.eggGrid?.[y * width + x] ?? 0);
 
   let nearestFood: SensedEntity | null = null;
   let minFoodDist = Infinity;

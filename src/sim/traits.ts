@@ -1,6 +1,6 @@
 import type { PRNG } from './prng';
 import type { Abilities, AbilityName, Organism, SimulationConfig } from './types';
-import { digestiveEfficiencyOf, maxEnergyOf, sizeOf } from './lifehistory';
+import { carnivoreEfficiencyOf, digestiveEfficiencyOf, maxEnergyOf, sizeOf } from './lifehistory';
 
 /** Carry capacity for a founder (pioneer or immigrant): 1–3 units. */
 export function founderCarryCapacity(config: Readonly<SimulationConfig>, prng: PRNG): number {
@@ -149,10 +149,17 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.digestiveUpkeepRate * organism.digestiveEfficiency
       : 0;
 
+  // Protein-processing upkeep: only a meat eater carries (and pays for) the machinery
+  const carnivoreUpkeep =
+    config.carnivoreGeneEnabled && organism.carnivoreEfficiency !== undefined
+      ? config.carnivoreUpkeepRate * organism.carnivoreEfficiency * organism.carnivory
+      : 0;
+
   return (
     baseCost +
     sensoryUpkeep +
     digestiveUpkeep +
+    carnivoreUpkeep +
     config.carryUpkeep * organism.carryCapacity +
     (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
@@ -190,8 +197,8 @@ export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herb
 }
 
 /** Energy from a full carrion meal (carrionBite of carrion energy); 0 when carrion is off. */
-export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency'>>, config: Readonly<SimulationConfig>): number {
-  const eff = digestiveEfficiencyOf(organism, config);
+export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency' | 'carnivoreEfficiency'>>, config: Readonly<SimulationConfig>): number {
+  const eff = digestiveEfficiencyOf(organism, config) * carnivoreEfficiencyOf(organism, config);
   return config.carrionEnabled ? config.carrionBite * organism.carnivory * eff : 0;
 }
 

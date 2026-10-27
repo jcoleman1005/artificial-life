@@ -60,6 +60,8 @@ import {
   lifeMatchesConfig,
   torporUpkeepFactor,
   LIFE_GENES,
+  carnivoreEfficiencyOf,
+  digestiveEfficiencyOf,
   maxEnergyOf,
   metabolicRateOf,
   sizeOf,
@@ -152,6 +154,7 @@ const WORLD_COUNTERS = [
   'eggsLaidTotal',
   'eggsHatchedTotal',
   'eggsDecayedTotal',
+  'eggsEatenTotal',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
@@ -210,6 +213,7 @@ export class World {
   public eggsLaidTotal = 0;
   public eggsHatchedTotal = 0;
   public eggsDecayedTotal = 0;
+  public eggsEatenTotal = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
   /** The latest mating, for observers (not saved). */
@@ -268,6 +272,7 @@ export class World {
     this.eggsLaidTotal = 0;
     this.eggsHatchedTotal = 0;
     this.eggsDecayedTotal = 0;
+    this.eggsEatenTotal = 0;
     this.lastKill = null;
     this.lastMating = null;
     this.plantCounters = newPlantCounters();
@@ -661,6 +666,9 @@ export class World {
     const foodGrid = new Int32Array(gridWidth * gridHeight);
     const carrionGrid = new Float32Array(gridWidth * gridHeight);
     for (const c of this.carrion.values()) carrionGrid[c.y * gridWidth + c.x] = c.stock;
+    // Egg energy by cell: a meat eater can eat an egg like carrion (the shell's energy is not food).
+    const eggGrid = new Float32Array(gridWidth * gridHeight);
+    for (const e of this.eggs.values()) eggGrid[e.y * gridWidth + e.x] += e.child.energy;
     const organismGrid = new Int32Array(gridWidth * gridHeight).fill(-1);
     for (const key of this.obstacles) {
       const [ox, oy] = key.split(',').map(Number);
@@ -697,6 +705,7 @@ export class World {
       obstacleGrid,
       foodGrid,
       carrionGrid,
+      eggGrid,
       organismGrid,
       signallers,
     };
@@ -1003,9 +1012,24 @@ export class World {
           // A meal takes up to carrionBite of the carrion's energy; the eater
           // gets its carnivory share of that (the rest is lost).
           const patch = this.carrion.get(`${organism.x},${organism.y}`);
-          if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
+          const egg = patch && patch.stock > 0 ? undefined : this.eggAt(organism.x, organism.y);
+          if (egg && organism.carnivory > 0 && this.config.carrionEnabled) {
+            // A whole egg goes down at once; its meal is the child's energy through the same gut, and the shell is lost.
+            // Capped at the egg's own energy, so even the best gut cannot make laying-and-eating a profit.
+            const meal =
+              egg.child.energy *
+              Math.min(1, organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config));
+            const energyGain = Math.min(maxEnergyOf(organism, this.config) - organism.energy, meal);
+            organism.energy += energyGain;
+            this.storeSurplus(organism, meal - energyGain);
+            this.eggs.delete(egg.child.id);
+            organism.foodEatenCount++;
+            this.eggsEatenTotal++;
+            energyDelta += energyGain;
+            outcome = 'success';
+          } else if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
             const taken = Math.min(patch.stock, this.config.carrionBite);
-            const meal = taken * organism.carnivory;
+            const meal = taken * organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config);
             const maxEnergy = maxEnergyOf(organism, this.config);
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
@@ -1526,6 +1550,12 @@ export class World {
     }
   }
 
+  /** The first egg lying at (x, y), if any. */
+  private eggAt(x: number, y: number): Egg | undefined {
+    for (const e of this.eggs.values()) if (e.x === x && e.y === y) return e;
+    return undefined;
+  }
+
   /** Whether the cell at (x, y) is currently in a lean season. */
   private isCellLean(x: number, y: number): boolean {
     if (this.config.seasonLength <= 0) return false;
@@ -1843,12 +1873,14 @@ export class World {
       size: mean(c.sizeGeneEnabled, (o) => o.size ?? 1),
       sensingRadius: mean(c.sensingGeneEnabled, (o) => o.sensingRadius ?? c.sensingRadius),
       digestiveEfficiency: mean(c.digestiveGeneEnabled, (o) => o.digestiveEfficiency ?? 1),
+      carnivoreEfficiency: mean(c.carnivoreGeneEnabled, (o) => o.carnivoreEfficiency ?? c.carnivoreFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,
       eggsLaidTotal: this.eggsLaidTotal,
       eggsHatchedTotal: this.eggsHatchedTotal,
       eggsDecayedTotal: this.eggsDecayedTotal,
+      eggsEatenTotal: this.eggsEatenTotal,
     };
   }
 

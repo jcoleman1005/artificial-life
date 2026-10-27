@@ -22,12 +22,13 @@ function lifeCards(metrics: WorldMetrics): string {
     out.push(card('Torpor', `${Math.round(life.torporDepth * 100)}% deep <small>(${life.resting ?? 0} resting now)</small>`));
   const eggVal = life.eggAllocation ?? life.eggRate;
   if (eggVal != null)
-    out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(eggVal * 100)}% mean shell; ${life.eggsHatchedTotal ?? 0} hatched, ${life.eggsDecayedTotal ?? 0} failed)</small>`));
+    out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(eggVal * 100)}% mean shell; ${life.eggsHatchedTotal ?? 0} hatched, ${life.eggsDecayedTotal ?? 0} failed, ${life.eggsEatenTotal ?? 0} eaten)</small>`));
   if (life.metabolicRate != null) out.push(card('Metabolism', `${life.metabolicRate.toFixed(2)}×`));
   if (life.clutchSize != null) out.push(card('Clutch', `${life.clutchSize.toFixed(2)} <small>(children per mating)</small>`));
   if (life.size != null) out.push(card('Size', `${life.size.toFixed(2)}×`));
   if (life.sensingRadius != null) out.push(card('Vision', `${life.sensingRadius.toFixed(1)} cells`));
   if (life.digestiveEfficiency != null) out.push(card('Digestion', `${Math.round(life.digestiveEfficiency * 100)}%`));
+  if (life.carnivoreEfficiency != null) out.push(card('Meat digestion', `${Math.round(life.carnivoreEfficiency * 100)}%`));
   return out.join('');
 }
 

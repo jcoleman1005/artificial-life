@@ -120,7 +120,8 @@ const offered = (o: Organism) => o.recentHistory[0].scores.map((s) => s.action.t
 
 describe('Diet', () => {
   it('trades plant energy for carrion energy', () => {
-    const config = { ...DEFAULT_CONFIG, foodEnergyYield: 25, carrionBite: 30, dietTradeoff: 0.6 };
+    // Meat-digestion gene off: isolates the diet trade-off itself (carnivoreEfficiency is tested in tier1_genes).
+    const config = { ...DEFAULT_CONFIG, foodEnergyYield: 25, carrionBite: 30, dietTradeoff: 0.6, carnivoreGeneEnabled: false };
     expect(plantYield({ carnivory: 0 }, config)).toBe(25);
     expect(carrionYield({ carnivory: 0 }, config)).toBe(0);
     expect(plantYield({ carnivory: 1 }, config)).toBeCloseTo(10);
@@ -162,8 +163,9 @@ describe('Carrion', () => {
     expect(world.carrionUnitsRotted).toBe(10);
   });
 
+  // The two digestion genes are off in these carrion tests to isolate the base meal (they are tested in tier1_genes).
   it('feeds a meat eater its carnivory share of a carrionBite meal; a plant eater cannot eat it', () => {
-    const world = quietWorld({ carrionBite: 30 });
+    const world = quietWorld({ carrionBite: 30, carnivoreGeneEnabled: false, digestiveGeneEnabled: false });
     world.carrion.set('3,3', { x: 3, y: 3, stock: 50, expiresAt: 1000 });
     world.carrion.set('8,8', { x: 8, y: 8, stock: 50, expiresAt: 1000 });
     const eater = brainWith({ isEatCarrion: 100, isRest: 1 });
@@ -181,8 +183,38 @@ describe('Carrion', () => {
     expect(sheep.energy).toBe(40);
   });
 
+  it('a meat eater can eat an egg: the child\'s energy × diet share is gained, the egg and its shell are gone', () => {
+    const world = quietWorld({ carrionBite: 30, carnivoreGeneEnabled: false, digestiveGeneEnabled: false });
+    const child = makeOrganism('kid', 3, 3, { energy: 30 });
+    world.eggs.set('kid', { x: 3, y: 3, laidTick: 0, shell: 5, child });
+    const wolf = makeOrganism('wolf', 3, 3, { energy: 40, carnivory: 0.5, brain: brainWith({ isEatCarrion: 100 }) });
+    const sheep = makeOrganism('sheep', 8, 8, { energy: 40, carnivory: 0, brain: brainWith({ isEatCarrion: 100 }) });
+    world.eggs.set('kid2', { x: 8, y: 8, laidTick: 0, shell: 0, child: makeOrganism('kid2', 8, 8, { energy: 30 }) });
+    addAll(world, wolf, sheep);
+    world.step();
+    expect(wolf.energy).toBe(55); // half of 30
+    expect(world.eggs.has('kid')).toBe(false);
+    expect(world.eggsEatenTotal).toBe(1);
+    expect(offered(sheep)).not.toContain('EAT_CARRION'); // a plant eater gets nothing from an egg
+    expect(world.eggs.has('kid2')).toBe(true);
+  });
+
+  it('eating an egg returns less than laying it cost, even with the best gut', () => {
+    const world = quietWorld({ carrionBite: 30, digestiveFounder: 1.5, carnivoreFounder: 1 });
+    const child = makeOrganism('kid', 3, 3, { energy: 30 });
+    world.eggs.set('kid', { x: 3, y: 3, laidTick: 0, shell: 0, child });
+    const wolf = makeOrganism('wolf', 3, 3, {
+      energy: 20, carnivory: 1, digestiveEfficiency: 1.5, carnivoreEfficiency: 1, brain: brainWith({ isEatCarrion: 100 }),
+    });
+    addAll(world, wolf);
+    world.step();
+    expect(world.eggsEatenTotal).toBe(1);
+    expect(wolf.energy).toBeCloseTo(50, 0); // capped at the egg's 30, not 45 (minus a little gut upkeep)
+    expect(30).toBeLessThan(30 + world.config.reproductionMetabolismTax); // laying it cost more than that
+  });
+
   it('needs room for a full meal, like plant food', () => {
-    const world = quietWorld({ carrionBite: 30 });
+    const world = quietWorld({ carrionBite: 30, carnivoreGeneEnabled: false, digestiveGeneEnabled: false });
     world.carrion.set('3,3', { x: 3, y: 3, stock: 50, expiresAt: 1000 });
     const wolf = makeOrganism('wolf', 3, 3, { energy: 80, carnivory: 1, brain: brainWith({ isEatCarrion: 100 }) });
     addAll(world, wolf);

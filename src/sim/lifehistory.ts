@@ -30,7 +30,8 @@ export type LifeField =
   | 'clutchSize'
   | 'size'
   | 'sensingRadius'
-  | 'digestiveEfficiency';
+  | 'digestiveEfficiency'
+  | 'carnivoreEfficiency';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -136,6 +137,15 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.digestiveMin,
     max: (c) => c.digestiveMax,
   },
+  {
+    field: 'carnivoreEfficiency',
+    traitId: 50,
+    enabled: (c) => c.carnivoreGeneEnabled,
+    founder: (c) => c.carnivoreFounder,
+    step: (c) => c.carnivoreStep,
+    min: (c) => c.carnivoreMin,
+    max: (c) => c.carnivoreMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -209,6 +219,10 @@ export const sensingRadiusOf = (o: Readonly<Pick<Organism, 'sensingRadius'>>, c:
 
 export const digestiveEfficiencyOf = (o: Readonly<Pick<Organism, 'digestiveEfficiency'>>, c: Readonly<SimulationConfig>): number =>
   c.digestiveGeneEnabled ? (o.digestiveEfficiency ?? 1) : 1;
+
+/** Share of a carrion meal absorbed; 1 (the old world) without the gene. */
+export const carnivoreEfficiencyOf = (o: Readonly<Pick<Organism, 'carnivoreEfficiency'>>, c: Readonly<SimulationConfig>): number =>
+  c.carnivoreGeneEnabled ? (o.carnivoreEfficiency ?? c.carnivoreFounder) : 1;
 
 export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold' | 'size'>>, c: Readonly<SimulationConfig>): number =>
   (o.reproThreshold ?? c.reproductionThreshold) * sizeOf(o, c);

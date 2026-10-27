@@ -35,6 +35,9 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (o.digestiveEfficiency !== undefined) {
     out.push(pill('Digestion', `${Math.round(o.digestiveEfficiency * 100)}%`));
   }
+  if (o.carnivoreEfficiency !== undefined) {
+    out.push(pill('Meat digestion', `${Math.round(o.carnivoreEfficiency * 100)}%`));
+  }
   return out.join('');
 }
 

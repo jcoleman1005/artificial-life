@@ -52,6 +52,7 @@ describe('Artificial Life Core Mechanics', () => {
       torporEnabled: false, // a boxed-in organism would rest into torpor and live longer
       sensingGeneEnabled: false, // only base metabolism
       digestiveGeneEnabled: false,
+      carnivoreGeneEnabled: false,
       moveCost: 2.0,
       maxEnergy: 50,
       initialEnergy: 10,

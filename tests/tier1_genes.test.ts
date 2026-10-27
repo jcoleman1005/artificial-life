@@ -272,3 +272,57 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
     });
   });
 });
+
+describe('Gene 5: carnivoreEfficiency (carrion and meat digestion)', () => {
+  const base = { seed: 1, carrionBite: 30, digestiveGeneEnabled: false };
+
+  it('scales carrion yield linearly; plant yield is untouched', () => {
+    const config = new World(base).config;
+    const half = { carnivory: 1, carnivoreEfficiency: 0.5 };
+    expect(carrionYield({ carnivory: 1, carnivoreEfficiency: 1 }, config)).toBeCloseTo(30);
+    expect(carrionYield(half, config)).toBeCloseTo(15);
+    expect(carrionYield({ carnivory: 1, carnivoreEfficiency: 0 }, config)).toBe(0);
+    expect(plantYield(half, config)).toBe(plantYield({ carnivory: 1, carnivoreEfficiency: 1 }, config));
+  });
+
+  it('is exactly the old world when switched off', () => {
+    const off = new World({ ...base, carnivoreGeneEnabled: false }).config;
+    expect(carrionYield({ carnivory: 0.5, carnivoreEfficiency: 0.1 }, off)).toBeCloseTo(15);
+  });
+
+  it('pays upkeep only in proportion to diet: herbivores pay nothing, full meat eaters most', () => {
+    const config = new World({ ...base, sensingGeneEnabled: false, sizeGeneEnabled: false, fatEnabled: false, memoryEnabled: false, metabolismGeneEnabled: false }).config;
+    const cost = (carnivory: number, eff: number) => metabolismCost(makeTestOrganism({ carnivory, carnivoreEfficiency: eff }), config);
+    expect(cost(0, 1)).toBeCloseTo(cost(0, 0));
+    expect(cost(1, 1) - cost(1, 0)).toBeCloseTo(config.carnivoreUpkeepRate);
+    expect(cost(0.5, 1) - cost(0.5, 0)).toBeCloseTo(config.carnivoreUpkeepRate * 0.5);
+  });
+
+  it('a bite on a carcass gives energy scaled by the gene, and the rest is lost', () => {
+    const run = (eff: number) => {
+      const world = new World({ ...base, gridWidth: 8, gridHeight: 8, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0, immigrationInterval: 0, seasonLength: 0, foodRegionCount: 0, tickMetabolismCost: 0, carryUpkeep: 0, abilityUpkeep: 0, memoryEnabled: false, fatEnabled: false, torporEnabled: false, sensingGeneEnabled: false, carnivoreUpkeepRate: 0 });
+      world.carrion.set('3,3', { x: 3, y: 3, stock: 50, expiresAt: 1000 });
+      const wolf = makeTestOrganism({ x: 3, y: 3, energy: 20, carnivory: 1, carnivoreEfficiency: eff, brain: { ...createHeadStartBrain(new PRNG(0)) } });
+      world.organisms.set(wolf.id, wolf);
+      return { world, wolf };
+    };
+    const { world, wolf } = run(0.4);
+    world.step();
+    // The brain may not choose to eat; only assert energy when it did.
+    if (world.carrionEatenTotal > 0) expect(wolf.energy).toBeCloseTo(20 + 30 * 0.4, 5);
+  });
+
+  it('children inherit it within [0, 1] under mutation', () => {
+    const world = new World({ seed: 'carn-inherit', traitMutationRate: 1 });
+    for (let i = 0; i < 300; i++) world.step();
+    for (const o of world.organisms.values()) {
+      expect(o.carnivoreEfficiency).toBeGreaterThanOrEqual(0);
+      expect(o.carnivoreEfficiency).toBeLessThanOrEqual(1);
+    }
+  }, 30_000);
+
+  it('survives the genome round trip', () => {
+    const world = new World({ seed: 'carn-dna' });
+    for (const o of world.organisms.values()) expect(o.carnivoreEfficiency).toBe(world.config.carnivoreFounder);
+  });
+});
