@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
-import { createGzip } from 'node:zlib';
 import { SimulationHost } from '../src/sim/host';
 import type { ToWorker } from '../src/sim/protocol';
 import { encodeMessage, ViewerStream } from './viewer-stream';
@@ -31,7 +30,7 @@ export const DEFAULT_OPTIONS: ServerOptions = {
   staticDir: 'dist',
   port: 8080,
   host: '0.0.0.0',
-  frameIntervalMs: 100,
+  frameIntervalMs: 40,
   saveEveryMs: 5 * 60 * 1000,
   backupEveryMs: 60 * 60 * 1000,
   keepBackups: 48,
@@ -74,7 +73,7 @@ const timers = {
  * instead of running its own (see src/ui/simulation-client.ts).
  *
  *   GET  /api/info      what this server is (the page checks it to pick server mode)
- *   GET  /api/events    the world as a stream of messages (Server-Sent Events, gzip)
+ *   GET  /api/events    the world as a stream of messages (Server-Sent Events)
  *   POST /api/command   one page-to-world message (header X-Viewer: the stream's id)
  *   GET  /api/world     the current world as a SavedWorld file
  *   GET  /*             the built app
@@ -186,22 +185,16 @@ export class AlifeServer {
   }
 
   private openStream(req: IncomingMessage, res: ServerResponse): void {
-    const gzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''));
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no', // ask proxies not to hold the stream back
-      ...(gzip ? { 'Content-Encoding': 'gzip' } : {}),
     });
-    const zip = gzip ? createGzip() : null;
-    if (zip) zip.pipe(res);
-    const out = zip ?? res;
     const write = (text: string) => {
-      out.write(text);
-      zip?.flush();
+      res.write(text);
     };
-    const queued = () => res.writableLength + (zip?.writableLength ?? 0);
+    const queued = () => res.writableLength;
 
     const stream = new ViewerStream((m) => write(`data: ${encodeMessage(m)}\n\n`), this.options.frameIntervalMs, timers, () => queued() < MAX_QUEUED_BYTES);
     // The id comes first, so the page can send commands as soon as the world arrives.
@@ -218,7 +211,7 @@ export class AlifeServer {
       stream.close();
       this.host.disconnect(id);
       this.streams.delete(id);
-      out.end();
+      res.end();
       this.log(`Viewer ${id} left (${this.host.viewerCount} watching)`);
     };
     this.streams.set(id, { stream, end });

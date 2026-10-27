@@ -1,5 +1,5 @@
 import type { PRNG } from './prng';
-import { ACTION_INVARIANT_MASK, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
+import { ACTION_INVARIANT_MASK, BASE_BRAIN_INPUT_COUNT, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
 import { lifeOf, LIFE_GENES, LIFE_TRAIT_BASE, LIFE_TRAIT_COUNT, clampLife, geneForTrait, inheritLifeValue, type LifeValues } from './lifehistory';
@@ -122,14 +122,22 @@ export const geneCount = (dna: ArrayLike<number>): number => Math.floor(dna.leng
  * draw order (tag, carry capacity, brain, abilities, dispersal, memory span,
  * register weights, carnivory), which mutateGenome relies on.
  */
-export function encodeOrganismDNA(p: Readonly<Phenotype>): Uint32Array {
+export function encodeOrganismDNA(p: Readonly<Phenotype>, config?: Readonly<SimulationConfig>): Uint32Array {
   const genes: [number, number][] = [];
   const add = (geneClass: GeneClass, index: number, dose: number) => genes.push([geneKey(geneClass, index), dose]);
   add(GeneClass.trait, TraitId.tag, p.tag);
   add(GeneClass.trait, TraitId.carryCapacity, p.carryCapacity);
-  p.brain.skip.forEach((w, i) => add(GeneClass.brainSkip, i, w));
+  const weatherOn = config?.weatherEnabled !== false;
+  p.brain.skip.forEach((w, i) => {
+    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return;
+    add(GeneClass.brainSkip, i, w);
+  });
   const inputs = p.brain.skip.length;
-  p.brain.hidden.forEach((w, k) => add(GeneClass.brainHidden, (Math.floor(k / inputs) << 8) | k % inputs, w));
+  p.brain.hidden.forEach((w, k) => {
+    const i = k % inputs;
+    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return;
+    add(GeneClass.brainHidden, (Math.floor(k / inputs) << 8) | i, w);
+  });
   p.brain.hiddenBias.forEach((w, h) => add(GeneClass.brainHiddenBias, h, w));
   p.brain.out.forEach((w, h) => add(GeneClass.brainOut, h, w));
   add(GeneClass.brainOutBias, 0, p.brain.outBias);
@@ -777,19 +785,23 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
   for (let t = 0; t <= LAST_BODY_TRAIT; t++) keys.push(geneKey(GeneClass.trait, t));
   if (splitDiets(config)) keys.push(geneKey(GeneClass.trait, TraitId.herbivory));
   for (let i = 0; i < MEMORY_WEIGHT_COUNT; i++) keys.push(geneKey(GeneClass.trait, TraitId.memoryWeight0 + i));
-  for (let i = 0; i < BRAIN_INPUT_COUNT; i++) keys.push(geneKey(GeneClass.brainSkip, i));
+  const inputCount = config.weatherEnabled ? BRAIN_INPUT_COUNT : BASE_BRAIN_INPUT_COUNT;
+  for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainSkip, i));
   for (let h = 0; h < units; h++) {
-    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
+    for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
     keys.push(geneKey(GeneClass.brainHiddenBias, h), geneKey(GeneClass.brainOut, h));
   }
   keys.push(geneKey(GeneClass.brainOutBias, 0));
   return keys;
 }
-let slotCache: { split: boolean; units: number; keys: number[] } | null = null;
+let slotCache: { split: boolean; weather: boolean; units: number; keys: number[] } | null = null;
 function slotsFor(config: Readonly<SimulationConfig>): number[] {
   const split = splitDiets(config);
+  const weather = config.weatherEnabled;
   const units = growableBrain(config) ? internalUnits(config) : BRAIN_HIDDEN;
-  if (slotCache?.split !== split || slotCache.units !== units) slotCache = { split, units, keys: slotKeys(config, units) };
+  if (slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.units !== units) {
+    slotCache = { split, weather, units, keys: slotKeys(config, units) };
+  }
   return slotCache.keys;
 }
 

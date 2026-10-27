@@ -64,6 +64,10 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Gene registry (`src/sim/genes.ts`): table-driven plant-trait genes (ranges, founders, mutation, clamping, budgets, locking); organism genomes live in `dna.ts`.
 - `World.stateHash()`: hash of the snapshot minus trend history; equal hashes continue identically.
 - Always-on server (`server/`): one shared `SimulationHost`, SSE out, POST in, saves to `data/world.json`; not safe public unless `--watch-only`.
+- UI/UX Audit & Ergonomic Refactor: Typography tokens, 44×44px touch targets for mobile (Galaxy S21), WCAG AA dark contrast, responsive summary pills (2026-10-27).
+- Genome Lineage Map (`lineage.ts`, `lineage-view.ts`): Pedigree DAG in Inspector, crossover attribution, mutations, observer-only with deterministic `stateHash()` (2026-10-27).
+- Egg Selection & Inspection: Direct egg selection, floating card, incubation/shell metrics, unborn traits and pedigree in Inspector (2026-10-27).
+- Weather systems (`weatherEnabled`, on; `docs/specs/weather.md`): multi-front dynamic temperature, moisture, and wind; abiotic costs, plant drift, and downwind signal propagation (2026-10-27).
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.

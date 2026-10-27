@@ -88,6 +88,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     diagonalMoves: false,
     squeezeEnabled: false,
     leapEnabled: false,
+    weatherEnabled: false,
     ...overrides,
   });
 }

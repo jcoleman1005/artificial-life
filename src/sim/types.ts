@@ -202,6 +202,12 @@ export interface SensedInputs {
   readonly rememberedSignal: Recalled | null;
   readonly home: Recalled | null;
   readonly registers: readonly number[];
+  /** Local temperature anomaly at this cell [-1, 1], 0 when weather is off. */
+  readonly weatherTemp?: number;
+  /** Local precipitation / rain at this cell [0, 1], 0 when weather is off. */
+  readonly weatherRain?: number;
+  /** Local wind vector at this cell, or null when weather is off. */
+  readonly weatherWind?: { readonly wx: number; readonly wy: number } | null;
 }
 
 export interface ActionScore {
@@ -654,6 +660,17 @@ export interface SimulationConfig {
   dnaGrowableBrain: boolean; // With DNA (Stage 3): the brain is compiled from the genome as a sparse circuit with up to dnaMaxInternal hidden units; every brain gene is expressed
   dnaMaxInternal: number; // Hidden units a genome can address with the growable brain (clamped to 6..256)
   dnaUpkeepPerConnection: number; // Energy per tick per expressed acquired connection (in hidden units past the founders' 6)
+  // Weather systems
+  weatherEnabled: boolean;
+  weatherMaxFronts: number;
+  weatherSpawnInterval: number;
+  weatherChillCoeff: number;
+  weatherMudCoeff: number;
+  weatherWindCoupling: number;
+  weatherSeedDrift: number;
+  weatherSignalDrift: number;
+  weatherEvapRate: number;
+  weatherAbsorptionRate: number;
   seed: number | string;
 }
 
@@ -738,6 +755,15 @@ export interface WorldMetrics {
   overgrazing: OvergrazingMetrics | null;
   /** Life-history genes, or null when none is on. */
   life: LifeMetrics | null;
+  /** Weather conditions, or null when weather is off. */
+  weather: WeatherMetrics | null;
+}
+
+export interface WeatherMetrics {
+  frontCount: number;
+  avgTemp: number;
+  windSpeed: number;
+  windAngle: number;
 }
 
 /** Population means of the life-history genes that are switched on, and egg/rest/fat counts. */
@@ -782,4 +808,26 @@ export interface WorldSnapshot {
   readonly organismGrid: Int32Array;
   /** Indices into `organisms` of those that signalled last tick. */
   readonly signallers: readonly number[];
+  /** Active weather state snapshot, or null when weather is off. */
+  readonly weather?: WeatherSnapshot | null;
+}
+
+export type WeatherFrontType = 'rain_storm' | 'cold_front' | 'heat_wave';
+
+export interface WeatherFront {
+  readonly id: number;
+  readonly type: WeatherFrontType;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  intensity: number;
+  lifetime: number;
+}
+
+export interface WeatherSnapshot {
+  readonly fronts: readonly WeatherFront[];
+  readonly wind: { readonly wx: number; readonly wy: number };
+  readonly moistureGrid: Uint8Array;
 }

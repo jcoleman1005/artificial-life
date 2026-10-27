@@ -3,6 +3,8 @@ import type { HistorySample } from '../sim/history';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
 import type {
+  AncestorNode,
+  EggView,
   FromWorker,
   OrganismView,
   PanelData,
@@ -77,9 +79,10 @@ export class SimulationClient implements WorldView {
   public organisms = new Map<string, OrganismView>();
   public foodPatches = new Map<string, FoodPatch>();
   public carrion = new Map<string, CarrionPatch>();
-  public eggs = new Map<string, { x: number; y: number }>();
+  public eggs = new Map<string, EggView>();
   public foodRegions: readonly FoodRegion[] = [];
   public obstacles: ReadonlySet<string> = new Set();
+  public weather: WorldView['weather'] = null;
   /** Ticks per second the worker actually ran over the last second. */
   public ticksPerSecond = 0;
   /** Whether the world is playing, and at what speed, as of the latest frame. */
@@ -96,6 +99,7 @@ export class SimulationClient implements WorldView {
   private selectedId: string | null = null;
   private metrics: WorldMetrics | null = null;
   private selectedDetail: Organism | null = null;
+  private selectedAncestry: readonly AncestorNode[] = [];
   private history: readonly HistorySample[] = [];
   private heatmap: { kind: HeatmapKind; cells: Float32Array } | null = null;
   private wantsHistory = false;
@@ -190,7 +194,38 @@ export class SimulationClient implements WorldView {
         this.organisms = new Map(message.organisms.map((o) => [o.id, o]));
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));
-        this.eggs = new Map((message.eggs ?? []).map((e, i) => [`${i}`, { x: e.x, y: e.y }]));
+        this.eggs = new Map((message.eggs ?? []).map((e) => [e.id, e]));
+        if (message.weather) {
+          const w = message.weather;
+          this.weather = {
+            fronts: w.fronts,
+            getWind: (x: number, y: number) => {
+              let wx = w.wind.wx;
+              let wy = w.wind.wy;
+              for (const f of w.fronts) {
+                const dx = x - f.x;
+                const dy = y - f.y;
+                const d2 = dx * dx + dy * dy;
+                if (d2 <= f.radius * f.radius) {
+                  const dist = Math.sqrt(d2);
+                  const inf = f.intensity * (1 - dist / f.radius);
+                  if (dist > 0.1) {
+                    wx += (-dy / dist) * 0.2 * inf;
+                    wy += (dx / dist) * 0.2 * inf;
+                  }
+                }
+              }
+              const speed = Math.hypot(wx, wy);
+              if (speed > 1.0) {
+                wx /= speed;
+                wy /= speed;
+              }
+              return { wx, wy };
+            },
+          };
+        } else {
+          this.weather = null;
+        }
         this.ticksPerSecond = message.ticksPerSecond;
         this.running = message.running;
         this.targetTicksPerSecond = message.targetTicksPerSecond;
@@ -224,6 +259,7 @@ export class SimulationClient implements WorldView {
   private applyPanels(panels: PanelData): void {
     this.metrics = panels.metrics;
     this.selectedDetail = panels.selected;
+    this.selectedAncestry = panels.selectedAncestry ?? [];
     if (panels.history) this.history = panels.history;
     this.heatmap = panels.heatmap ?? null;
   }
@@ -245,6 +281,7 @@ export class SimulationClient implements WorldView {
   public reset(seed: string | number, config?: Partial<SimulationConfig>): void {
     this.selectedId = null;
     this.selectedDetail = null;
+    this.selectedAncestry = [];
     this.send({ kind: 'reset', seed, config });
   }
   /** A live settings change, from the next tick. */
@@ -255,6 +292,7 @@ export class SimulationClient implements WorldView {
   public select(id: string | null): void {
     this.selectedId = id;
     this.selectedDetail = null;
+    this.selectedAncestry = [];
     this.send({ kind: 'select', id });
   }
   /** Ask for history samples only while the Trends tab is showing. */
@@ -299,9 +337,18 @@ export class SimulationClient implements WorldView {
   public getSelectedOrganism(): OrganismView | undefined {
     return this.selectedId ? this.organisms.get(this.selectedId) : undefined;
   }
+  public findEggAt(x: number, y: number): EggView | undefined {
+    for (const egg of this.eggs.values()) {
+      if (egg.x === x && egg.y === y) return egg;
+    }
+    return undefined;
+  }
   /** The selected organism's full record (policy, brain, last decision), as of the last panel update. */
   public getSelectedDetail(): Organism | null {
     return this.selectedDetail && this.selectedDetail.id === this.selectedId ? this.selectedDetail : null;
+  }
+  public getSelectedAncestry(): readonly AncestorNode[] {
+    return this.selectedAncestry;
   }
   public getMetrics(): WorldMetrics | null {
     return this.metrics;

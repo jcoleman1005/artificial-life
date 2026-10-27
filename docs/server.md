@@ -21,7 +21,7 @@ Stop with Ctrl+C (or SIGTERM): it saves first.
 | `--host ADDR` | `ALIFE_HOST` | 0.0.0.0 | every interface (LAN, Tailscale); `127.0.0.1` for this machine only |
 | `--data DIR` | `ALIFE_DATA` | `./data` | where the world is saved |
 | `--static DIR` | `ALIFE_STATIC` | `./dist` | the built app |
-| `--fps N` | `ALIFE_FPS` | 10 | frames per second sent to each viewer |
+| `--fps N` | `ALIFE_FPS` | 25 | frames per second sent to each viewer |
 | `--max-speed N` | `ALIFE_MAX_SPEED` | 60 | ticks-per-second limit (the page's 10× is 60) |
 | `--save-minutes N` | `ALIFE_SAVE_MINUTES` | 5 | also saves on shutdown, play/pause/speed, and before a reset or load |
 | `--keep-backups N` | `ALIFE_KEEP_BACKUPS` | 48 | hourly compressed backups kept |
@@ -33,7 +33,7 @@ Stop with Ctrl+C (or SIGTERM): it saves first.
   any number of viewers. Playback, settings, reset and load are shared; each
   viewer has its own selected organism, tabs and overlay.
 - The page asks `GET /api/info` when it opens. If it is talking to the server
-  it streams the world from `GET /api/events` (Server-Sent Events, gzip) and
+  it streams the world from `GET /api/events` (Server-Sent Events) and
   sends commands with `POST /api/command`; otherwise (Vite, a static host) it
   runs its own world in a Web Worker as before. The messages are the ones in
   `src/sim/protocol.ts` either way.

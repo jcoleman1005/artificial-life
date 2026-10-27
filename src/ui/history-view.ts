@@ -50,7 +50,7 @@ const PLANT_SECTION = 'Plants (when Food = Plants)';
 /** Trend section for the dial weights, collapsed while the brain is in charge. */
 const DIAL_SECTION = 'Inherited weights (dials)';
 
-const REFERENCE = '#64748b';
+const REFERENCE = '#94a3b8';
 const LEAN_WASH = 'rgba(251, 191, 36, 0.09)';
 
 interface Panel {

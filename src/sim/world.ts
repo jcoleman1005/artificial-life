@@ -1,3 +1,4 @@
+import { LineageTracker, type AncestorNode } from './lineage';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
 import type {
@@ -31,6 +32,7 @@ import { MetricsHistory, type HistorySample } from './history';
 import { inheritTag, tagSimilarity } from './tags';
 import { regionSeasonAt, seasonAt } from './seasons';
 import { CellHealth, fertileCells, type CellHealthState } from './grazing';
+import { WeatherSimulation, type WeatherExportState } from './weather';
 import {
   carrionFromBody,
   founderAbilities,
@@ -113,6 +115,10 @@ export interface WorldState {
   readonly plantCounters?: PlantCounters;
   /** Cell health (absent in saves from before overgrazing, or with it off). */
   readonly cellHealth?: CellHealthState;
+  /** Ancestor history for lineage map (absent in saves from before lineage tracker). */
+  readonly lineage?: readonly AncestorNode[];
+  /** Weather state (absent in saves from before weather, or with it off). */
+  readonly weather?: WeatherExportState;
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -171,6 +177,7 @@ export class World {
   /** Fertile regions where food grows (empty: food can grow anywhere). */
   public readonly foodRegions: FoodRegion[] = [];
   public readonly organisms = new Map<string, Organism>(); // id -> Organism
+  public lineageTracker = new LineageTracker();
 
   private nextOrganismSeq = 0;
   public birthsTotal = 0;
@@ -221,6 +228,8 @@ export class World {
   private fertileList: number[] | null = null;
   /** Overgrazing: per-cell health (null when overgrazingEnabled is off). */
   public cellHealth: CellHealth | null = null;
+  /** Weather simulation (null when weatherEnabled is off). */
+  public weather: WeatherSimulation | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -274,6 +283,8 @@ export class World {
     this.soilField = null;
     this.fertileList = null;
     this.cellHealth = this.config.overgrazingEnabled ? new CellHealth(this.config.gridWidth * this.config.gridHeight) : null;
+    this.weather = this.config.weatherEnabled ? new WeatherSimulation(this.config.gridWidth, this.config.gridHeight) : null;
+    this.lineageTracker = new LineageTracker();
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
     this.foodPatches.clear();
@@ -436,7 +447,7 @@ export class World {
     const policy = createRandomPolicy(this.prng);
     const tag = Number(this.prng.nextFloat(0, 360).toFixed(2));
     const carryCapacity = founderCarryCapacity(this.config, this.prng);
-    const brain = createHeadStartBrain(this.prng);
+    const brain = createHeadStartBrain(this.prng, this.config);
     const abilities = founderAbilities(this.config, this.prng);
     const dispersal = founderDispersal(this.config, this.prng);
     const memorySpan = founderMemorySpan(this.config, this.prng);
@@ -450,9 +461,9 @@ export class World {
       ...founderLife(this.config),
     };
     // With DNA, the founder is what its encoded genome decodes to.
-    const genome = this.config.dnaEnabled ? encodeOrganismDNA(drawn) : undefined;
+    const genome = this.config.dnaEnabled ? encodeOrganismDNA(drawn, this.config) : undefined;
     const phenotype = genome ? decodeOrganismDNA(genome, this.config) : drawn;
-    return {
+    const founder: Organism = {
       id: `org-${this.nextOrganismSeq}`,
       x,
       y,
@@ -477,6 +488,8 @@ export class World {
       signalTick: -1,
       recentHistory: [],
     };
+    this.lineageTracker.recordBirth(founder, null, null, this.tick);
+    return founder;
   }
 
   /**
@@ -490,7 +503,7 @@ export class World {
     const needsHerbivory = splitDiets(this.config) && o.herbivory === undefined;
     const lifeStale = !lifeMatchesConfig(o, this.config);
     if (o.genome && !needsHerbivory && !lifeStale) return o.genome;
-    return encodeOrganismDNA(this.freshPhenotype(o, needsHerbivory));
+    return encodeOrganismDNA(this.freshPhenotype(o, needsHerbivory), this.config);
   }
 
   /**
@@ -581,6 +594,8 @@ export class World {
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
       ...(this.cellHealth ? { cellHealth: this.cellHealth.exportState() } : {}),
+      lineage: this.lineageTracker.exportState(),
+      ...(this.weather && this.config.weatherEnabled ? { weather: this.weather.exportState() } : {}),
     };
   }
 
@@ -592,7 +607,7 @@ export class World {
    * so call it now and then, not every tick.
    */
   public stateHash(): string {
-    const { history: _history, ...state } = this.exportState();
+    const { history: _history, lineage: _lineage, ...state } = this.exportState();
     return hashString(JSON.stringify(state));
   }
 
@@ -630,10 +645,23 @@ export class World {
       const child = World.restoreOrganism(e.child, world.config);
       world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child });
     }
+    world.weather = state.weather
+      ? WeatherSimulation.fromState(state.weather, world.config.gridWidth, world.config.gridHeight)
+      : world.config.weatherEnabled
+        ? new WeatherSimulation(world.config.gridWidth, world.config.gridHeight)
+        : null;
     world.history.importState(state.history);
+    if (state.lineage) world.lineageTracker = LineageTracker.fromState(state.lineage);
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
     return world;
+  }
+
+  /**
+   * Retrieves the direct ancestor lineage DAG for an organism.
+   */
+  public getAncestry(id: string): readonly AncestorNode[] {
+    return this.lineageTracker.getAncestry(id);
   }
 
   /**
@@ -699,6 +727,7 @@ export class World {
       carrionGrid,
       organismGrid,
       signallers,
+      weather: this.weather && this.config.weatherEnabled ? this.weather.getSnapshot() : null,
     };
   }
 
@@ -959,6 +988,13 @@ export class World {
       let outcome = item.outcome;
       // Base metabolism, plus the upkeep of carry capacity
       let metabolism = metabolismCost(organism, this.config);
+      if (this.weather && this.config.weatherEnabled) {
+        const season = seasonAt(this.tick, this.config)?.season ?? null;
+        const temp = this.weather.getTemperature(organism.x, organism.y, season);
+        if (temp < 0) {
+          metabolism *= (1 + this.config.weatherChillCoeff * Math.abs(temp));
+        }
+      }
       // Resting saves upkeep in proportion to torpor depth.
       if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);
       let energyDelta = -metabolism;
@@ -1061,7 +1097,7 @@ export class World {
         case 'LEAP_WEST': {
           // Diagonals cost more (longer step); squeezing past a stranger and
           // leaping cost more again. Nothing is paid for a move that fails.
-          const cost = moveEnergyCost(
+          let cost = moveEnergyCost(
             organism,
             {
               leap: isLeapAction(chosenAction.type),
@@ -1070,6 +1106,18 @@ export class World {
             },
             this.config
           );
+          if (this.weather && this.config.weatherEnabled) {
+            const rain = this.weather.getRain(organism.x, organism.y);
+            const mudDrag = 1 + this.config.weatherMudCoeff * rain;
+            const wind = this.weather.getWind(organism.x, organism.y);
+            const target = chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined);
+            const dx = target ? target.x - organism.x : 0;
+            const dy = target ? target.y - organism.y : 0;
+            const dist = Math.hypot(dx, dy);
+            const align = dist > 0 ? (dx * wind.wx + dy * wind.wy) / dist : 0;
+            const windMultiplier = Math.max(0.5, 1.0 - this.config.weatherWindCoupling * align);
+            cost *= (mudDrag * windMultiplier);
+          }
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
@@ -1318,6 +1366,13 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+
+    // Periodic pruning of dead lineage branches with no living descendants (every 500 ticks)
+    if (this.tick % 500 === 0) {
+      const active = new Set(this.organisms.keys());
+      for (const egg of this.eggs.values()) active.add(egg.child.id);
+      this.lineageTracker.prune(active);
+    }
   }
 
   /**
@@ -1333,7 +1388,7 @@ export class World {
     this.nextOrganismSeq++;
     const policy = mutatePolicy(policySource, this.config, this.prng);
     const inherited = this.inheritBody(parent, mate);
-    return {
+    const child: Organism = {
       id: `org-${this.nextOrganismSeq}`,
       x: birth.x,
       y: birth.y,
@@ -1358,6 +1413,8 @@ export class World {
       signalTick: -1,
       recentHistory: [],
     };
+    this.lineageTracker.recordBirth(child, parent, mate, this.tick);
+    return child;
   }
 
   /**
@@ -1671,6 +1728,12 @@ export class World {
 
     // 0b. Carrion rots away (it never regrows)
     for (const [key, c] of this.carrion) {
+      if (this.weather && this.config.weatherEnabled) {
+        const rain = this.weather.getRain(c.x, c.y);
+        if (rain > 0.4 && c.expiresAt > this.tick) {
+          c.expiresAt -= 1;
+        }
+      }
       if (c.expiresAt <= this.tick) {
         this.carrionUnitsRotted += c.stock;
         this.carrion.delete(key);
@@ -1680,6 +1743,11 @@ export class World {
     // 0c. Cells rest and recover (and the matched-random control spends its damage)
     const health = this.cellHealth;
     if (health) health.step(this.tick, this.config, this.prng, this.config.overgrazingMatchedRandom ? this.fertile() : []);
+
+    // 0d. Dynamic weather fronts advance
+    if (this.config.weatherEnabled && this.weather) {
+      this.weather.step(this.tick, this.prng, this.config, seasonAt(this.tick, this.config)?.season ?? null);
+    }
 
     // 1a. Plants grow, seed and die in place of classic regrowth and spawning.
     if (this.config.plantsEnabled) {
@@ -1694,6 +1762,7 @@ export class World {
         worldLean,
         counters: this.plantCounters,
         ...(health ? { health: health.health } : {}),
+        ...(this.weather && this.config.weatherEnabled ? { weather: this.weather } : {}),
       });
     }
 
@@ -1823,6 +1892,7 @@ export class World {
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
       overgrazing: this.cellHealth ? this.cellHealth.metrics(this.soil(), this.foodRegions.length, this.fertile()) : null,
       life: this.lifeMetrics(organisms),
+      weather: this.weather && this.config.weatherEnabled ? this.weather.getMetrics(seasonAt(this.tick, this.config)?.season ?? null) : null,
     };
   }
 
@@ -1872,6 +1942,19 @@ export class World {
 
   public getOrganism(id: string): Organism | undefined {
     return this.organisms.get(id);
+  }
+
+  public getEgg(id: string): Egg | undefined {
+    return this.eggs.get(id);
+  }
+
+  public getEggAt(x: number, y: number): Egg | undefined {
+    for (const egg of this.eggs.values()) {
+      if (egg.x === x && egg.y === y) {
+        return egg;
+      }
+    }
+    return undefined;
   }
 
   /** Same as getMetrics(). */

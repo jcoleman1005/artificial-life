@@ -255,8 +255,8 @@ describe('Always-on server over HTTP', () => {
     expect(await (await fetch(`${base}/`)).text()).toContain('<title>app</title>');
     expect((await fetch(`${base}/../../etc/passwd`)).status).not.toBe(200);
 
-    const events = await fetch(`${base}/api/events`, { headers: { 'Accept-Encoding': 'gzip' } });
-    expect(events.headers.get('content-encoding')).toBe('gzip');
+    const events = await fetch(`${base}/api/events`);
+    expect(events.headers.get('content-type')).toBe('text/event-stream');
     const first = await readEvents(events, (m) => m.length >= 3);
     expect(first.map((m) => m.event)).toEqual(['hello', 'message', 'message']);
     const viewer = (first[0].data as { viewer: number }).viewer;

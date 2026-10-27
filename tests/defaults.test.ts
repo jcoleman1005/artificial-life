@@ -36,6 +36,7 @@ describe('Default world', () => {
       sizeGeneEnabled: DEFAULT_CONFIG.sizeGeneEnabled,
       sensingGeneEnabled: DEFAULT_CONFIG.sensingGeneEnabled,
       digestiveGeneEnabled: DEFAULT_CONFIG.digestiveGeneEnabled,
+      weatherEnabled: DEFAULT_CONFIG.weatherEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -69,6 +70,8 @@ describe('Default world', () => {
       sizeGeneEnabled: true,
       sensingGeneEnabled: true,
       digestiveGeneEnabled: true,
+      // Weather systems are a new feature, on by default.
+      weatherEnabled: true,
     });
   });
 
