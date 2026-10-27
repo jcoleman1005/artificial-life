@@ -87,6 +87,19 @@ export const BRAIN_INPUT_COUNT = BRAIN_INPUTS.length;
 export const BRAIN_HIDDEN = 6;
 export const WEIGHT_LIMIT = 40;
 
+/**
+ * The brain inputs whose feature value is the same for every legal action
+ * within one decision (brainFeatures reads them from the organism's state
+ * and senses only, never from the action): the constant bias, energy,
+ * carried food, crowding and the three free memory registers. A hidden unit
+ * fed only by these adds the same offset to every action's score, so it
+ * cannot change which action wins (checked by a test).
+ */
+export const ACTION_INVARIANT_INPUTS: readonly BrainInput[] = ['bias', 'energy', 'carried', 'crowding', 'register0', 'register1', 'register2'];
+
+/** 1 at the BRAIN_INPUTS index of each ACTION_INVARIANT_INPUTS entry. */
+export const ACTION_INVARIANT_MASK: Readonly<Uint8Array> = Uint8Array.from(BRAIN_INPUTS, (name) => (ACTION_INVARIANT_INPUTS.includes(name) ? 1 : 0));
+
 export interface Brain {
   readonly skip: readonly number[]; // BRAIN_INPUT_COUNT
   readonly hidden: readonly number[]; // BRAIN_HIDDEN × BRAIN_INPUT_COUNT, row-major
@@ -352,6 +365,15 @@ export interface Circuit {
   readonly acquiredConnections: number;
   /** Evaluated or folded units with unitId >= BRAIN_HIDDEN. */
   readonly acquiredUnits: number;
+  /**
+   * Acquired units (unitId >= BRAIN_HIDDEN) that are not choice-invariant: a
+   * unit is choice-invariant when it is constant (no live in-edge) or every
+   * live in-edge comes from ACTION_INVARIANT_INPUTS, since it then adds the
+   * same offset to every action's score.
+   */
+  readonly effectiveAcquiredUnits: number;
+  /** In-edges plus the out edge of the effective acquired units. */
+  readonly effectiveAcquiredConnections: number;
 }
 
 /** Scratch for scoreCircuit: the direct contributions of the last call, by skip entry (no allocation per call). */

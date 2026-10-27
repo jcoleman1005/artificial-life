@@ -319,7 +319,8 @@ function runJob(job: Job): RunResult {
 
 /**
  * Stage 3 (growable brain): over the living organisms that have a circuit, the mean acquired hidden units, acquired
- * connections and all connections, and the share with at least one acquired unit (all 0 when none has a circuit).
+ * connections and all connections, and the share with at least one acquired unit; the same unit mean and share for
+ * effective (choice-variant) acquired units (all 0 when none has a circuit).
  */
 function topologyResults(organisms: readonly Organism[]): Record<string, number> {
   const circuits = organisms.flatMap((o) => (o.circuit ? [o.circuit] : []));
@@ -329,6 +330,8 @@ function topologyResults(organisms: readonly Organism[]): Record<string, number>
     'topo.acquiredConnections': circuits.reduce((a, c) => a + c.acquiredConnections, 0) / n,
     'topo.connections': circuits.reduce((a, c) => a + c.connections, 0) / n,
     'topo.withAcquired%': (100 * circuits.filter((c) => c.acquiredUnits > 0).length) / n,
+    'topo.effectiveUnits': circuits.reduce((a, c) => a + c.effectiveAcquiredUnits, 0) / n,
+    'topo.withEffective%': (100 * circuits.filter((c) => c.effectiveAcquiredUnits > 0).length) / n,
   };
 }
 

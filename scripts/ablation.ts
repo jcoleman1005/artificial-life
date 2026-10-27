@@ -1,18 +1,25 @@
 // Ablation assay for DNA Stage 3 (growable brain): does an organism's acquired brain topology matter?
 //
 //   npm run ablation -- [--seeds 1-8] [--ticks 5000] [--replicates 10] [--window 500]
-//                       [--sample 40] [--arenas 4] [--arena-window 200] [--early 100] [--level all|units] [--workers 4]
+//                       [--sample 40] [--arenas 4] [--arena-window 200] [--early 100] [--level effective|units|all] [--workers 4]
 //                       [--set key=value] [--out docs/experiments/dna-stage3-ablation]
 //
 // Per seed, a world with dnaEnabled, dnaVariationEnabled and dnaGrowableBrain on (plus any --set) is
 // evolved for --ticks. A seed that dies out, or where no organism has an acquired hidden unit
-// (circuit.acquiredUnits > 0), is reported and skipped. The cohort is every living organism with
-// acquired connections (circuit.acquiredConnections > 0). "Ablating" an organism replaces its genome
-// with stripAcquiredTopology(genome, config, --level): 'all' (default) removes every brain gene the
-// growable-off decode ignores (genes on units >= 6 and wrapped keys, which the growable brain folds onto
-// canonical slots), so the circuit then scores exactly as the dense brain; 'units' removes only genes on
-// units >= 6 (wrapped keys landing on canonical slots stay). Either way its dense brain and every other
-// trait are unchanged (checked), and its children inherit the stripped genome.
+// (circuit.acquiredUnits > 0), is reported and skipped. "Ablating" an organism replaces its genome with
+// stripAcquiredTopology(genome, config, --level). Wrapped brain keys never land on founder slots (they
+// map onto acquired units or are silent), so the levels differ only in which acquired genes go:
+//   'effective' (default)  removes the genes of choice-variant acquired units only (circuit
+//                          .effectiveAcquiredUnits: units with a live in-edge from an input that differs
+//                          between actions). Choice-invariant acquired units (constant, or fed only by
+//                          bias/energy/carried/crowding/registers) add the same offset to every action and
+//                          stay, so the ablated half keeps their upkeep. Cohort: effectiveAcquiredUnits > 0.
+//   'units'                removes every expressed gene on units >= 6; the circuit then scores exactly as
+//                          the dense brain. Cohort: acquiredConnections > 0.
+//   'all'                  'units' plus the silent brain genes the growable-off decode ignores (no effect
+//                          on scores, only on dnaUpkeepPerGene). Cohort: acquiredConnections > 0.
+// Either way its dense brain and every other trait are unchanged (checked), and its children inherit the
+// stripped genome.
 //
 // B1, in situ (the main measure). For each of --replicates replicates (own seeded split, own world
 // random stream): the cohort is split at random into two equal halves; the evolved world is restored
@@ -32,8 +39,8 @@
 // --arenas fixed 24x24 arenas × --arena-window ticks as the mutation census (scripts/census.ts), with
 // mutation off. Score = births of the founder's line, and the share of the window the founder lived.
 //
-// Note: an ablated organism also stops paying dnaUpkeepPerConnection for its acquired connections and
-// dnaUpkeepPerGene for the removed genes, a small energy advantage for it.
+// Note: an ablated organism also stops paying dnaUpkeepPerConnection for the acquired connections removed
+// and dnaUpkeepPerGene for the removed genes, a small energy advantage for it.
 
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -41,7 +48,8 @@ import { World, type WorldState } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
 import { newMemory } from '../src/sim/memory';
 import { BRAIN_HIDDEN } from '../src/sim/brain';
-import { decodeOrganismDNA, genomeStats, stripAcquiredTopology } from '../src/sim/dna';
+import { decodeOrganismDNA, genomeStats, stripAcquiredTopology, type StripLevel } from '../src/sim/dna';
+import type { Circuit } from '../src/sim/brain';
 import type { Organism, SimulationConfig } from '../src/sim/types';
 
 type Overrides = Record<string, string | number | boolean>;
@@ -55,7 +63,7 @@ interface Options {
   arenas: number;
   arenaWindow: number;
   early: number;
-  level: 'all' | 'units';
+  level: StripLevel;
   overrides: Overrides;
 }
 
@@ -78,13 +86,15 @@ interface SeedResult {
   genomeLength?: { mean: number; sd: number };
   topology?: {
     meanAcquiredUnits: number;
+    /** Choice-variant acquired units per cohort member (what 'effective' removes). */
+    meanEffectiveUnits: number;
     meanAcquiredConnections: number;
     meanConnections: number;
     /** Acquired units across the cohort: evaluated (have inputs), kept constant, folded into the output bias. */
     liveUnits: number;
     constantUnits: number;
     foldedUnits: number;
-    /** Genes removed by the 'all' strip, mean per cohort member. */
+    /** Genes removed by the --level strip, mean per cohort member. */
     meanGenesRemoved: number;
   };
   /** Cohort members whose stripped genome failed the consistency checks (should be 0). */
@@ -167,6 +177,17 @@ function arenaScore(template: Organism, body: Partial<Organism>, config: Simulat
 
 // --------------------------------------------------------------------------- B1 in situ
 
+/** Whether a circuit has what --level removes (cohort membership). */
+const inCohort = (c: Readonly<Circuit>, level: StripLevel) => (level === 'effective' ? c.effectiveAcquiredUnits > 0 : c.acquiredConnections > 0);
+/** Whether a stripped circuit has nothing left that --level removes. */
+const fullyStripped = (c: Readonly<Circuit>, level: StripLevel) => (level === 'effective' ? c.effectiveAcquiredUnits === 0 : c.acquiredConnections === 0 && c.acquiredUnits === 0);
+
+const LEVEL_TEXT: Record<StripLevel, string> = {
+  effective: 'genes of choice-variant acquired units only; choice-invariant acquired units kept',
+  units: 'every expressed gene on units >= 6; scores as the dense brain',
+  all: "every gene on units >= 6 plus silent brain genes the growable-off decode ignores; scores as 'units'",
+};
+
 const plain = (_key: string, value: unknown) => (ArrayBuffer.isView(value) ? Array.from(value as unknown as ArrayLike<number>) : value);
 
 function runHalves(saved: string, ablateIds: readonly string[], intactIds: readonly string[], ablate: boolean, stream: number, config: SimulationConfig, opts: Options) {
@@ -184,7 +205,7 @@ function runHalves(saved: string, ablateIds: readonly string[], intactIds: reado
   if (ablate) {
     for (const id of ablateIds) {
       const c = world.organisms.get(id)?.circuit;
-      if (!c || c.acquiredConnections !== 0 || c.acquiredUnits !== 0) throw new Error(`ablated ${id} still has acquired topology after load`);
+      if (!c || !fullyStripped(c, opts.level)) throw new Error(`ablated ${id} still has acquired topology after load`);
     }
   }
   const halves = [ablateIds, intactIds].map((ids) => ({
@@ -249,12 +270,13 @@ function runSeed(opts: Options): SeedResult {
   if (living.length === 0) return done('extinct');
   base.genomeLength = (({ meanLength, sdLength }) => ({ mean: meanLength, sd: sdLength }))(genomeStats(living.flatMap((o) => (o.genome ? [o.genome] : [])), config));
   if (base.withAcquiredUnits === 0) return done('no-acquired');
-  const cohort = living.filter((o) => o.genome && o.circuit && o.circuit.acquiredConnections > 0);
+  const cohort = living.filter((o) => o.genome && o.circuit && inCohort(o.circuit, opts.level));
   base.cohort = cohort.length;
   base.half = Math.floor(cohort.length / 2);
 
   // Topology of the cohort, and consistency of each stripped genome.
   let units = 0;
+  let effective = 0;
   let acq = 0;
   let conns = 0;
   let live = 0;
@@ -263,6 +285,7 @@ function runSeed(opts: Options): SeedResult {
   for (const o of cohort) {
     const c = o.circuit!;
     units += c.acquiredUnits;
+    effective += c.effectiveAcquiredUnits;
     acq += c.acquiredConnections;
     conns += c.connections;
     for (let u = 0; u < c.unitId.length; u++) {
@@ -281,12 +304,13 @@ function runSeed(opts: Options): SeedResult {
       JSON.stringify(after.brain, plain) === JSON.stringify(o.brain, plain) &&
       c0 !== undefined &&
       c1 !== undefined &&
-      c1.acquiredConnections === 0 &&
-      c1.acquiredUnits === 0;
+      fullyStripped(c1, opts.level);
     if (!ok) base.inconsistent++;
   }
+  if (cohort.length === 0) return done('cohort-too-small');
   base.topology = {
     meanAcquiredUnits: units / cohort.length,
+    meanEffectiveUnits: effective / cohort.length,
     meanAcquiredConnections: acq / cohort.length,
     meanConnections: conns / cohort.length,
     liveUnits: live,
@@ -360,14 +384,14 @@ function report(results: SeedResult[], opts: Omit<Options, 'seed'>, seedSpec: st
   const ok = results.filter((r) => r.status === 'ok');
   const lines: string[] = [
     `Ablation assay, DNA Stage 3 (growable brain). Seeds ${seedSpec}; each evolved ${opts.ticks} ticks with dnaEnabled, dnaVariationEnabled, dnaGrowableBrain on${Object.keys(opts.overrides).length ? `, plus ${JSON.stringify(opts.overrides)}` : ''}.`,
-    `Ablation: genome -> stripAcquiredTopology(genome, '${opts.level}')${opts.level === 'all' ? ' (genes on units >= 6 and wrapped keys)' : ' (genes on units >= 6 only; wrapped keys kept)'}; dense brain and other traits unchanged; children inherit the stripped genome.`,
+    `Ablation: genome -> stripAcquiredTopology(genome, '${opts.level}') (${LEVEL_TEXT[opts.level]}); dense brain and other traits unchanged; children inherit the stripped genome.`,
     `survivalEarly = share of original half members alive after ${opts.early} ticks; survival = at the end of the window.`,
-    `Cohort: living organisms with acquired connections > 0. B1: ${opts.replicates} replicates × ${opts.window} ticks, cohort split in two equal random halves, one ablated; sham = same split and stream, nobody ablated.`,
+    `Cohort: living organisms with ${opts.level === 'effective' ? 'choice-variant (effective) acquired units > 0' : 'acquired connections > 0'}. B1: ${opts.replicates} replicates × ${opts.window} ticks, cohort split in two equal random halves, one ablated; sham = same split and stream, nobody ablated.`,
     `B2: up to ${opts.sample} cohort organisms per seed alone in ${opts.arenas} fixed 24×24 arenas × ${opts.arenaWindow} ticks, mutation off, intact vs ablated.`,
-    `Caveat: ablated organisms save dnaUpkeepPerConnection on their acquired connections and dnaUpkeepPerGene on removed genes (a small energy advantage).`,
+    `Caveat: ablated organisms save dnaUpkeepPerConnection on the acquired connections removed and dnaUpkeepPerGene on removed genes (a small energy advantage).`,
     '',
     '## Seeds and topology',
-    'seed | status | pop | with acquired units | cohort | half | genome length | acq units/member | acq conns/member | conns/member | acquired units live / constant / folded | genes removed/member | inconsistent',
+    'seed | status | pop | with acquired units | cohort | half | genome length | acq units/member (effective / total) | acq conns/member | conns/member | acquired units live / constant / folded | genes removed/member | inconsistent',
     '--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---',
   ];
   for (const r of results) {
@@ -381,7 +405,7 @@ function report(results: SeedResult[], opts: Omit<Options, 'seed'>, seedSpec: st
         r.cohort,
         r.half,
         r.genomeLength ? `${f(r.genomeLength.mean, 0)}±${f(r.genomeLength.sd, 0)}` : '-',
-        t ? f(t.meanAcquiredUnits) : '-',
+        t ? `${f(t.meanEffectiveUnits)} / ${f(t.meanAcquiredUnits)}` : '-',
         t ? f(t.meanAcquiredConnections) : '-',
         t ? f(t.meanConnections, 1) : '-',
         t ? `${t.liveUnits} / ${t.constantUnits} / ${t.foldedUnits}` : '-',
@@ -482,7 +506,7 @@ async function main() {
     arenas: Number(get('--arenas', '4')),
     arenaWindow: Number(get('--arena-window', '200')),
     early: Number(get('--early', '100')),
-    level: (get('--level', 'all') === 'units' ? 'units' : 'all') as Options['level'],
+    level: ((l: string): StripLevel => (l === 'units' || l === 'all' ? l : 'effective'))(get('--level', 'effective')),
     overrides,
   };
   const workers = Math.max(1, Number(get('--workers', '4')));

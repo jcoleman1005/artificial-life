@@ -162,7 +162,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dnaDosageCompensation: false,
   dnaUpkeepPerGene: 0.00005, // a 415-gene founder (52 brain inputs) pays about 8% of base metabolism
   dnaMaxGenes: 1500,
-  dnaGrowableBrain: false, // Stage 3 (needs dnaEnabled): hidden units past the 6 founders and wrapped brain keys are expressed (docs/specs/dna.md)
+  dnaGrowableBrain: false, // Stage 3 (needs dnaEnabled): hidden units past the 6 founders are expressed; wrapped unit fields land on them, other wrapped brain keys stay silent (docs/specs/dna.md)
   dnaMaxInternal: 16, // hidden units a genome can address with the growable brain (clamped to 6..256)
   dnaUpkeepPerConnection: 0.00005, // an expressed acquired connection costs as much as a gene
   seed: 42,
