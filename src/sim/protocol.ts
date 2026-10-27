@@ -44,6 +44,10 @@ export interface OrganismView {
   readonly sensingRadius?: number;
   readonly digestiveEfficiency?: number;
   readonly carnivoreEfficiency?: number;
+  /** Life-history genes the colour modes and card read (absent while their switch is off). */
+  readonly metabolicRate?: number;
+  readonly investment?: number;
+  readonly clutchSize?: number;
   /** Only the latest decision (or none). */
   readonly recentHistory: readonly ActionView[];
 }
@@ -78,6 +82,9 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.sensingRadius !== undefined ? { sensingRadius: org.sensingRadius } : {}),
     ...(org.digestiveEfficiency !== undefined ? { digestiveEfficiency: org.digestiveEfficiency } : {}),
     ...(org.carnivoreEfficiency !== undefined ? { carnivoreEfficiency: org.carnivoreEfficiency } : {}),
+    metabolicRate: org.metabolicRate,
+    investment: org.investment,
+    clutchSize: org.clutchSize,
     recentHistory: last
       ? [
           {

@@ -1,6 +1,7 @@
 import type { SimulationConfig } from '../sim/types';
 import type { OrganismView } from '../sim/protocol';
 import { organismName } from './names';
+import { metabolismHue, reproStrategyHue } from '../render/renderer';
 
 const DIRECTION: Record<string, string> = { NORTH: 'north', SOUTH: 'south', EAST: 'east', WEST: 'west' };
 
@@ -59,6 +60,8 @@ export class OrganismCard {
   private readonly doing: HTMLElement;
   private readonly energy: HTMLElement;
   private readonly fill: HTMLElement;
+  /** Trait chips: a dot in the colour the matching "Colour by" mode would give this organism. */
+  private readonly chips: Readonly<Record<'diet' | 'burn' | 'breeding', HTMLElement>>;
 
   constructor(el: HTMLElement, onOpen: () => void, onClose: () => void) {
     this.el = el;
@@ -68,6 +71,11 @@ export class OrganismCard {
         <span class="card-name"><span class="card-given"></span> <span class="card-family"></span></span>
         <span class="card-doing"></span>
         <span class="card-energy" role="img"><span class="card-energy-fill"></span></span>
+        <span class="card-traits">
+          <span class="trait-chip" data-chip="diet"><i></i>diet</span>
+          <span class="trait-chip" data-chip="burn"><i></i>burn</span>
+          <span class="trait-chip" data-chip="breeding"><i></i>breeding</span>
+        </span>
       </span>
       <span class="card-more" aria-hidden="true">›</span>
       <button type="button" class="card-close" aria-label="Deselect">✕</button>
@@ -78,6 +86,11 @@ export class OrganismCard {
     this.doing = el.querySelector('.card-doing')!;
     this.energy = el.querySelector('.card-energy')!;
     this.fill = el.querySelector('.card-energy-fill')!;
+    this.chips = {
+      diet: el.querySelector<HTMLElement>('[data-chip="diet"]')!,
+      burn: el.querySelector<HTMLElement>('[data-chip="burn"]')!,
+      breeding: el.querySelector<HTMLElement>('[data-chip="breeding"]')!,
+    };
     el.addEventListener('click', (e) => {
       if ((e.target as Element).closest('.card-close')) onClose();
       else onOpen();
@@ -117,5 +130,24 @@ export class OrganismCard {
     this.energy.setAttribute('aria-label', `Energy ${Math.round(energy)} of ${config.maxEnergy}`);
     this.fill.style.width = `${pct}%`;
     this.fill.classList.toggle('low', energy < config.maxEnergy * 0.25);
+
+    // Trait chips; the two life-history ones only exist while their genes are switched on.
+    const chip = (el: HTMLElement, hue: number | null, title: string) => {
+      el.hidden = hue === null;
+      if (hue === null) return;
+      el.style.setProperty('--chip-hue', String(Math.round(hue)));
+      el.title = title;
+    };
+    chip(this.chips.diet, 120 - 120 * org.carnivory, `${Math.round(org.carnivory * 100)}% meat`);
+    chip(
+      this.chips.burn,
+      org.metabolicRate === undefined ? null : metabolismHue(org, config),
+      `Metabolic rate ${org.metabolicRate?.toFixed(2)}×`
+    );
+    chip(
+      this.chips.breeding,
+      org.investment === undefined && org.clutchSize === undefined ? null : reproStrategyHue(org, config),
+      'Breeding strategy: cyan = larger clutches, purple = well-fed single children'
+    );
   }
 }

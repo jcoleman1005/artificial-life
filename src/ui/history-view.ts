@@ -1,4 +1,11 @@
-import { POLICY_WEIGHT_KEYS, type HistorySample, type PolicyWeightKey } from '../sim/history';
+import {
+  DIST_BIN_COUNT,
+  POLICY_WEIGHT_KEYS,
+  type DistTrait,
+  type HistorySample,
+  type PolicyWeightKey,
+} from '../sim/history';
+import type { LifeField } from '../sim/lifehistory';
 import { WEIGHT_MAX, WEIGHT_MIN } from '../sim/policy';
 import { PLANT_TRAITS, PLANT_TRAIT_KEYS } from '../sim/plants';
 import type { PlantTrait } from '../sim/types';
@@ -47,8 +54,101 @@ const PLANT_TRAIT_LABELS: Record<PlantTrait, string> = {
 
 const PLANT_SECTION = 'Plants (when Food = Plants)';
 
+// The genome sections, in the order they appear (see SECTION_ORDER).
+const LIFE_SECTION = 'Genome · Life history & energetics';
+const MORPH_SECTION = 'Genome · Morphology & abilities';
+const NICHE_SECTION = 'Genome · Trophic & dietary niche';
+const NEURAL_SECTION = 'Genome · Neural topology';
+const DIST_SECTION = 'Genome · Population distributions';
+
+/** Top-to-bottom order of the sections; panels keep their order within one. */
+const SECTION_ORDER = [
+  'Population & food',
+  LIFE_SECTION,
+  MORPH_SECTION,
+  NICHE_SECTION,
+  NEURAL_SECTION,
+  DIST_SECTION,
+  'Reproduction',
+  'Look-alike groups & sharing',
+  'Signals',
+  PLANT_SECTION,
+];
+
 /** Trend section for the dial weights, collapsed while the brain is in charge. */
 const DIAL_SECTION = 'Inherited weights (dials)';
+
+interface DistPanel {
+  readonly trait: DistTrait;
+  readonly label: string;
+  /** What the bottom and top of the range mean. */
+  readonly low: string;
+  readonly high: string;
+  canvas?: HTMLCanvasElement;
+  valueEl?: HTMLElement;
+}
+
+const DIST_PANELS: readonly DistPanel[] = [
+  { trait: 'carnivory', label: 'Diet spread', low: 'plants', high: 'meat' },
+  { trait: 'reproThreshold', label: 'Breeding threshold spread', low: 'early', high: 'late' },
+  { trait: 'clutchSize', label: 'Clutch size spread', low: 'small', high: 'large' },
+  { trait: 'metabolicRate', label: 'Metabolic rate spread', low: 'slow', high: 'fast' },
+];
+
+/** Bin counts as fractions of their total (all zero when empty). */
+function binFractions(counts: readonly number[] | undefined): number[] {
+  const total = counts ? counts.reduce((a, c) => a + c, 0) : 0;
+  return Array.from({ length: DIST_BIN_COUNT }, (_, b) => (total > 0 ? counts![b] / total : 0));
+}
+
+/**
+ * Whether a distribution has two separate humps: two bins that are each local peaks holding at least 20% of
+ * the population, with a trough between them under half the lower peak. A reading aid; it changes nothing.
+ */
+export function isSplit(fractions: readonly number[]): boolean {
+  const peaks: number[] = [];
+  for (let b = 0; b < fractions.length; b++) {
+    const f = fractions[b];
+    if (f >= 0.2 && (b === 0 || f >= fractions[b - 1]) && (b === fractions.length - 1 || f >= fractions[b + 1])) peaks.push(b);
+  }
+  for (let i = 0; i < peaks.length; i++) {
+    for (let j = i + 1; j < peaks.length; j++) {
+      if (peaks[j] - peaks[i] < 2) continue;
+      const trough = Math.min(...fractions.slice(peaks[i] + 1, peaks[j]));
+      if (trough < 0.5 * Math.min(fractions[peaks[i]], fractions[peaks[j]])) return true;
+    }
+  }
+  return false;
+}
+
+const BAR_HUES = 'rgba(57, 135, 229,';
+/** Share of a distribution chart's width taken by its strip over time; the rest holds the current bars. */
+const DIST_STRIP = 0.74;
+/** Shortest gap between redraws of the charts while data streams in. */
+const DRAW_MIN_MS = 400;
+
+/** A life-history gene's chart: mean ± SD over the living; "off" while its switch is off. */
+function lifePanel(
+  field: LifeField | 'fat',
+  label: string,
+  range: readonly [number, number] | null,
+  fmt: (v: number) => string,
+  extra?: Partial<Panel>
+): Panel {
+  const stat = (s: HistorySample) => s.life?.[field];
+  return {
+    section: LIFE_SECTION,
+    label,
+    fixedRange: range,
+    value: (s) => stat(s)?.mean ?? 0,
+    spread: (s) => stat(s)?.sd ?? 0,
+    format: (s) => {
+      const st = stat(s);
+      return st ? `${fmt(st.mean)} ± ${fmt(st.sd)}` : 'off';
+    },
+    ...extra,
+  };
+}
 
 const REFERENCE = '#64748b';
 const LEAN_WASH = 'rgba(251, 191, 36, 0.09)';
@@ -102,6 +202,7 @@ function alikeMatingShare(s: HistorySample, prev?: HistorySample): number {
   const matings = (s.matingsTotal ?? 0) - (prev.matingsTotal ?? 0);
   return matings > 0 ? ((s.matingsAlikeTotal ?? 0) - (prev.matingsAlikeTotal ?? 0)) / matings : 0;
 }
+const carrionMealsPer100Ticks = ratePer100((s) => s.carrionEatenTotal ?? 0);
 const plantsGrazedOutPer100Ticks = ratePer100((s) => s.plants?.deathsGrazed ?? 0);
 const plantsLostLeanPer100Ticks = ratePer100((s) => s.plants?.deathsLean ?? 0);
 const plantsStarvedPer100Ticks = ratePer100((s) => (s.plants?.deathsShaded ?? 0) + (s.plants?.deathsStarved ?? 0));
@@ -138,6 +239,13 @@ export class HistoryView {
   private readonly container: HTMLElement;
   private samples: readonly HistorySample[] = [];
   private hoverIndex: number | null = null;
+  /** What the charts last showed (sample count, latest tick, scrub position), so an unchanged feed draws nothing. */
+  private drawnKey = '';
+  /** Charts currently on screen: the rest are not drawn (a phone shows a handful of ~60). Null until the observer reports. */
+  private readonly onScreen = new Set<HTMLCanvasElement>();
+  private readonly observer: IntersectionObserver | null;
+  private lastDrawAt = 0;
+  private pendingDraw: ReturnType<typeof setTimeout> | null = null;
 
   constructor(container: HTMLElement, onDownloadCSV: () => void) {
     this.container = container;
@@ -216,7 +324,7 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Diet & hunting',
+        section: NICHE_SECTION,
         label: 'Meat in the diet',
         fixedRange: [0, 1],
         value: (s) => s.carnivory?.mean ?? 0,
@@ -225,14 +333,14 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Diet & hunting',
+        section: NICHE_SECTION,
         label: 'Kills',
         fixedRange: null,
         value: killsPer100Ticks,
         format: (s, prev) => `${killsPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
       },
       {
-        section: 'Diet & hunting',
+        section: NICHE_SECTION,
         label: 'Kills of a different colour',
         fixedRange: [0, 1],
         value: strangerKillShare,
@@ -256,7 +364,7 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'Carry capacity',
         fixedRange: [0, 6],
         value: (s) => s.carryCapacity.mean,
@@ -264,7 +372,7 @@ export class HistoryView {
         format: (s) => `${s.carryCapacity.mean.toFixed(2)} ± ${s.carryCapacity.sd.toFixed(2)} units`,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'Dispersal distance',
         fixedRange: [0, 8],
         value: (s) => s.dispersal.mean,
@@ -272,7 +380,7 @@ export class HistoryView {
         format: (s) => `${s.dispersal.mean.toFixed(2)} ± ${s.dispersal.sd.toFixed(2)} steps`,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'Memory span',
         fixedRange: [0, 100],
         value: (s) => s.memorySpan.mean,
@@ -280,7 +388,7 @@ export class HistoryView {
         format: (s) => `${s.memorySpan.mean.toFixed(1)} ± ${s.memorySpan.sd.toFixed(1)} ticks`,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'Diagonal movers',
         fixedRange: [0, 1],
         value: (s) => s.abilities.diagonal,
@@ -288,7 +396,7 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'Squeezers',
         fixedRange: [0, 1],
         value: (s) => s.abilities.squeeze,
@@ -296,7 +404,7 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'Leapers',
         fixedRange: [0, 1],
         value: (s) => s.abilities.leap,
@@ -304,7 +412,7 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Body traits',
+        section: MORPH_SECTION,
         label: 'No movement ability',
         fixedRange: [0, 1],
         value: (s) => s.abilities.none,
@@ -312,7 +420,7 @@ export class HistoryView {
         axisLabel: pct,
       },
       {
-        section: 'Brains (used when Controller = Brain)',
+        section: NEURAL_SECTION,
         label: 'Drift from head start',
         fixedRange: null,
         value: (s) => s.brainDrift.mean,
@@ -320,7 +428,7 @@ export class HistoryView {
         format: (s) => `${s.brainDrift.mean.toFixed(2)} ± ${s.brainDrift.sd.toFixed(2)}`,
       },
       {
-        section: 'Brains (used when Controller = Brain)',
+        section: NEURAL_SECTION,
         label: 'Hidden layer strength',
         fixedRange: null,
         value: (s) => s.hiddenStrength.mean,
@@ -363,6 +471,93 @@ export class HistoryView {
         value: plantsStarvedPer100Ticks,
         format: (s, prev) => `${plantsStarvedPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
       },
+      lifePanel('reproThreshold', 'Breeding threshold (energy)', null, (v) => v.toFixed(0)),
+      lifePanel('investment', 'Investment per child', [0, 1], pct, { axisLabel: pct }),
+      lifePanel('metabolicRate', 'Metabolic rate (× base burn)', null, (v) => v.toFixed(2)),
+      lifePanel('fatCapacity', 'Fat capacity (grey = fat held)', null, (v) => v.toFixed(0), {
+        reference: (s) => s.life?.fat?.mean ?? 0,
+      }),
+      lifePanel('clutchSize', 'Clutch size (per mating)', null, (v) => v.toFixed(1)),
+      lifePanel('torporDepth', 'Rest efficiency', [0, 1], pct, { axisLabel: pct }),
+      lifePanel('eggAllocation', 'Births laid as eggs', [0, 1], pct, { axisLabel: pct }),
+      {
+        section: NICHE_SECTION,
+        label: 'Plant-eating efficiency',
+        fixedRange: [0, 1],
+        value: (s) => s.herbivory?.mean ?? 0,
+        spread: (s) => s.herbivory?.sd ?? 0,
+        format: (s) => (s.herbivory ? `${pct(s.herbivory.mean)} ± ${pct(s.herbivory.sd)}` : 'off (split diets)'),
+        axisLabel: pct,
+      },
+      {
+        section: NICHE_SECTION,
+        label: 'Energy per plant meal',
+        fixedRange: null,
+        value: (s) => s.yields?.plant.mean ?? 0,
+        spread: (s) => s.yields?.plant.sd ?? 0,
+        format: (s) => (s.yields ? `${s.yields.plant.mean.toFixed(1)} ± ${s.yields.plant.sd.toFixed(1)}` : '–'),
+      },
+      {
+        section: NICHE_SECTION,
+        label: 'Energy per carrion meal',
+        fixedRange: null,
+        value: (s) => s.yields?.carrion.mean ?? 0,
+        spread: (s) => s.yields?.carrion.sd ?? 0,
+        format: (s) => (s.yields ? `${s.yields.carrion.mean.toFixed(1)} ± ${s.yields.carrion.sd.toFixed(1)}` : '–'),
+      },
+      {
+        section: NICHE_SECTION,
+        label: 'Carrion meals eaten',
+        fixedRange: null,
+        value: carrionMealsPer100Ticks,
+        format: (s, prev) => `${carrionMealsPer100Ticks(s, prev).toFixed(1)} per 100 ticks`,
+      },
+      {
+        section: NEURAL_SECTION,
+        label: 'Active connections',
+        fixedRange: null,
+        value: (s) => s.topology?.connections.mean ?? 0,
+        spread: (s) => s.topology?.connections.sd ?? 0,
+        format: (s) => (s.topology ? `${s.topology.connections.mean.toFixed(1)} ± ${s.topology.connections.sd.toFixed(1)}` : '–'),
+      },
+      {
+        section: NEURAL_SECTION,
+        label: 'Recruited hidden units',
+        fixedRange: [0, 6],
+        value: (s) => s.topology?.hiddenUnits.mean ?? 0,
+        spread: (s) => s.topology?.hiddenUnits.sd ?? 0,
+        format: (s) => (s.topology ? `${s.topology.hiddenUnits.mean.toFixed(2)} ± ${s.topology.hiddenUnits.sd.toFixed(2)}` : '–'),
+      },
+      {
+        section: NEURAL_SECTION,
+        label: 'Genome length (genes)',
+        fixedRange: null,
+        value: (s) => s.genome?.length.mean ?? 0,
+        spread: (s) => s.genome?.length.sd ?? 0,
+        format: (s) => (s.genome ? `${s.genome.length.mean.toFixed(1)} ± ${s.genome.length.sd.toFixed(1)}` : 'off (no DNA)'),
+      },
+      {
+        section: NEURAL_SECTION,
+        label: 'Silent genes',
+        fixedRange: null,
+        value: (s) => s.genome?.silent ?? 0,
+        format: (s) => (s.genome ? s.genome.silent.toFixed(2) : 'off (no DNA)'),
+      },
+      {
+        section: NEURAL_SECTION,
+        label: 'Duplicated gene slots',
+        fixedRange: null,
+        value: (s) => s.genome?.duplicatedSlots ?? 0,
+        format: (s) => (s.genome ? s.genome.duplicatedSlots.toFixed(2) : 'off (no DNA)'),
+      },
+      {
+        section: NEURAL_SECTION,
+        label: 'Duplicates still identical',
+        fixedRange: [0, 1],
+        value: (s) => s.genome?.identicalShare ?? 0,
+        format: (s) => (s.genome ? pct(s.genome.identicalShare) : 'off (no DNA)'),
+        axisLabel: pct,
+      },
       ...PLANT_TRAIT_KEYS.map(
         (key): Panel => ({
           section: PLANT_SECTION,
@@ -385,27 +580,45 @@ export class HistoryView {
         })
       ),
     ];
+    // Group by section (array.sort is stable, so each section keeps its order).
+    const rank = (p: Panel) => {
+      const i = SECTION_ORDER.indexOf(p.section);
+      return i < 0 ? SECTION_ORDER.length : i;
+    };
+    this.panels.sort((a, b) => rank(a) - rank(b));
+
+    const sections = [...new Set([...this.panels.map((p) => p.section), DIST_SECTION])].sort((a, b) => {
+      const ra = SECTION_ORDER.indexOf(a);
+      const rb = SECTION_ORDER.indexOf(b);
+      return (ra < 0 ? SECTION_ORDER.length : ra) - (rb < 0 ? SECTION_ORDER.length : rb);
+    });
 
     container.innerHTML = `
       <details open class="trends-card">
         <summary class="trends-summary">
           <strong>Trends</strong>
-          <span class="trends-hint">Shaded = lean season · band = ±1 SD · grey = chance · bias = kin − stranger giving</span>
+          <span class="trends-hint">Shaded = lean season · band = ±1 SD · grey = chance or reference · bias = kin − stranger giving</span>
         </summary>
         <div class="trends-body">
           <div class="trends-toolbar">
             <span class="trends-readout"></span>
             <button type="button" class="btn btn-secondary btn-small btn-csv">Download CSV</button>
           </div>
-          ${[...new Set(this.panels.map((p) => p.section))]
-            .map(
-              (section) => section === DIAL_SECTION ? `
-          <details class="trends-dials" open>
-          <summary class="trends-section">${section}<span class="trends-dials-note"> · inactive under the Brain controller</span></summary>
+          ${sections
+            .map((section) =>
+              section === DIST_SECTION
+                ? `
+          <details class="trends-sec" open>
+          <summary class="trends-section">${section}<span class="trends-dials-note"> · bright = more of the living in that fifth</span></summary>
+          <div class="trends-grid">${this.distFigures()}</div>
+          </details>`
+                : `
+          <details class="trends-sec${section === DIAL_SECTION ? ' trends-dials' : ''}" open>
+          <summary class="trends-section">${section}${
+            section === DIAL_SECTION ? '<span class="trends-dials-note"> · inactive under the Brain controller</span>' : ''
+          }</summary>
           <div class="trends-grid">${this.panelFigures(section)}</div>
-          </details>` : `
-          <h4 class="trends-section">${section}</h4>
-          <div class="trends-grid">${this.panelFigures(section)}</div>`
+          </details>`
             )
             .join('')}
         </div>
@@ -419,18 +632,27 @@ export class HistoryView {
       p.valueEl = figures[i].querySelector<HTMLElement>('.trend-value')!;
     });
 
+    const distFigures = container.querySelectorAll<HTMLElement>('.dist-panel');
+    DIST_PANELS.forEach((d, i) => {
+      d.canvas = distFigures[i].querySelector('canvas')!;
+      d.valueEl = distFigures[i].querySelector<HTMLElement>('.trend-value')!;
+    });
+
     container.querySelector('.btn-csv')!.addEventListener('click', onDownloadCSV);
-    // Collapsed charts are skipped when drawing; draw them once opened.
-    container.querySelector('.trends-dials')!.addEventListener('toggle', () => this.draw());
+    // Collapsed charts are skipped when drawing; draw them once opened. `toggle` does not bubble, so listen while it descends.
+    container.addEventListener('toggle', () => this.draw(true), true);
 
     // Press-and-drag scrubbing. Horizontal drags scrub; vertical swipes
     // still scroll the page (touch-action: pan-y in CSS).
     const grid = container.querySelector<HTMLElement>('.trends-body')!;
     const scrub = (e: PointerEvent) => {
-      const canvas = (e.target as Element).closest('.trend-panel')?.querySelector('canvas');
-      if (!canvas || this.samples.length === 0) return;
+      const figure = (e.target as Element).closest('.trend-panel, .dist-panel');
+      const canvas = figure?.querySelector('canvas');
+      if (!figure || !canvas || this.samples.length === 0) return;
       const rect = canvas.getBoundingClientRect();
-      const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      // A distribution chart keeps its time strip in the left part; the bars beside it are not a time axis.
+      const span = figure.classList.contains('dist-panel') ? rect.width * DIST_STRIP : rect.width;
+      const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / span));
       this.hoverIndex = Math.round(frac * (this.samples.length - 1));
       this.draw();
     };
@@ -448,7 +670,27 @@ export class HistoryView {
       if (e.pointerType !== 'mouse') clear();
     });
 
-    new ResizeObserver(() => this.draw()).observe(grid);
+    new ResizeObserver(() => this.draw(true)).observe(grid);
+
+    // Draw only the charts in view; one that scrolls into view is drawn then.
+    this.observer =
+      typeof IntersectionObserver === 'undefined'
+        ? null
+        : new IntersectionObserver(
+            (entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) this.onScreen.add(e.target as HTMLCanvasElement);
+                else this.onScreen.delete(e.target as HTMLCanvasElement);
+              }
+              this.draw(true);
+            },
+            { rootMargin: '120px 0px' }
+          );
+    for (const canvas of container.querySelectorAll('canvas')) this.observer?.observe(canvas);
+  }
+
+  private shouldDraw(canvas: HTMLCanvasElement): boolean {
+    return this.observer === null || this.onScreen.has(canvas);
   }
 
   private panelFigures(section: string): string {
@@ -462,6 +704,16 @@ export class HistoryView {
               </figure>`
       )
       .join('');
+  }
+
+  private distFigures(): string {
+    return DIST_PANELS.map(
+      (d) => `
+              <figure class="dist-panel">
+                <figcaption><span class="trend-label">${d.label} <span class="dist-axis">(${d.low} → ${d.high})</span></span><span class="trend-value"></span></figcaption>
+                <canvas></canvas>
+              </figure>`
+    ).join('');
   }
 
   /**
@@ -480,11 +732,24 @@ export class HistoryView {
     if (this.hoverIndex !== null && this.hoverIndex >= samples.length) {
       this.hoverIndex = null;
     }
-    this.draw();
+    // Charts move slowly: at most a few redraws a second, with the last one always delivered.
+    const wait = DRAW_MIN_MS - (performance.now() - this.lastDrawAt);
+    if (wait <= 0) this.draw();
+    else if (this.pendingDraw === null) {
+      this.pendingDraw = setTimeout(() => {
+        this.pendingDraw = null;
+        this.draw();
+      }, wait);
+    }
   }
 
-  private draw(): void {
+  /** Redraws the charts; skipped when nothing they show has changed since the last draw, unless `force`. */
+  private draw(force = false): void {
     const n = this.samples.length;
+    const key = `${n}:${n > 0 ? this.samples[n - 1].tick : -1}:${this.hoverIndex}`;
+    if (!force && key === this.drawnKey) return;
+    this.drawnKey = key;
+    this.lastDrawAt = performance.now();
     const shownIndex = this.hoverIndex ?? n - 1;
     const shown = n === 0 ? null : this.samples[shownIndex];
     const shownPrev = shownIndex > 0 ? this.samples[shownIndex - 1] : undefined;
@@ -500,8 +765,75 @@ export class HistoryView {
     }
 
     for (const panel of this.panels) {
+      if (!this.shouldDraw(panel.canvas!)) continue;
       panel.valueEl!.textContent = shown ? panel.format(shown, shownPrev) : '–';
       this.drawPanel(panel);
+    }
+    for (const dist of DIST_PANELS) this.drawDist(dist, shown, shownIndex);
+  }
+
+  /** A trait's distribution: a strip of colour over time (one row per fifth of the range) beside the shown tick's bars. */
+  private drawDist(dist: DistPanel, shown: HistorySample | null, shownIndex: number): void {
+    const canvas = dist.canvas!;
+    if (!this.shouldDraw(canvas)) return;
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (width === 0 || height === 0) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+    }
+    const ctx = canvas.getContext('2d')!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = SURFACE;
+    ctx.fillRect(0, 0, width, height);
+
+    const samples = this.samples;
+    const n = samples.length;
+    const current = shown ? binFractions(shown.bins?.[dist.trait]) : binFractions(undefined);
+    const exists = samples.some((s) => s.bins?.[dist.trait]);
+    if (!exists) {
+      ctx.fillStyle = AXIS_TEXT;
+      ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n === 0 ? 'No data yet' : 'off in this world', 8, height / 2);
+      if (dist.valueEl) dist.valueEl.textContent = 'off';
+      return;
+    }
+
+    const rowH = (height - 4) / DIST_BIN_COUNT;
+    const stripRight = Math.round(width * DIST_STRIP);
+    const barsLeft = stripRight + 8;
+    const cellW = n > 0 ? (stripRight - 2) / n : 0;
+    // The top row is the highest fifth of the range.
+    for (let i = 0; i < n; i++) {
+      const fr = binFractions(samples[i].bins?.[dist.trait]);
+      for (let b = 0; b < DIST_BIN_COUNT; b++) {
+        if (fr[b] <= 0) continue;
+        ctx.fillStyle = `${BAR_HUES} ${Math.min(1, 0.08 + 0.92 * Math.sqrt(fr[b])).toFixed(3)})`;
+        ctx.fillRect(1 + i * cellW, 2 + (DIST_BIN_COUNT - 1 - b) * rowH, Math.ceil(cellW) + 0.5, rowH - 1);
+      }
+    }
+    if (this.hoverIndex !== null && n > 0) {
+      ctx.strokeStyle = CROSSHAIR;
+      ctx.lineWidth = 1;
+      const cx = Math.round(1 + (shownIndex + 0.5) * cellW) + 0.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, height);
+      ctx.stroke();
+    }
+
+    // The shown tick's histogram, lowest fifth at the bottom, scaled to the largest bin.
+    const peak = Math.max(0.0001, ...current);
+    for (let b = 0; b < DIST_BIN_COUNT; b++) {
+      const len = (current[b] / peak) * (width - barsLeft - 2);
+      ctx.fillStyle = SERIES;
+      ctx.fillRect(barsLeft, 2 + (DIST_BIN_COUNT - 1 - b) * rowH + 1, Math.max(current[b] > 0 ? 2 : 0, len), rowH - 3);
+    }
+    if (dist.valueEl) {
+      dist.valueEl.textContent = `${current.map((f) => Math.round(f * 100)).join(' · ')} %${isSplit(current) ? ' · split' : ''}`;
     }
   }
 
@@ -528,7 +860,7 @@ export class HistoryView {
     if (!panel.fixedRange) {
       let max = 0;
       samples.forEach((s, i) => {
-        max = Math.max(max, panel.value(s, samples[i - 1]));
+        max = Math.max(max, panel.value(s, samples[i - 1]) + (panel.spread ? panel.spread(s) : 0), panel.reference ? panel.reference(s) : 0);
       });
       yMax = niceMax(max);
     }

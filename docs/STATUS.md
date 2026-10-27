@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27 (DNA Stage 3: growable brain; torpor reworked into rest efficiency)._
+_Last updated: 2026-10-27 (genome trend dashboard, Tier 1 basic physical genes, DNA Stage 3 growable brain, and carnivore efficiency)._
 
 ## Branches
 
@@ -31,7 +31,7 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 ## Life-history genes (built and merged 2026-10-26)
 
-Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate (a seventh, clutch size for matings, came with the mating rule on 2026-10-27). Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Next: watch long runs for whether the genes drift (add history charts for them), and re-gate those three alone with eggs on.
+Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate (a seventh, clutch size for matings, came with the mating rule on 2026-10-27). Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Genome trend charts built 2026-10-27 (Trends tab: life history, morphology, niche, neural topology, population histograms; colour modes Metabolism and Breeding; inspector gene dosage; `docs/decisions.md` "Genome trends"). Next: watch long runs for whether the genes drift, and re-gate those three alone with eggs on.
 
 ## Tier 1 basic physical genes (built 2026-10-27)
 
