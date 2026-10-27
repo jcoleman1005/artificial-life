@@ -1,0 +1,145 @@
+DNA Stage 3 (growable brain) gate — 2026-10-27
+================================================
+
+Gate criterion: removing acquired connections must measurably degrade fitness or survival in at least a subset of seeds.
+
+VERDICT: INCONCLUSIVE (leaning null for acquired topology proper).
+- Under the ablation as specified (strip 'all': every brain gene the growable-off decode ignores), the criterion is met in 1 of 6 testable seeds:
+  seed 2 shows a clear loss in both assays (in situ births −17 per half vs sham, 10/10 replicates, p = 0.002, the floor for 10 replicates;
+  standardized arenas 32.1 vs 10.5 births, 16 vs 3 organisms, p < 0.001). Seed 1 is suggestive only (descendants alive +29 vs sham, 9/10, p = 0.033;
+  arenas 28.3 vs 19.1 births, p = 0.12). Seeds 3, 4, 6, 7: no effect distinguishable from the sham.
+- But the 'all' strip removes far more than the acquired hidden units: 34–104 genes per cohort member, of which only 16–44 sit on units ≥ 6
+  (the rest are wrapped keys, which the growable brain folds onto the founders' existing slots, i.e. weight changes, not new topology).
+  The control ablation that removes ONLY genes on units ≥ 6 ('units', i.e. exactly the acquired units/connections) shows no reliable degrade:
+  seed 2 in situ births +6.8 vs sham (7/10, p = 0.037, not significant once the ~30 per-seed tests are counted), and in the arenas seed 2
+  goes the other way (ablated 35.7 vs intact 32.1 births, p = 0.018). Pooled across seeds every measure is null (sign-flip p ≥ 0.4).
+- So: growable-only gene expression as a whole matters in one seed, and what matters there is the re-expressed wrapped keys, not the
+  acquired hidden units. For acquired connections in the strict sense (circuit.acquiredConnections), the result is null at this sample size.
+  A null here is weak evidence of absence: cohorts are small (1–1.5 acquired units, 2.5–5 acquired connections per member), and only
+  ~30% of organisms carry any.
+
+Caveats
+- Seed 8 goes extinct with growable on (seed 6 with it off); seed 5 has a single organism with acquired topology (untestable). 6 seeds tested.
+- Ablated organisms stop paying dnaUpkeepPerConnection (0.00005 per acquired connection) and dnaUpkeepPerGene (0.00005 per removed gene):
+  at most ~0.005 energy/tick for 'all' in seed 1, ~0.002 for 'units' — small, but it biases toward the ablated half.
+- Window 500 ticks is longer than most lifespans: end-of-window survival of the original members is ~0 in 5 of 6 seeds (uninformative);
+  survival after 100 ticks (survivalEarly) is reported instead and shows no degrade (seed 1, 'all': ablated survive slightly MORE, p = 0.031,
+  consistent with them reproducing less and saving upkeep).
+- "Live" acquired units (with at least one input) are 90–100% of acquired units, but a unit whose inputs do not vary across a tick's
+  candidate actions adds the same offset to every action and cannot change an argmax choice; the assay does not separate those.
+- In the B1 design births/descendants through a mating between the two halves count for both halves.
+- 10 replicates per seed; sign-flip p-values are unadjusted. Evolution 5000 ticks only.
+- No parameters were changed to make the gate pass.
+
+Setup and commands (4 cores, --workers 4)
+- Part A: npm run experiment -- --compare dnaGrowableBrain=false,true --set dnaVariationEnabled=true --seeds 1-8 --ticks 5000 --workers 4 --json docs/experiments/dna-stage3-arms.json
+  (16.5 min wall). Output: docs/experiments/dna-stage3-arms.txt / .json.
+- Part B: npm run ablation -- --seeds 1-8 --workers 4            (defaults: --ticks 5000 --replicates 10 --window 500 --early 100 --sample 40 --arenas 4 --arena-window 200 --level all; 25 min)
+          npm run ablation -- --seeds 1-8 --workers 4 --level units --out docs/experiments/dna-stage3-ablation-units   (27 min)
+  Output: docs/experiments/dna-stage3-ablation.txt / .json, docs/experiments/dna-stage3-ablation-units.txt / .json.
+  Script: scripts/ablation.ts (npm run ablation). Evolved worlds are bit-for-bit the Part A growable-on worlds (same seed and config; topology counts match).
+  Each B1 replicate restores the world via exportState → JSON → fromState with the replicate's own random stream; ablation and sham share the split and stream.
+  Ablated genomes were checked per member: decode to the same dense brain and traits, circuit with 0 acquired units/connections, and are what children inherit (0 inconsistent).
+- Part C: npm run perf (14.7 min wall, run alone).
+
+Part A arm comparison (growable off vs on, both with dnaVariationEnabled; 8 seeds × 5000 ticks)
+Full summary: docs/experiments/dna-stage3-arms.txt. The experiment ship-on check prints FAIL (avgPop median ratio 0.92 ok, leanLow 0.75 ok, new extinction in seed 8); seed 6 is extinct only with growable off.
+
+Per seed (false | true):
+seed | extinct | finalPop | avgPop | leanLow | births | genome length | topo acq units | topo acq conns | topo conns | with acquired %
+--- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+1 | 0 / 0 | 570 / 247 | 535 / 232 | 475 / 111 | 16750 / 25475 | 474 / 629 | 0.21 | 0.96 | 297 | 18.2
+2 | 0 / 0 | 911 / 520 | 612 / 551 | 487 / 453 | 19213 / 19024 | 447 / 470 | 0.20 | 0.54 | 293 | 19.6
+3 | 0 / 0 | 548 / 641 | 495 / 465 | 434 / 327 | 15738 / 13056 | 469 / 474 | 0.05 | 0.12 | 300 | 4.7
+4 | 0 / 0 | 91 / 102 | 424 / 285 | 293 / 213 | 23540 / 31912 | 505 / 537 | 1.06 | 4.30 | 259 | 100.0
+5 | 0 / 0 | 366 / 355 | 365 / 455 | 169 / 364 | 15514 / 23235 | 475 / 489 | 0.00 | 0.01 | 312 | 0.3
+6 | 1 / 0 | 0 / 584 | 12 / 440 | 0 / 293 | 583 / 24568 | - / 508 | 0.62 | 1.47 | 307 | 51.4
+7 | 0 / 0 | 544 / 692 | 535 / 520 | 467 / 471 | 15876 / 13444 | 464 / 471 | 0.37 | 1.22 | 319 | 25.0
+8 | 0 / 1 | 423 / 0 | 326 / 66 | 143 / 22 | 13556 / 2029 | 488 / - | 0.00 | 0.00 | 0 | 0.0
+
+Survivor-averaged (mean over seeds where that arm is alive at 5000 ticks):
+metric | growable off (7 survivors; seed 6 extinct) | growable on (7 survivors; seed 8 extinct)
+--- | --- | ---
+finalPop | 493.29 | 448.71
+avgPop | 470.48 | 421.01
+leanLow | 352.57 | 318.66
+births | 17169.57 | 21530.57
+genes.mean | 474.38 | 511.16
+topo.acquiredUnits | 0.00 | 0.36
+topo.acquiredConnections | 0.00 | 1.23
+topo.connections | 0.00 | 298.20
+topo.withAcquired% | 0.00 | 31.31
+
+Seeds alive in both arms (1,2,3,4,5,7): median per-seed ratio on/off
+avgPop: median ratio 0.92, on higher in 1/6
+finalPop: median ratio 1.05, on higher in 3/6
+leanLow: median ratio 0.84, on higher in 2/6
+births: median ratio 1.17, on higher in 3/6
+genes.mean: median ratio 1.04, on higher in 6/6
+
+Topology statistics (growable on, tick 5000)
+- Part A (all living organisms; experiment topo.*): 7 of 8 seeds evolved acquired units (seed 8 extinct). Survivor mean: acquired units 0.36,
+  acquired connections 1.23, total connections 298 per organism; 31% of organisms carry acquired topology (per seed 0.3%–100%).
+- Cohorts (organisms with acquired connections > 0; every organism with an acquired unit had acquired connections):
+
+seed | pop | cohort | acq units/member | acq conns/member | conns/member | acquired units live / constant / folded | genes removed 'all' | genes removed 'units' (on units ≥ 6) | wrapped-key genes (difference)
+--- | --- | --- | --- | --- | --- | --- | --- | --- | ---
+1 | 247 | 45 | 1.16 | 5.24 | 290 | 52 / 0 / 0 | 103.5 | 44.4 | 59.1
+2 | 520 | 102 | 1.04 | 2.75 | 318 | 106 / 0 / 0 | 33.8 | 15.6 | 18.2
+3 | 641 | 30 | 1.00 | 2.47 | 279 | 27 / 3 / 0 | 41.0 | 19.0 | 22.0
+4 | 102 | 102 | 1.06 | 4.30 | 259 | 108 / 0 / 0 | 83.0 | 37.5 | 45.5
+5 | 355 | 1 | 1.00 | 4.00 | 341 | 1 / 0 / 0 | 26.0 | 14.0 | 12.0  (untestable: cohort of 1)
+6 | 584 | 300 | 1.20 | 2.85 | 296 | 339 / 22 / 0 | 53.4 | 19.1 | 34.3
+7 | 692 | 173 | 1.47 | 4.87 | 335 | 253 / 2 / 0 | 32.8 | 19.1 | 13.7
+8 | extinct | - | - | - | - | - | - | - | -
+
+  live = evaluated unit with ≥ 1 input; constant = kept as out·tanh(bias) entry; folded = folded into the output bias.
+  Acquired units are mostly single extra units (1.0–1.5 per member). Genes on units ≥ 6 outnumber the expressed acquired connections
+  (e.g. seed 2: 15.6 genes vs 2.75 connections), i.e. most such genes do not become expressed connections (a unit without an out weight is pruned with its inputs; several genes can share one slot).
+
+B1 in situ ablation (10 replicates × 500 ticks; effect = (intact − ablated) − sham, paired by replicate; + = ablation hurt; p = exact sign-flip)
+
+Level 'all' (as specified):
+seed | births effect (>0, p) | descendants alive effect (>0, p) | mean energy effect (>0, p) | survival@100 effect (>0, p)
+--- | --- | --- | --- | ---
+1 | +2.5 ± 7.8 (4/10, 0.39) | +28.9 ± 33.0 (9/10, 0.033) | −0.32 ± 0.90 (3/10, 0.28) | −0.064 ± 0.065 (1/10, 0.031)
+2 | +17.2 ± 7.9 (10/10, 0.002) | +20.8 ± 53.2 (6/10, 0.28) | −1.96 ± 1.60 (0/10, 0.002) | −0.024 ± 0.074 (3/10, 0.40)
+3 | −0.7 ± 3.7 (4/10, 0.61) | +26.6 ± 62.1 (4/10, 0.25) | +0.27 ± 2.19 (5/10, 0.70) | +0.107 ± 0.265 (5/10, 0.28)
+4 | −5.2 ± 11.3 (2/10, 0.19) | +6.2 ± 81.5 (5/10, 0.81) | −0.10 ± 0.55 (4/10, 0.57) | +0.012 ± 0.034 (6/10, 0.37)
+6 | +14.5 ± 23.3 (7/10, 0.082) | −9.6 ± 60.3 (3/10, 0.65) | +0.93 ± 1.38 (7/10, 0.063) | +0.038 ± 0.085 (5/10, 0.20)
+7 | +0.8 ± 12.1 (6/10, 0.86) | −11.2 ± 50.7 (4/10, 0.52) | −0.30 ± 2.18 (5/10, 0.66) | −0.007 ± 0.029 (2/10, 0.54)
+Across seeds (standardized by sham sd): births 4/6 seeds > 0, p = 0.34; descendants 4/6, p = 0.22; energy 2/6, p = 0.59; survival@100 3/6, p = 0.97.
+Sham baseline (intact − ablated label, no ablation), births: seed 1 −2.1 ± 8.6, 2 −3.5 ± 8.4, 3 +1.8 ± 3.7, 4 −0.2 ± 13.1, 6 −8.1 ± 14.7, 7 +8.5 ± 15.7.
+Seed 2 reading: the ablated half has MORE energy (−1.96) and fewer births: ablated organisms reproduce less, not starve.
+
+Level 'units' (only genes on units ≥ 6 removed; the acquired-topology control):
+seed | births effect (>0, p) | descendants alive effect (>0, p) | mean energy effect (>0, p) | survival@100 effect (>0, p)
+--- | --- | --- | --- | ---
+1 | +0.6 ± 8.7 (5/10, 0.86) | +3.1 ± 25.6 (5/10, 0.73) | +0.09 ± 0.75 (5/10, 0.72) | −0.032 ± 0.037 (1/10, 0.063)
+2 | +6.8 ± 7.9 (7/10, 0.037) | +7.2 ± 55.0 (5/10, 0.68) | +0.36 ± 0.77 (6/10, 0.19) | +0.006 ± 0.068 (5/10, 0.86)
+3 | −1.3 ± 4.6 (3/10, 0.46) | +16.5 ± 45.3 (5/10, 0.29) | +0.39 ± 2.46 (5/10, 0.60) | +0.053 ± 0.308 (7/10, 0.64)
+4 | +0.7 ± 18.9 (4/10, 0.94) | −6.3 ± 83.0 (5/10, 0.82) | −0.02 ± 0.82 (6/10, 0.95) | +0.004 ± 0.047 (6/10, 0.90)
+6 | −4.0 ± 22.1 (3/10, 0.60) | −0.8 ± 42.0 (6/10, 0.98) | −0.13 ± 2.27 (5/10, 0.86) | −0.015 ± 0.089 (3/10, 0.63)
+7 | −0.1 ± 15.1 (4/10, 1.00) | −10.8 ± 60.4 (4/10, 0.58) | −0.06 ± 1.89 (6/10, 0.91) | −0.005 ± 0.033 (3/10, 0.73)
+Across seeds: births 3/6, p = 0.81; descendants 3/6, p = 0.41; energy 3/6, p = 0.41; survival@100 3/6, p = 0.63.
+
+B2 standardized arenas (≤ 40 cohort organisms per seed, alone in 4 fixed 24×24 arenas × 200 ticks, mutation off; births of the founder's line)
+seed | n | 'all': intact vs ablated births | intact>ablated / ablated>intact | p | 'units': ablated births | intact>ablated / ablated>intact | p
+--- | --- | --- | --- | --- | --- | --- | ---
+1 | 40 | 28.3 vs 19.1 | 13 / 6 | 0.12 | 25.8 | 13 / 6 | 0.22
+2 | 40 | 32.1 vs 10.5 | 16 / 3 | <0.001 | 35.7 | 7 / 12 | 0.018 (ablated better)
+3 | 30 | 48.0 vs 49.7 | 5 / 8 | 0.47 | 47.5 | 8 / 5 | 0.88
+4 | 40 | 15.0 vs 12.5 | 12 / 6 | 0.33 | 12.7 | 10 / 5 | 0.21
+6 | 40 | 57.2 vs 54.3 | 12 / 8 | 0.35 | 54.8 | 11 / 9 | 0.23
+7 | 40 | 79.4 vs 80.4 | 7 / 11 | 0.66 | 79.4 | 6 / 9 | 1.00
+ALL | 230 | diff +5.9 ± 25.8 | 65 / 42 | 0.001 | diff +0.7 ± 11.3 | 55 / 46 | 0.36
+(Pooled 'all' result is carried by seed 2. Founder alive share: 'all' seed 2 ablated founders live longer, −0.116, p < 0.001 — the intact ones spend energy on births.)
+
+Perf (npm run perf, 3000 ticks, seed 42, run alone on the 4-core machine)
+dials: 31.25 ms/tick avg, 56.9 µs per organism, at peak pop 777: 38.2 ms
+brain: 51.11 ms/tick avg, 98.0 µs per organism, at peak pop 861: 105.7 ms
+brain + DNA: 52.12 ms/tick avg, 99.9 µs per organism, at peak pop 861: 97.1 ms
+brain + DNA + variation: 58.78 ms/tick avg, 106.8 µs per organism, at peak pop 840: 80.8 ms
+brain + growable: 49.95 ms/tick avg, 106.9 µs per organism, at peak pop 695: 62.6 ms
+Per organism-tick the growable brain costs the same as DNA + variation (106.9 vs 106.8 µs); its lower ms/tick is a smaller population.
+Part A's usPerOrganismTick (concurrent workers, noisier): 103 off vs 110 on (+7%).

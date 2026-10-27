@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27 (mating rule and clutch gene)._
+_Last updated: 2026-10-27 (DNA Stage 3: growable brain)._
 
 ## Branches
 
@@ -42,6 +42,8 @@ Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled
 **Mating rule and clutch gene (2026-10-27):** a mating needs both parents at their own threshold; each pays own energy × own investment plus the tax; the carrier's clutch gene (trait 46, `clutchGeneEnabled`, on, founders 1, 1–6) sets how many children share the two shares; below `minViableChildEnergy` (10) per child the clutch fails and the energy is lost (Stats → Matings counts failed clutches and lost children). Matings lay no eggs. Unmeasured: the mating experiment (`docs/experiments/sex.txt`) predates DNA, the life-history genes and this rule.
 
 **Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. (Seeds 1 and 8 are left out because they go extinct early; see below.)
+
+**Stage 3 (growable brain) built 2026-10-27, merged with the switch off** (`dnaGrowableBrain`, off; `dnaMaxInternal` 16; `dnaUpkeepPerConnection` 0.00005; spec `docs/specs/dna.md`, Stage 3; tests `tests/dna-brain-growable.test.ts`): brain genes compile into a sparse circuit with up to 16 hidden units; fingerprint unchanged; with Stage 2 off the switch is bit-identical. Gate (`docs/experiments/dna-stage3-gate.txt`): **inconclusive, leaning null**: acquired units evolve in 7/8 seeds, but removing only them degrades nothing reliably; the one clear effect (seed 2) comes from wrapped keys re-expressed on founder connections. **Awaiting the user's sign-off before Stage 4.** Open choices for the user: keep wrapped keys silent so the switch only adds topology; longer runs (15k+) or the server for larger cohorts; an assay that skips units whose input is the same for every action. Ablation tool: `npm run ablation -- --seeds 1-8 --workers 4 [--level all|units]`.
 
 Urgent: 5 of 8 default worlds go extinct (4 in an early lean season, seed 1 by tick ~800), with or without DNA (`docs/findings.md`). Gates now report `extinct` and average traits over survivors.
 
