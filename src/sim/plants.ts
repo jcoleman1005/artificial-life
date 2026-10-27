@@ -199,6 +199,8 @@ export interface PlantStepContext {
   readonly regionLean: readonly boolean[];
   readonly worldLean: boolean;
   readonly counters: PlantCounters;
+  /** Overgrazing: cell health per cell, scaling growth (absent: no scaling). */
+  readonly health?: Float32Array;
 }
 
 /** Whether a seed can take root here: on the grid, fertile, no obstacle and no plant or other food. */
@@ -263,7 +265,8 @@ export function stepPlants(ctx: PlantStepContext): void {
       field.fertility[index] *
       (lean ? lightLean : 1) *
       Math.max(0, 1 - config.shadeStrength * shade) *
-      (1 - dormancy);
+      (1 - dormancy) *
+      (ctx.health ? ctx.health[index] : 1);
     const upkeep =
       (config.plantUpkeep * size + config.growthCostFactor * g.growthRate * vigour) *
       (1 - DORMANCY_SAVING * dormancy);

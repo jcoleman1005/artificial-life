@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-26._
+_Last updated: 2026-10-27._
 
 ## Branches
 
@@ -40,6 +40,10 @@ Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled
 **Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. (Seeds 1 and 8 are left out because they go extinct early; see below.)
 
 Urgent: 5 of 8 default worlds go extinct (4 in an early lean season, seed 1 by tick ~800), with or without DNA (`docs/findings.md`). Gates now report `extinct` and average traits over survivors.
+
+## World changes (WORLD_RULES.md)
+
+- **Overgrazing** built 2026-10-26 (`overgrazingEnabled`, **off**: it failed the ship-on gate, B avgPop 0.61 / leanLow 0.22 of off; see `docs/findings.md`). Switch off reproduces the default fingerprint exactly (switch-on values under Known issues, fingerprint); overlay `Cell health`; `npm run sweep:overgrazing`; `npm run experiment -- --arm name=k:v,k:v` for multi-key arms; standard diagnostics are in the experiment output. Its gate ran before the life-history genes (now on by default; e.g. fat lets organisms keep biting at full energy), so rerun it before deciding. Next: decide whether to try a softer setting or leave it off.
 
 ## Latest findings (details and all other results in `docs/findings.md`)
 
@@ -108,5 +112,6 @@ There is no target outcome: new features go in on by default and the world is le
 - Fingerprint (2026-10-26; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500 (dials 831, brain 390). Identical with `dnaEnabled=false`. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds:
   `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`
   With the six life-history genes on (default; the hash also covers their state): `large dials 7b57d1d02fc2951e · large brain 542f52ae3400dbe6` (pop 570 / 503). With all six switched off the hashes above are reproduced exactly.
+  Overgrazing ships off, so these are unchanged by it. With `overgrazingEnabled=true` and the other defaults (life-history genes on; the hash also covers cell health): `large dials 265280e9ef82d016 · large brain 912f5781fb244660` (pop 400 / 289, births 3196 / 1357; rechecked 2026-10-27 at the merge of main into the overgrazing branch).
 - `npm run verify` on a 4-core container: the long plants run used to block its vitest worker long enough to fail verify ("Timeout calling onTaskUpdate"). Fixed 2026-10-27: it yields to the event loop every 100 ticks, and the short plants-off test has a 60 s timeout; same assertions. If the mobility runs start doing the same, give them the same treatment.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

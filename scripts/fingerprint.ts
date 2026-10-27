@@ -36,6 +36,7 @@ for (const [name, overrides] of Object.entries(worlds)) {
           h.update(JSON.stringify(life.map((o) => [o.id, o.reproThreshold, o.investment, o.fatCapacity, o.fat, o.torporDepth, o.torpor, o.eggRate, o.metabolicRate, o.nextBirthTick])));
           h.update(JSON.stringify(Array.from(w.eggs.values()).map((e) => [e.child.id, e.x, e.y, e.laidTick, e.child.energy])));
         }
+        if (w.cellHealth) h.update(JSON.stringify(w.cellHealth.exportState())); // overgrazing state, only while it is on
       }
     }
     out.push(`${name} ${controller}: ${h.digest('hex').slice(0, 16)} pop ${w.organisms.size} births ${w.birthsTotal}`);

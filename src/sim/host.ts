@@ -290,7 +290,7 @@ export class SimulationHost {
       metrics,
       selected: (viewer.selectedId && this.world.getOrganism(viewer.selectedId)) || null,
       ...(viewer.wantsHistory ? { history: this.world.history.getSamples() } : {}),
-      ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap) } } : {}),
+      ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap, this.world) } } : {}),
     };
     return { ...base, panels };
   }
