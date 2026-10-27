@@ -76,6 +76,9 @@ export interface HistorySample {
   readonly matingsTotal?: number;
   readonly matingsAlikeTotal?: number;
   readonly matingsOfStrangersTotal?: number;
+  /** Children of mating born, and matings whose clutch failed (absent before clutches). */
+  readonly matingChildrenTotal?: number;
+  readonly clutchesFailedTotal?: number;
   /** Plants (absent when plants are off, and in samples from before plants). */
   readonly plants?: PlantSample;
 }
@@ -213,6 +216,8 @@ export class MetricsHistory {
       matingsTotal: metrics.matingsTotal,
       matingsAlikeTotal: metrics.matingsAlikeTotal,
       matingsOfStrangersTotal: metrics.matingsOfStrangersTotal,
+      matingChildrenTotal: metrics.matingChildrenTotal,
+      clutchesFailedTotal: metrics.clutchesFailedTotal,
       ...(metrics.plants
         ? {
             plants: {
@@ -277,6 +282,8 @@ export class MetricsHistory {
       'matings_total',
       'matings_alike_total',
       'matings_of_strangers_total',
+      'mating_children_total',
+      'clutches_failed_total',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
       'plants',
       'plant_edible_biomass',
@@ -328,6 +335,8 @@ export class MetricsHistory {
         s.matingsTotal ?? 0,
         s.matingsAlikeTotal ?? 0,
         s.matingsOfStrangersTotal ?? 0,
+        s.matingChildrenTotal ?? s.matingsTotal ?? 0,
+        s.clutchesFailedTotal ?? 0,
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

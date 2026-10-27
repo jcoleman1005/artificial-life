@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27._
+_Last updated: 2026-10-27 (mating rule and clutch gene)._
 
 ## Branches
 
@@ -31,13 +31,15 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 ## Life-history genes (built and merged 2026-10-26)
 
-Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate. Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Next: watch long runs for whether the genes drift (add history charts for them), and re-gate those three alone with eggs on.
+Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate (a seventh, clutch size for matings, came with the mating rule on 2026-10-27). Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Next: watch long runs for whether the genes drift (add history charts for them), and re-gate those three alone with eggs on.
 
 ## In progress: DNA (2026-10-26)
 
 Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled`; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain (not the dials) are decoded from a genome, bit-identical to a legacy world. Stage 1b is built as two toggles, off by default, with gates in `docs/experiments/dna-1b*.txt` (continuous abilities: met; split diets: plant eaters met, meat eaters not yet seen in 3,000 ticks). Both await the user's review of their gates; meanwhile Stage 2 was built on top (below).
 
 **Mating with genomes (2026-10-26):** a child of mating gets its genome by crossing its parents' genomes by key (each key's copies, or a whole hidden brain unit, from one parent), then the clone's mutation path, capped at `dnaMaxGenes` (`docs/specs/dna.md`, Sexual reproduction). Not yet measured: the branch's mating experiment ran before DNA.
+
+**Mating rule and clutch gene (2026-10-27):** a mating needs both parents at their own threshold; each pays own energy × own investment plus the tax; the carrier's clutch gene (trait 46, `clutchGeneEnabled`, on, founders 1, 1–6) sets how many children share the two shares; below `minViableChildEnergy` (10) per child the clutch fails and the energy is lost (Stats → Matings counts failed clutches and lost children). Matings lay no eggs. Unmeasured: the mating experiment (`docs/experiments/sex.txt`) predates DNA, the life-history genes and this rule.
 
 **Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. (Seeds 1 and 8 are left out because they go extinct early; see below.)
 
@@ -52,7 +54,7 @@ Urgent: 5 of 8 default worlds go extinct (4 in an early lean season, seed 1 by t
 - Squeezing past other organisms is what solved crowding (blocked moves 49.5% → 5.1%).
 - Signals have not evolved any meaning, even over 50,000 ticks, and windfalls did not give them a job.
 - Staggered region seasons raised lean-season lows about 2.5×.
-- Mating (2026-10-26, 6 seeds × 15k, before DNA): used in every surviving world (0.1–24% of births), no colour choosiness, parent–child pairs 2–3× chance; population lower with sex on, cause unclear.
+- Mating (2026-10-26, 6 seeds × 15k, before DNA, the life-history genes and the 2026-10-27 mating rule): used in every surviving world (0.1–24% of births), no colour choosiness, parent–child pairs 2–3× chance; population lower with sex on, cause unclear.
 - Carrion/predation: scavenging pays at once, hunting takes off in some worlds in waves. Plants vs classic food: same population, faster turnover.
 - Findings predate the 2026-10-25 region layout; rerun before relying on exact numbers.
 
@@ -112,11 +114,13 @@ There is no target outcome: new features go in on by default and the world is le
 
 - Boom-bust cycles are sharp. `leanSlowdown` (8) is the main knob if they prove too harsh.
 - Plants on the merged world cost organisms more per tick than classic food (brain, this container: ~73 vs ~51 µs per organism), mostly in sensing denser crowds; the plant update itself is ~2% of the time. Check `npm run perf` on the S21.
-- Fingerprint (2026-10-26, after mating merged; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500 (dials 460, brain 616). Identical with `dnaEnabled=false`:
-  `large dials c51ecae8de0bdec2 · large brain 9ec109d2b13d06ad`
-  With `--set sexEnabled=false`: `large dials c51ecae8de0bdec2 · large brain 434963fe33ba72a1`. This is not the pre-mating value below: the five appended brain inputs add PRNG draws (30 more hidden weights per founder brain, 35 more per-gene mutation rolls per birth), so every world's random stream shifts. Main with five zero-valued inputs appended gives exactly this sexEnabled=false output, so the inputs, not mating, account for the difference. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds. Before mating (main at d466b28; dials 831, brain 390):
-  `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`
-  With the six life-history genes on (default; the hash also covers their state): `large dials 7b57d1d02fc2951e · large brain 542f52ae3400dbe6` (pop 570 / 503). With all six switched off the hashes above are reproduced exactly.
-  Overgrazing ships off, so these are unchanged by it. With `overgrazingEnabled=true` and the other defaults (life-history genes on; the hash also covers cell health): `large dials 265280e9ef82d016 · large brain 912f5781fb244660` (pop 400 / 289, births 3196 / 1357; rechecked 2026-10-27 at the merge of main into the overgrazing branch).
-- `npm run verify` on a 4-core container: the long plants run used to block its vitest worker long enough to fail verify ("Timeout calling onTaskUpdate"). Fixed 2026-10-27: it yields to the event loop every 100 ticks, and the short plants-off test has a 60 s timeout; same assertions. If the mobility runs start doing the same, give them the same treatment.
+- Fingerprint (2026-10-27, mating with the clutch rule merged onto main 22568b4; record a new one at each world-change merge): default 60×60 world, seed `'2'`, no immigration, both controllers alive at tick 1500. Default (life-history genes, clutch gene and mating on; identical with `dnaEnabled=false`):
+  `large dials 3fa33dea90586dc6 · large brain 9936b113220393eb` (pop 520 / 490, births 2614 / 3358)
+  - `--set clutchGeneEnabled=false`: `large dials a675c39e63a44fae · large brain 0e608eeb54d8c786`. The dials never mate, so the clutch gene's only effect on them is its mutation roll at every birth: without it they match main plus the five brain inputs (below). The brain differs because matings still happen under the new rule.
+  - `--set sexEnabled=false`: `large dials 3fa33dea90586dc6 · large brain 43d84c0b93c90c98`. The clutch gene is still carried and mutated (one roll per birth) though nothing reads it.
+  - `--set sexEnabled=false --set clutchGeneEnabled=false`: `large dials a675c39e63a44fae · large brain e0598e82ea0aa1a5`, exactly main 22568b4 with five zero-valued brain inputs appended. So everything from main's baseline below to this line comes from the five appended inputs (their extra PRNG draws: 30 more hidden weights per founder brain, 35 more per-gene mutation rolls per birth), and nothing else.
+  - Main 22568b4 before mating (life-history genes on; the hash also covers their state): `large dials 7b57d1d02fc2951e · large brain 542f52ae3400dbe6` (pop 570 / 503). With all six life-history switches off, main reproduces the older `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`.
+  - Overgrazing ships off. Its switch-on values (`large dials 265280e9ef82d016 · large brain 912f5781fb244660`, pop 400 / 289) were measured on main before mating merged; recheck them.
+  The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds.
+- `npm run verify` on a 4-core container: the long plants run used to block its vitest worker long enough to fail verify ("Timeout calling onTaskUpdate"). Fixed 2026-10-27: it yields to the event loop every 100 ticks, and the short plants-off test has a 60 s timeout; same assertions. Since 2026-10-27 the long mobility run and the stateHash round trip (genes.test) do the same, with 180 s timeouts, as mating made their worlds slower; same assertions.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

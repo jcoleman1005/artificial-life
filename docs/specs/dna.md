@@ -19,7 +19,7 @@ Code: `src/sim/dna.ts`; tests: `tests/dna.test.ts`.
 | register weights (`memoryWeights`, 30) | traits 10–39 | 0 | Σ dose |
 | brain weights (skip 52, hidden 6 × 52, hidden bias 6, out 6, out bias 1) | brain gene classes 1–5 | 0 (no connection) | Σ dose |
 
-Trait 8 is herbivory (split diets only); 9 is reserved. Traits 40–45 are the life-history genes (reproduction threshold, investment, fat capacity, torpor depth, egg rate, metabolic rate; `docs/decisions.md`, `src/sim/lifehistory.ts`): present in a genome only while their switch is on, decoded to their starting value if a switch is on and the gene is missing, and clamped to their bounds. Not in the genome: the policy dials (decided 2026-10-26: they stay outside, inherited directly, so DNA covers the brain controller and the body), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
+Trait 8 is herbivory (split diets only); 9 is reserved. Traits 40–46 are the life-history genes (reproduction threshold, investment, fat capacity, torpor depth, egg rate, metabolic rate, clutch size; `docs/decisions.md`, `src/sim/lifehistory.ts`): present in a genome only while their switch is on, decoded to their starting value if a switch is on and the gene is missing, and clamped to their bounds. Not in the genome: the policy dials (decided 2026-10-26: they stay outside, inherited directly, so DNA covers the brain controller and the body), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
 
 ### Format
 
@@ -76,6 +76,8 @@ Mating (`sexEnabled`; see `docs/decisions.md`, Mating) makes a child from two pa
 - **Parents without a genome** (DNA switched on mid-run, or split diets switched on) are encoded on the spot, as for clones.
 - **Not in the genome:** the policy dials are mixed per dial (each dial whole from one parent), then mutate as for clones. PRNG order for a child of mating: dial picks, dial mutation, genome group picks, genome mutation.
 - **DNA off:** the phenotype recombination (`recombine` in `src/sim/sex.ts`) is kept: each trait whole from one parent, a hidden unit as one gene, then legacy inheritance. Its picks are drawn in genome order, so with Stage 2 off a DNA world and a legacy world stay bit-identical with mating too (tested; fingerprint identical with `dnaEnabled=false`). With Stage 2 on, genomes differ in layout and the two no longer match, as for clones.
+
+Mating rule (2026-10-27; `docs/decisions.md`, Mating rule): a mating can make a clutch of several children (the carrier's clutch gene, trait 46). Each child is a separate crossover: its own dial picks, its own genome group picks, its own mutation and cap, so siblings differ. Life-history genes (traits 40–46) are trait genes like any other, so they cross by key too (tested).
 
 Brain inputs: mating appended five inputs (`isMate`, `mateFullness`, `mateAlike`, `mateFamily`, `mateReady`; 47 → 52). Hidden gene indices are `(unit << 8) | input`, so every older gene keeps its meaning; a genome or save without genes for the new inputs decodes them as no connection, and `upgradeGenome` adds head-start direct-connection genes for inputs past the save's input count (`upgradeBrain` does the same for saved brains).
 

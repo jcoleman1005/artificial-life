@@ -29,6 +29,7 @@ describe('Default world', () => {
       dnaContinuousAbilities: DEFAULT_CONFIG.dnaContinuousAbilities,
       dnaSplitDiets: DEFAULT_CONFIG.dnaSplitDiets,
       dnaVariationEnabled: DEFAULT_CONFIG.dnaVariationEnabled,
+      clutchGeneEnabled: DEFAULT_CONFIG.clutchGeneEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -51,6 +52,8 @@ describe('Default world', () => {
       dnaContinuousAbilities: false,
       dnaSplitDiets: false,
       dnaVariationEnabled: false,
+      // The clutch gene (matings only) is a new feature, on by default.
+      clutchGeneEnabled: true,
     });
   });
 

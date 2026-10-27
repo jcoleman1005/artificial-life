@@ -13,12 +13,14 @@ import type { Organism, SimulationConfig } from './types';
  * - torpor:     deeper saves more upkeep but wakes more slowly and costs energy to wake.
  * - eggs:       extra energy to lay, a decay chance, and a hatchling smaller than the egg.
  * - metabolism: a fast rate pays more upkeep and breeds sooner; a slow one pays less and waits longer.
+ * - clutch:     children per mating (matings only); the pair's energy is split among them, and a
+ *               clutch too poor to be viable fails (minViableChildEnergy).
  *
  * With a switch off the organism carries no such field and the world's old
  * fixed value applies, so the world is bit-identical to one without the gene.
  */
 
-export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggRate' | 'metabolicRate';
+export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggRate' | 'metabolicRate' | 'clutchSize';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -87,6 +89,16 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.metabolismMin,
     max: (c) => c.metabolismMax,
   },
+  {
+    // Children per mating; founders 1, so the gene alone changes nothing at the start. Cloning ignores it.
+    field: 'clutchSize',
+    traitId: 46,
+    enabled: (c) => c.clutchGeneEnabled,
+    founder: () => 1,
+    step: (c) => c.clutchStep,
+    min: (c) => c.clutchMin,
+    max: (c) => c.clutchMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -154,6 +166,10 @@ export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold'>>, c: Re
 
 export const investmentOf = (o: Readonly<Pick<Organism, 'investment'>>, c: Readonly<SimulationConfig>): number =>
   o.investment ?? c.reproductionEnergyFraction;
+
+/** Children per mating: the clutch gene rounded, at least 1; 1 without the gene. */
+export const clutchSizeOf = (o: Readonly<Pick<Organism, 'clutchSize'>>, c: Readonly<SimulationConfig>): number =>
+  c.clutchGeneEnabled ? Math.max(1, Math.round(o.clutchSize ?? 1)) : 1;
 
 export const metabolicRateOf = (o: Readonly<Pick<Organism, 'metabolicRate'>>, c: Readonly<SimulationConfig>): number =>
   c.metabolismGeneEnabled ? (o.metabolicRate ?? 1) : 1;

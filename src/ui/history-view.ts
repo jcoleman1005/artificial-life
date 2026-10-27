@@ -93,7 +93,9 @@ function strangerKillShare(s: HistorySample, prev?: HistorySample): number {
 function sexualBirthShare(s: HistorySample, prev?: HistorySample): number {
   if (!prev) return 0;
   const births = s.birthsTotal - prev.birthsTotal;
-  return births > 0 ? ((s.matingsTotal ?? 0) - (prev.matingsTotal ?? 0)) / births : 0;
+  // Samples from before clutches counted one child per mating.
+  const children = (x: HistorySample) => x.matingChildrenTotal ?? x.matingsTotal ?? 0;
+  return births > 0 ? (children(s) - children(prev)) / births : 0;
 }
 function alikeMatingShare(s: HistorySample, prev?: HistorySample): number {
   if (!prev) return 0;

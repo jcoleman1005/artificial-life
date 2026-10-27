@@ -50,6 +50,8 @@ import {
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import {
   birthCooldownOf,
+  clutchSizeOf,
+  thresholdOf,
   fatRoom,
   founderLife,
   inheritLife,
@@ -140,6 +142,10 @@ const WORLD_COUNTERS = [
   'matingsAlikeTotal',
   'matingsOfStrangersTotal',
   'matingsInFamilyTotal',
+  'matingChildrenTotal',
+  'clutchesFailedTotal',
+  'matingChildrenLostTotal',
+  'matingEnergyLostTotal',
   'carrionEatenTotal',
   'carrionUnitsRotted',
   'eggsLaidTotal',
@@ -192,6 +198,11 @@ export class World {
   public matingsAlikeTotal = 0;
   public matingsOfStrangersTotal = 0;
   public matingsInFamilyTotal = 0;
+  /** Children of mating born; clutches that failed the viability gate; children of mating not born, and the energy paid for them. */
+  public matingChildrenTotal = 0;
+  public clutchesFailedTotal = 0;
+  public matingChildrenLostTotal = 0;
+  public matingEnergyLostTotal = 0;
   public carrionEatenTotal = 0;
   public carrionUnitsRotted = 0;
   /** Eggs laid, hatched and failed so far. */
@@ -247,6 +258,10 @@ export class World {
     this.matingsAlikeTotal = 0;
     this.matingsOfStrangersTotal = 0;
     this.matingsInFamilyTotal = 0;
+    this.matingChildrenTotal = 0;
+    this.clutchesFailedTotal = 0;
+    this.matingChildrenLostTotal = 0;
+    this.matingEnergyLostTotal = 0;
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
     this.eggsLaidTotal = 0;
@@ -1358,17 +1373,28 @@ export class World {
   }
 
   /**
-   * Two organisms that asked each other this tick make one child. Each pays
-   * half the share of its energy a clone would get (reproductionEnergyFraction / 2)
-   * plus the reproduction tax, and the child gets both halves. It is born
-   * next to one parent picked at random (the other if that one has no free
-   * cell), dispersing as that parent's children do. Returns false, charging
-   * nothing, when either can't afford it or there is no room.
+   * Two organisms that asked each other this tick mate (docs/decisions.md,
+   * Mating). Consent: each must be at its own reproduction threshold and past
+   * its own birth cooldown, or nothing happens. The children are born next to
+   * one parent, the carrier, picked at random (the other if that one has no
+   * free cell; if neither has one, nothing happens). Each parent then pays
+   * its own share, floor(own energy × own investment), plus the birth tax.
+   * The carrier's clutch gene sets how many children share the two shares
+   * equally. If that is below minViableChildEnergy the clutch fails: both
+   * still pay and the energy is lost. Otherwise each child gets its own
+   * crossover and mutation and is placed like a clone's child (dispersing as
+   * the carrier's do); a child with no free cell left is not born and its
+   * energy is lost. Matings never lay eggs. Returns false when nothing
+   * happened.
    */
   private mate(a: Organism, b: Organism, blocked: Set<string>, newBorns: Organism[]): boolean {
-    const { reproductionEnergyFraction, reproductionMetabolismTax: tax } = this.config;
-    const shareA = Math.floor((a.energy * reproductionEnergyFraction) / 2);
-    const shareB = Math.floor((b.energy * reproductionEnergyFraction) / 2);
+    const { config } = this;
+    const tax = config.reproductionMetabolismTax;
+    const ready = (o: Organism) => o.energy >= thresholdOf(o, config) && this.tick >= (o.nextBirthTick ?? 0);
+    if (!ready(a) || !ready(b)) return false;
+    const share = (o: Organism) => Math.floor(o.energy * investmentOf(o, config));
+    const shareA = share(a);
+    const shareB = share(b);
     if (a.energy <= shareA + tax || b.energy <= shareB + tax || shareA + shareB <= 0) return false;
 
     const free = (o: Organism) =>
@@ -1376,8 +1402,8 @@ export class World {
         (c) =>
           c.x >= 0 &&
           c.y >= 0 &&
-          c.x < this.config.gridWidth &&
-          c.y < this.config.gridHeight &&
+          c.x < config.gridWidth &&
+          c.y < config.gridHeight &&
           !this.obstacles.has(`${c.x},${c.y}`) &&
           !blocked.has(`${c.x},${c.y}`)
       );
@@ -1391,41 +1417,59 @@ export class World {
     }
     if (cells.length === 0) return false;
     const other = carrier === a ? b : a;
-    const carrierShare = carrier === a ? shareA : shareB;
-    const otherShare = carrier === a ? shareB : shareA;
 
-    const target = this.prng.choice(cells);
-    const birth = this.birthCell(carrier, target, carrier.energy - carrierShare - tax, blocked);
-    const carrierCost = carrierShare + tax + birth.extraCost;
-    const otherCost = otherShare + tax;
-    carrier.energy -= carrierCost;
-    other.energy -= otherCost;
-    blocked.add(`${birth.x},${birth.y}`);
-    this.birthDistanceSum += birth.distance;
-    this.birthsTotal++;
+    // Both pay their own share and the tax, whatever becomes of the clutch.
+    const pool = shareA + shareB;
+    const paid = new Map<Organism, number>([
+      [a, shareA + tax],
+      [b, shareB + tax],
+    ]);
+    a.energy -= shareA + tax;
+    b.energy -= shareB + tax;
+    if (config.metabolismGeneEnabled) for (const o of [a, b]) o.nextBirthTick = this.tick + birthCooldownOf(o, config);
     this.matingsTotal++;
     const similarity = tagSimilarity(a.tag, b.tag);
-    if (similarity >= this.config.kinSimilarity) this.matingsAlikeTotal++;
-    if (similarity <= this.config.strangerSimilarity) this.matingsOfStrangersTotal++;
+    if (similarity >= config.kinSimilarity) this.matingsAlikeTotal++;
+    if (similarity <= config.strangerSimilarity) this.matingsOfStrangersTotal++;
     if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
     this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
 
-    for (const [parent, cost] of [
-      [carrier, carrierCost],
-      [other, otherCost],
-    ] as const) {
-      parent.offspringCount++;
+    const clutch = clutchSizeOf(carrier, config);
+    const perChild = pool / clutch;
+    let born = 0;
+    if (perChild < config.minViableChildEnergy) {
+      this.clutchesFailedTotal++;
+    } else {
+      for (let k = 0; k < clutch; k++) {
+        if (k > 0) cells = free(carrier);
+        if (cells.length === 0) break; // no room for the rest
+        const target = this.prng.choice(cells);
+        const birth = this.birthCell(carrier, target, carrier.energy, blocked);
+        carrier.energy -= birth.extraCost;
+        paid.set(carrier, (paid.get(carrier) ?? 0) + birth.extraCost);
+        blocked.add(`${birth.x},${birth.y}`);
+        this.birthDistanceSum += birth.distance;
+        newBorns.push(this.makeChild(carrier, other, birth, perChild));
+        born++;
+      }
+    }
+    this.birthsTotal += born;
+    this.matingChildrenTotal += born;
+    this.matingChildrenLostTotal += clutch - born;
+    this.matingEnergyLostTotal += pool - perChild * born;
+
+    for (const parent of [carrier, other]) {
+      parent.offspringCount += born;
       const record = parent.recentHistory[0];
       if (record && record.tick === this.tick) {
         parent.recentHistory[0] = {
           ...record,
-          outcome: 'success',
-          energyDelta: Number((record.energyDelta - cost).toFixed(2)),
+          outcome: born > 0 ? 'success' : 'clutch_failed',
+          energyDelta: Number((record.energyDelta - (paid.get(parent) ?? 0)).toFixed(2)),
           energyAfter: Number(parent.energy.toFixed(2)),
         };
       }
     }
-    newBorns.push(this.makeChild(carrier, other, birth, carrierShare + otherShare));
     return true;
   }
 
@@ -1743,6 +1787,10 @@ export class World {
       matingsAlikeTotal: this.matingsAlikeTotal,
       matingsOfStrangersTotal: this.matingsOfStrangersTotal,
       matingsInFamilyTotal: this.matingsInFamilyTotal,
+      matingChildrenTotal: this.matingChildrenTotal,
+      clutchesFailedTotal: this.clutchesFailedTotal,
+      matingChildrenLostTotal: this.matingChildrenLostTotal,
+      matingEnergyLostTotal: Number(this.matingEnergyLostTotal.toFixed(2)),
       carrionEatenTotal: this.carrionEatenTotal,
       carrionStock: Math.round(Array.from(this.carrion.values()).reduce((a, c) => a + c.stock, 0)),
       averageCarnivory:
@@ -1768,6 +1816,7 @@ export class World {
       torporDepth: mean(c.torporEnabled, (o) => o.torporDepth ?? 0),
       eggRate: mean(c.eggsEnabled, (o) => o.eggRate ?? 0),
       metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
+      clutchSize: mean(c.clutchGeneEnabled, (o) => o.clutchSize ?? 1),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       torpid: c.torporEnabled ? organisms.filter(isTorpid).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

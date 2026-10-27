@@ -31,9 +31,10 @@ for (const [name, overrides] of Object.entries(worlds)) {
         h.update(JSON.stringify(orgs.map((o) => [o.id, o.x, o.y, o.energy, o.carriedFood, o.tag, o.recentHistory[0]?.chosenAction.type])));
         h.update(JSON.stringify(Array.from(w.foodPatches.values())));
         // Life-history state, hashed only when something carries it, so a world with those switches off keeps its old hash.
-        const life = orgs.filter((o) => o.reproThreshold !== undefined || o.fatCapacity !== undefined || o.torporDepth !== undefined || o.eggRate !== undefined || o.metabolicRate !== undefined || o.investment !== undefined);
+        const life = orgs.filter((o) => o.reproThreshold !== undefined || o.fatCapacity !== undefined || o.torporDepth !== undefined || o.eggRate !== undefined || o.metabolicRate !== undefined || o.investment !== undefined || o.clutchSize !== undefined);
         if (life.length > 0 || w.eggs.size > 0) {
-          h.update(JSON.stringify(life.map((o) => [o.id, o.reproThreshold, o.investment, o.fatCapacity, o.fat, o.torporDepth, o.torpor, o.eggRate, o.metabolicRate, o.nextBirthTick])));
+          // clutchSize only when present, so a world with the clutch gene off keeps its old hash.
+          h.update(JSON.stringify(life.map((o) => [o.id, o.reproThreshold, o.investment, o.fatCapacity, o.fat, o.torporDepth, o.torpor, o.eggRate, o.metabolicRate, o.nextBirthTick, ...(o.clutchSize !== undefined ? [o.clutchSize] : [])])));
           h.update(JSON.stringify(Array.from(w.eggs.values()).map((e) => [e.child.id, e.x, e.y, e.laidTick, e.child.energy])));
         }
         if (w.cellHealth) h.update(JSON.stringify(w.cellHealth.exportState())); // overgrazing state, only while it is on

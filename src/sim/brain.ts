@@ -289,7 +289,7 @@ export function brainFeatures(
     isAttack && action.preyIsFamily ? 1 : 0, // attackFamily
     isAttack ? hunger * organism.carnivory : 0, // attackHunger
     isMate ? 1 : 0, // isMate
-    isMate ? Math.max(0, organism.energy - config.reproductionThreshold) / headroom : 0, // mateFullness
+    isMate ? Math.max(0, organism.energy - threshold) / headroom : 0, // mateFullness
     isMate ? (action.mateSimilarity ?? 0) : 0, // mateAlike
     isMate && action.mateIsFamily ? 1 : 0, // mateFamily
     isMate && action.mateReady ? 1 : 0, // mateReady

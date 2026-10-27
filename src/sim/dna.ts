@@ -46,7 +46,7 @@ export const GeneClass = {
 } as const;
 export type GeneClass = (typeof GeneClass)[keyof typeof GeneClass];
 
-/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–45 are the life-history genes (lifehistory.ts). */
+/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–46 are the life-history genes (lifehistory.ts). */
 export const TraitId = {
   tag: 0,
   carryCapacity: 1,

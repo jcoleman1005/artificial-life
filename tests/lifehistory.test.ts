@@ -12,6 +12,7 @@ const ALL_OFF: Partial<SimulationConfig> = {
   torporEnabled: false,
   eggsEnabled: false,
   metabolismGeneEnabled: false,
+  clutchGeneEnabled: false,
 };
 
 const ZERO_POLICY: PolicyWeights = {
@@ -65,7 +66,7 @@ function addOrganism(world: World, id: string, x: number, y: number, o: Partial<
   return organism;
 }
 
-const lifeFields = (o: Organism) => [o.reproThreshold, o.investment, o.fatCapacity, o.torporDepth, o.eggRate, o.metabolicRate];
+const lifeFields = (o: Organism) => [o.reproThreshold, o.investment, o.fatCapacity, o.torporDepth, o.eggRate, o.metabolicRate, o.clutchSize];
 
 describe('life-history genes: switches and inheritance', () => {
   it('founders carry only the genes that are switched on, at their starting values', () => {
@@ -73,10 +74,10 @@ describe('life-history genes: switches and inheritance', () => {
     for (const o of off.organisms.values()) expect(lifeFields(o).every((v) => v === undefined)).toBe(true);
     const on = new World({ seed: 5 });
     for (const o of on.organisms.values()) {
-      expect(lifeFields(o)).toEqual([65, 0.45, 4, 0.1, 0.1, 1]);
+      expect(lifeFields(o)).toEqual([65, 0.45, 4, 0.1, 0.1, 1, 1]);
     }
     const one = new World({ ...ALL_OFF, fatEnabled: true, seed: 5 });
-    for (const o of one.organisms.values()) expect(lifeFields(o)).toEqual([undefined, undefined, 4, undefined, undefined, undefined]);
+    for (const o of one.organisms.values()) expect(lifeFields(o)).toEqual([undefined, undefined, 4, undefined, undefined, undefined, undefined]);
   });
 
   it('a genome-decoded world and a directly-inherited world stay identical', () => {
@@ -92,7 +93,7 @@ describe('life-history genes: switches and inheritance', () => {
   }, 30_000);
 
   it('keeps every evolved value inside its bounds', () => {
-    const w = new World({ seed: 12, traitMutationRate: 1, thresholdStep: 40, investmentStep: 0.5, fatStep: 50, torporStep: 1, eggStep: 1, metabolismStep: 2 });
+    const w = new World({ seed: 12, traitMutationRate: 1, thresholdStep: 40, investmentStep: 0.5, fatStep: 50, torporStep: 1, eggStep: 1, metabolismStep: 2, clutchStep: 5 });
     for (let t = 0; t < 300; t++) w.step();
     expect(w.birthsTotal).toBeGreaterThan(w.config.initialOrganisms);
     const c = w.config;
@@ -107,6 +108,8 @@ describe('life-history genes: switches and inheritance', () => {
       for (const v of [o.torporDepth!, o.eggRate!]) expect(v >= 0 && v <= 1).toBe(true);
       expect(o.metabolicRate!).toBeGreaterThanOrEqual(c.metabolismMin);
       expect(o.metabolicRate!).toBeLessThanOrEqual(c.metabolismMax);
+      expect(o.clutchSize!).toBeGreaterThanOrEqual(c.clutchMin);
+      expect(o.clutchSize!).toBeLessThanOrEqual(c.clutchMax);
     }
   });
 
@@ -120,7 +123,7 @@ describe('life-history genes: switches and inheritance', () => {
       copy.step();
     }
     expect(JSON.stringify(copy.exportState())).toBe(JSON.stringify(w.exportState()));
-  });
+  }, 30_000); // a full default world for 320 ticks: over the 5 s default once its population grows
 });
 
 describe('reproduction threshold and investment', () => {

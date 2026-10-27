@@ -312,14 +312,17 @@ describe('Abilities are per organism', () => {
 });
 
 describe('All mobility options together', () => {
-  it('keeps invariants and stays deterministic over a long run (both controllers)', () => {
+  // Four 60×60 worlds for 500 ticks: close to a minute under load, so it yields to the event loop
+  // now and then (vitest's worker RPC) and has a longer timeout.
+  it('keeps invariants and stays deterministic over a long run (both controllers)', async () => {
     for (const controller of ['dials', 'brain'] as const) {
-      const run = () => {
+      const run = async () => {
         const w = new World({ seed: 'mobility', controller, leapEnabled: true });
         const violations: string[] = [];
         const kinds = new Set<string>();
         for (let t = 0; t < 500; t++) {
           w.step();
+          if (t % 50 === 0) await new Promise((resolve) => setImmediate(resolve));
           const cells = new Set<string>();
           for (const o of w.organisms.values()) {
             const key = `${o.x},${o.y}`;
@@ -338,11 +341,11 @@ describe('All mobility options together', () => {
         }
         return { violations, kinds, pop: w.organisms.size, births: w.birthsTotal };
       };
-      const a = run();
-      const b = run();
+      const a = await run();
+      const b = await run();
       expect(a.violations).toEqual([]);
       expect([...a.kinds].sort()).toEqual(['diagonal', 'leap', 'squeeze']);
       expect([b.pop, b.births]).toEqual([a.pop, a.births]);
     }
-  }, 60_000);
+  }, 180_000);
 });

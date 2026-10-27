@@ -27,13 +27,15 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Energy bounded by 0 and max; zero means death.
 - Energy only comes from eating food; organisms share food, never energy.
 - Reproduction by cloning (REPRODUCE); offspring inherit weights with mutation.
-- Mating (`sexEnabled`, on; brain only): MATE needs mutual consent the same tick; each parent pays half a clone's share; genes come whole from one parent or the other, then mutate as for clones.
+- Mating (`sexEnabled`, on; brain only): MATE needs mutual consent the same tick; genes come whole from one parent or the other, then mutate as for clones.
+- Mating rule (2026-10-27): both at their own threshold; each pays own energy × own investment + tax; carrier's clutch splits the shares; below `minViableChildEnergy` the clutch fails (paid, lost, counted); no eggs.
+- Clutch gene (`clutchGeneEnabled`, on; trait 46): children per mating, founders 1, 1–6; matings only.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
 - Carrion (`carrionEnabled`): bodies rot after `carrionLifetime`; eating one's newborn must return less than making it (tested).
 - Diet (`carnivory`): inherited; trades plant yield for carrion share.
 - Predation (`predationEnabled`, brain only): ATTACK adjacent organism; bites resolve after moves; kill leaves carrion, no energy.
 - Evolvable bodies so far: abilities, dispersal, carry capacity, memory span, diet.
-- Life-history genes (six switches, each the lock for its control arm; `src/sim/lifehistory.ts`): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate; all off reproduces the old world bit-identically.
+- Life-history genes (six switches, each the lock for its control arm; `src/sim/lifehistory.ts`): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate (and the clutch gene, below); all off reproduces the old world bit-identically.
 - Tribes are never assigned: inherited hue tag; graded kinship similarity (`kinSimilarity`, `strangerSimilarity`).
 - Giving food is need-aware (neighbour below half energy), delivered after all actions; `sharingEnabled` switch.
 - Childhood (`childhoodTicks`): children sense a food-carrying parent; `followFoodParent`.

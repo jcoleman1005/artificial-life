@@ -222,7 +222,9 @@ export type DecisionOutcome =
   /** An attack that did not kill (missed, or the prey got away). */
   | 'missed'
   /** Asked a neighbour to mate and it did not ask back. */
-  | 'no_partner';
+  | 'no_partner'
+  /** Mated, but the clutch was too poor to be viable (both parents paid; no children). */
+  | 'clutch_failed';
 
 export interface DecisionRecord {
   readonly tick: number;
@@ -307,6 +309,8 @@ export interface Organism {
   readonly eggRate?: number;
   /** Metabolic rate multiplier on base upkeep; sets the pause between births. */
   readonly metabolicRate?: number;
+  /** Children per mating (clutchGeneEnabled; matings only, cloning makes one child). */
+  readonly clutchSize?: number;
   /** Fat held now (state; only with fatEnabled). */
   fat?: number;
   /** Ticks of torpor left, 0 or absent when awake (state; only with torporEnabled). */
@@ -601,6 +605,11 @@ export interface SimulationConfig {
   metabolismMin: number;
   metabolismMax: number;
   birthCooldown: number; // Ticks between births at rate 1 (shorter when faster, longer when slower)
+  clutchGeneEnabled: boolean; // Children per mating evolve (clutchSize; matings only; off: one child per mating)
+  clutchStep: number;
+  clutchMin: number;
+  clutchMax: number;
+  minViableChildEnergy: number; // A mating whose energy per child is below this fails: both parents pay, no children
   dnaVariationEnabled: boolean; // With DNA (Stage 2): mutation counts are Poisson-sampled, genes can be inserted, deleted and duplicated, and every gene costs dnaUpkeepPerGene
   dnaInsertionRate: number; // Per gene per birth: a new random gene appears at a random position
   dnaDeletionRate: number; // Per gene per birth: a gene is removed
@@ -668,6 +677,16 @@ export interface WorldMetrics {
   matingsAlikeTotal: number;
   matingsOfStrangersTotal: number;
   matingsInFamilyTotal: number;
+  /**
+   * Children of mating born so far (the rest of birthsTotal are clones);
+   * matings whose clutch failed the viability gate (minViableChildEnergy);
+   * children of mating not born (failed clutches, and children with no free
+   * cell), and the energy their parents paid for them, which is lost.
+   */
+  matingChildrenTotal: number;
+  clutchesFailedTotal: number;
+  matingChildrenLostTotal: number;
+  matingEnergyLostTotal: number;
   /** Carrion meals eaten so far, and carrion energy lying in the world now. */
   carrionEatenTotal: number;
   carrionStock: number;
@@ -694,6 +713,7 @@ export interface LifeMetrics {
   torporDepth: number | null;
   eggRate: number | null;
   metabolicRate: number | null;
+  clutchSize: number | null;
   /** Mean fat held, and organisms in torpor now. */
   fat: number | null;
   torpid: number | null;

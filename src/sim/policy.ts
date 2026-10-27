@@ -319,8 +319,10 @@ export function getLegalActions(
 
   // 5d. Ask an orthogonally adjacent organism to mate (brain only, like
   // attacks). It only makes a child if that one asks back this same tick;
-  // whether to ask, and whom, is the brain's to evolve.
-  if (config.sexEnabled && config.controller === 'brain' && organism.energy >= config.reproductionThreshold) {
+  // whether to ask, and whom, is the brain's to evolve. Each must be at its
+  // own reproduction threshold and past its own birth cooldown.
+  const readyToBreed = (o: Readonly<Organism>) => o.energy >= thresholdOf(o, config) && snapshot.tick >= (o.nextBirthTick ?? 0);
+  if (config.sexEnabled && config.controller === 'brain' && readyToBreed(organism)) {
     const candidateMates: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'MATE_NORTH', dx: 0, dy: -1 },
       { type: 'MATE_SOUTH', dx: 0, dy: 1 },
@@ -336,7 +338,7 @@ export function getLegalActions(
         mateId: partner.id,
         mateSimilarity: Number(tagSimilarity(organism.tag, partner.tag).toFixed(3)),
         mateIsFamily: isParentOrChild(organism, partner),
-        mateReady: partner.energy >= config.reproductionThreshold,
+        mateReady: readyToBreed(partner),
       });
     }
   }

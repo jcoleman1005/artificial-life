@@ -4,8 +4,10 @@ import { PRNG } from '../src/sim/prng';
 import { BRAIN_HIDDEN, BRAIN_INPUTS, BRAIN_INPUT_COUNT, crossBrains, type Brain, type BrainInput } from '../src/sim/brain';
 import { isParentOf } from '../src/sim/family';
 import { createConfig } from '../src/sim/config';
+import { LIFE_GENES } from '../src/sim/lifehistory';
 import {
   GENE_WORDS,
+  mutateGenome,
   GeneClass,
   TraitId,
   capGenome,
@@ -168,7 +170,7 @@ describe('Mating', () => {
     expect(world.matingsTotal).toBe(0);
   });
 
-  it('makes one child when both ask, each parent paying half a share plus the tax', () => {
+  it('makes one child when both ask, each parent paying its own share plus the tax', () => {
     const world = quietWorld({ reproductionThreshold: 40, reproductionEnergyFraction: 0.5, reproductionMetabolismTax: 5 });
     const a = makeOrganism('a', 5, 5, { energy: 60, brain: ASKER, lineage: { id: 'lin-a', parentId: null, generation: 3, birthTick: 0 } });
     const b = makeOrganism('b', 6, 5, { energy: 80, brain: ASKER, tag: 180 });
@@ -177,14 +179,15 @@ describe('Mating', () => {
     const children = Array.from(world.organisms.values()).filter((o) => o.id !== 'a' && o.id !== 'b');
     expect(children).toHaveLength(1);
     const child = children[0];
-    // a pays floor(60 × 0.25) + 5 = 20, b pays floor(80 × 0.25) + 5 = 25; the child gets 15 + 20.
-    expect(a.energy).toBe(40);
-    expect(b.energy).toBe(55);
-    expect(child.energy).toBe(35);
+    // (Rule of 2026-10-27.) No investment gene on these organisms, so the world's 0.5 applies:
+    // a pays floor(60 × 0.5) + 5 = 35, b pays floor(80 × 0.5) + 5 = 45; one child (clutch 1) gets 30 + 40.
+    expect(a.energy).toBe(25);
+    expect(b.energy).toBe(35);
+    expect(child.energy).toBe(70);
     expect(a.offspringCount).toBe(1);
     expect(b.offspringCount).toBe(1);
     expect(a.recentHistory[0].outcome).toBe('success');
-    expect(a.recentHistory[0].energyDelta).toBe(-20);
+    expect(a.recentHistory[0].energyDelta).toBe(-35);
     expect(world.birthsTotal).toBe(1);
     expect(world.matingsTotal).toBe(1);
     expect(world.matingsOfStrangersTotal).toBe(1); // opposite hues
@@ -424,5 +427,156 @@ describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual rep
       return { phenotype: phenotypeOf(c), policy: c.policy, rng: world.prng.getState() };
     };
     for (let seed = 0; seed < 6; seed++) expect(child(true, seed)).toEqual(child(false, seed));
+  });
+});
+
+describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clutch, a viability gate', () => {
+  const children = (w: World) => Array.from(w.organisms.values()).filter((o) => o.id !== 'a' && o.id !== 'b');
+  const pair = (w: World, a: Partial<Organism>, b: Partial<Organism>) => {
+    const pa = makeOrganism('a', 5, 5, { energy: 60, brain: ASKER, ...a });
+    const pb = makeOrganism('b', 6, 5, { energy: 60, brain: ASKER, tag: 180, ...b });
+    addAll(w, pa, pb);
+    return [pa, pb] as const;
+  };
+
+  it('needs both parents at their own reproduction threshold, or nothing happens', () => {
+    for (const [ta, tb] of [[70, 40], [40, 70], [70, 70]]) {
+      const world = quietWorld({ reproductionThreshold: 40 });
+      const [a, b] = pair(world, { reproThreshold: ta }, { reproThreshold: tb });
+      world.step();
+      expect(children(world)).toHaveLength(0);
+      expect(world.matingsTotal).toBe(0);
+      // A parent at its threshold asks and is not answered: it pays nothing. (One that isn't ready does something else.)
+      for (const [o, t] of [[a, ta], [b, tb]] as const) {
+        if (t <= 60) {
+          expect(o.recentHistory[0].outcome).toBe('no_partner');
+          expect(o.energy).toBe(60);
+        }
+      }
+      // Below its own threshold an organism is not offered MATE, and its partner is told it isn't ready.
+      for (const [o, t, p] of [[a, ta, b], [b, tb, a]] as const) {
+        const offers = o.recentHistory[0].scores.filter((s) => s.action.type.startsWith('MATE_'));
+        if (t > 60) expect(offers).toHaveLength(0);
+        else expect(offers.every((s) => s.action.mateReady === p.energy >= (p.reproThreshold ?? 40))).toBe(true);
+      }
+    }
+  });
+
+  it('charges each parent its own energy × its own investment, plus the tax', () => {
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5 });
+    const [a, b] = pair(world, { energy: 60, investment: 0.2 }, { energy: 80, investment: 0.6 });
+    world.step();
+    const kids = children(world);
+    expect(kids).toHaveLength(1);
+    expect(a.energy).toBe(60 - 12 - 5);
+    expect(b.energy).toBe(80 - 48 - 5);
+    expect(kids[0].energy).toBe(60);
+  });
+
+  it('takes the clutch size from the carrier and splits the pair\'s shares equally', () => {
+    const seen = new Set<string>();
+    for (let seed = 0; seed < 16; seed++) {
+      const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5 });
+      pair(world, { energy: 80, clutchSize: 3 }, { energy: 80, clutchSize: 1.4 });
+      world.step();
+      const kids = children(world);
+      const carrier = kids[0].lineage.parentId;
+      expect(kids.every((k) => k.lineage.parentId === carrier)).toBe(true);
+      expect(kids).toHaveLength(carrier === 'a' ? 3 : 1); // 1.4 rounds to 1
+      for (const k of kids) expect(k.energy).toBeCloseTo(80 / kids.length, 12);
+      seen.add(carrier!);
+    }
+    expect(seen.size).toBe(2);
+  });
+
+  it('fails a clutch below minViableChildEnergy: both pay, no children, and the energy is accounted for exactly', () => {
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10 });
+    const [a, b] = pair(world, { energy: 50, investment: 0.2, clutchSize: 6 }, { energy: 50, investment: 0.2, clutchSize: 6 });
+    world.step();
+    expect(children(world)).toHaveLength(0); // (10 + 10) / 6 < 10
+    expect([a.energy, b.energy]).toEqual([35, 35]);
+    expect(world.matingsTotal).toBe(1);
+    expect(world.clutchesFailedTotal).toBe(1);
+    expect(world.matingChildrenLostTotal).toBe(6);
+    expect(world.matingEnergyLostTotal).toBe(20);
+    expect(world.birthsTotal).toBe(0);
+    expect(a.recentHistory[0].outcome).toBe('clutch_failed');
+    expect(a.recentHistory[0].energyDelta).toBe(-15);
+  });
+
+  it('conserves energy across a clutch, counting children that find no room as lost', () => {
+    // Walls on three sides of both parents leave one free cell each, so a clutch of 4 places 1 or 2.
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 1 });
+    for (const [x, y] of [[5, 4], [5, 6], [6, 4], [6, 6], [7, 5]]) world.obstacles.add(`${x},${y}`);
+    const [a, b] = pair(world, { energy: 90, investment: 0.5, clutchSize: 4 }, { energy: 70, investment: 0.5, clutchSize: 4 });
+    world.step();
+    const kids = children(world);
+    expect(kids.length).toBeGreaterThan(0);
+    expect(kids.length).toBeLessThan(4);
+    const pool = 45 + 35;
+    expect(world.matingChildrenTotal).toBe(kids.length);
+    expect(world.matingChildrenLostTotal).toBe(4 - kids.length);
+    const before = 90 + 70;
+    const after = a.energy + b.energy + kids.reduce((s, k) => s + k.energy, 0) + world.matingEnergyLostTotal + 2 * 5;
+    expect(after).toBeCloseTo(before, 9);
+    expect(world.matingEnergyLostTotal).toBeCloseTo(pool * (1 - kids.length / 4), 9);
+  });
+
+  it('gives each child of a clutch its own crossover', () => {
+    const world = quietWorld({ reproductionThreshold: 40, minViableChildEnergy: 1, ...NO_MUTATION });
+    const brain = (v: number): Brain => ({ ...brainWith({ isMate: 100 }), hidden: new Array<number>(BRAIN_HIDDEN * BRAIN_INPUT_COUNT).fill(v) });
+    pair(
+      world,
+      { energy: 90, clutchSize: 4, brain: brain(0.5), memoryWeights: new Array<number>(30).fill(0.5) },
+      { energy: 90, clutchSize: 4, brain: brain(-0.5), memoryWeights: new Array<number>(30).fill(-0.5) }
+    );
+    world.step();
+    const kids = children(world);
+    expect(kids.length).toBeGreaterThan(1);
+    const genomes = new Set(kids.map((k) => Array.from(k.genome!).join(',')));
+    expect(genomes.size).toBe(kids.length); // with ~70 independent picks each, no two crossovers coincide
+    for (const k of kids) expect(decodeOrganismDNA(k.genome!, world.config)).toEqual(phenotypeOf(k));
+  });
+
+  it('carries every life-history gene, the clutch gene included, through the crossover by key', () => {
+    const life = LIFE_GENES.map((g) => geneKey(GeneClass.trait, g.traitId));
+    expect(LIFE_GENES.find((g) => g.field === 'clutchSize')?.traitId).toBe(46);
+    const a = genes(life.map((k, i): [number, number] => [k, i + 1]));
+    const b = genes(life.map((k, i): [number, number] => [k, -(i + 1)]));
+    const prng = new PRNG(4);
+    const signs = new Set<string>();
+    for (let n = 0; n < 32; n++) {
+      const child = crossGenomes(a, b, prng);
+      life.forEach((k, i) => expect([[i + 1], [-(i + 1)]]).toContainEqual(ofKey(child, k)));
+      signs.add(life.map((k) => Math.sign(ofKey(child, k)[0])).join(''));
+    }
+    expect(signs.size).toBeGreaterThan(8); // genes picked independently
+  });
+
+  it('with clutchGeneEnabled false: no clutch field, no clutch gene, and no extra PRNG draws', () => {
+    const off = new World({ seed: 5, clutchGeneEnabled: false, initialOrganisms: 5 });
+    const on = new World({ seed: 5, initialOrganisms: 5 });
+    const clutchKey = geneKey(GeneClass.trait, 46);
+    for (const o of off.organisms.values()) {
+      expect(o.clutchSize).toBeUndefined();
+      expect(ofKey(o.genome!, clutchKey)).toHaveLength(0);
+    }
+    for (const o of on.organisms.values()) {
+      expect(o.clutchSize).toBe(1);
+      expect(ofKey(o.genome!, clutchKey)).toEqual([1]);
+    }
+    // Founders draw nothing for it: both worlds' founders differ only by that field.
+    const strip = (w: World) => Array.from(w.organisms.values()).map(({ clutchSize: _c, genome: _g, ...o }) => o);
+    expect(strip(off)).toEqual(strip(on));
+    // A birth mutates gene by gene: the off genome is the on genome without the clutch gene, so it draws one gene fewer.
+    const onGenome = [...on.organisms.values()][0].genome!;
+    const offGenome = genes(pairs(onGenome).filter(([k]) => k !== clutchKey));
+    const p1 = new PRNG(9);
+    const p2 = new PRNG(9);
+    const config = createConfig({ clutchGeneEnabled: false });
+    mutateGenome(offGenome, config, p1);
+    mutateGenome(genes(pairs(onGenome).filter(([k]) => k !== clutchKey)), config, p2);
+    expect(p1.getState()).toBe(p2.getState());
+    expect(decodeOrganismDNA(offGenome, config)).not.toHaveProperty('clutchSize');
   });
 });
