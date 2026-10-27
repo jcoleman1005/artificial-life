@@ -3,7 +3,7 @@ import type { SavedWorld } from './protocol';
 import { WorldEventDetector, type WorldEvent } from './events';
 import { ActivityMaps, type HeatmapKind } from './activity';
 import { toOrganismView, type FromWorker, type PanelData, type ToWorker } from './protocol';
-import type { SimulationConfig } from './types';
+import type { Organism, SimulationConfig } from './types';
 
 /** How often panel data (metrics, history, the selected organism) is sent while running. */
 export const PANEL_INTERVAL_MS = 200;
@@ -288,7 +288,7 @@ export class SimulationHost {
     if (!metrics) return base;
     const panels: PanelData = {
       metrics,
-      selected: (viewer.selectedId && this.world.getOrganism(viewer.selectedId)) || null,
+      selected: withoutCircuit((viewer.selectedId && this.world.getOrganism(viewer.selectedId)) || null),
       ...(viewer.wantsHistory ? { history: this.world.history.getSamples() } : {}),
       ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap, this.world) } } : {}),
     };
@@ -309,4 +309,12 @@ export class SimulationHost {
     for (const v of this.viewers.values()) v.post(this.frameFor(v, base, metrics));
     this.pendingEvents = [];
   }
+}
+
+/** An organism for the wire, without its circuit (derived from the genome; nothing on the page reads it). */
+function withoutCircuit(o: Organism | null | undefined): Organism | null {
+  if (!o) return null;
+  if (!o.circuit) return o;
+  const { circuit: _circuit, ...rest } = o;
+  return rest;
 }

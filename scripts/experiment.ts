@@ -304,6 +304,7 @@ function runJob(job: Job): RunResult {
     usPerOrganismTick: (1000 * stepMs) / Math.max(1, organismSteps),
     ...(world.config.dnaVariationEnabled && organisms.length > 0 ? genomeResults(organisms, world.config, genomeSeries) : {}),
     ...diagnostics.results(),
+    ...topologyResults(organisms),
     ...overgrazingResults(world),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
@@ -314,6 +315,24 @@ function runJob(job: Job): RunResult {
     ...Object.fromEntries(Object.entries(actions).map(([k, v]) => [`act.${k}%`, (100 * v) / actionTotal])),
   };
   return { seed: job.seed, variant: job.variant, metrics };
+}
+
+/**
+ * Stage 3 (growable brain): over the living organisms that have a circuit, the mean acquired hidden units, acquired
+ * connections and all connections, and the share with at least one acquired unit; the same unit mean and share for
+ * effective (choice-variant) acquired units (all 0 when none has a circuit).
+ */
+function topologyResults(organisms: readonly Organism[]): Record<string, number> {
+  const circuits = organisms.flatMap((o) => (o.circuit ? [o.circuit] : []));
+  const n = Math.max(1, circuits.length);
+  return {
+    'topo.acquiredUnits': circuits.reduce((a, c) => a + c.acquiredUnits, 0) / n,
+    'topo.acquiredConnections': circuits.reduce((a, c) => a + c.acquiredConnections, 0) / n,
+    'topo.connections': circuits.reduce((a, c) => a + c.connections, 0) / n,
+    'topo.withAcquired%': (100 * circuits.filter((c) => c.acquiredUnits > 0).length) / n,
+    'topo.effectiveUnits': circuits.reduce((a, c) => a + c.effectiveAcquiredUnits, 0) / n,
+    'topo.withEffective%': (100 * circuits.filter((c) => c.effectiveAcquiredUnits > 0).length) / n,
+  };
 }
 
 /** Stage 2 measurements: genome length over time, gene counts by type, and how far duplicated copies have drifted apart. */

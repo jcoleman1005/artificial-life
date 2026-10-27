@@ -1,0 +1,3642 @@
+{
+ "seeds": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8
+ ],
+ "ticks": 5000,
+ "replicates": 10,
+ "window": 500,
+ "sample": 40,
+ "arenas": 4,
+ "arenaWindow": 200,
+ "early": 100,
+ "level": "units",
+ "overrides": {},
+ "results": [
+  {
+   "seed": 1,
+   "status": "ok",
+   "population": 247,
+   "withAcquiredUnits": 45,
+   "cohort": 45,
+   "half": 22,
+   "inconsistent": 0,
+   "replicates": [
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.3367810069666364,
+       "births": 27,
+       "descAlive": 39
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.6117447039149975,
+       "births": 18,
+       "descAlive": 37
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.8980218667661632,
+       "births": 21,
+       "descAlive": 27
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.38328507455277,
+       "births": 26,
+       "descAlive": 9
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 1.793869703411038,
+       "births": 18,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.6834615070832415,
+       "births": 25,
+       "descAlive": 44
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.0941690277333027,
+       "births": 22,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 3.156679658283846,
+       "births": 32,
+       "descAlive": 49
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.4735686530469714,
+       "births": 22,
+       "descAlive": 33
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.526961107419451,
+       "births": 28,
+       "descAlive": 3
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.2815656280868786,
+       "births": 20,
+       "descAlive": 26
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.9172057431393976,
+       "births": 25,
+       "descAlive": 6
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.3713954508350303,
+       "births": 33,
+       "descAlive": 41
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.9350533201736144,
+       "births": 23,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.3690792610612386,
+       "births": 26,
+       "descAlive": 37
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.0118022849780757,
+       "births": 21,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.1530537534560636,
+       "births": 25,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.599729470212328,
+       "births": 19,
+       "descAlive": 31
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.9529566439726778,
+       "births": 32,
+       "descAlive": 2
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 1.337247090144275,
+       "births": 10,
+       "descAlive": 20
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.0015269437355188,
+       "births": 22,
+       "descAlive": 11
+      },
+      "intact": {
+       "survivalEarly": 0.09090909090909091,
+       "survival": 0,
+       "energy": 1.7434032998950477,
+       "births": 17,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.069621602079324,
+       "births": 22,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.13636363636363635,
+       "survival": 0,
+       "energy": 2.416811718396679,
+       "births": 18,
+       "descAlive": 26
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 1.6052024704385006,
+       "births": 16,
+       "descAlive": 36
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.228126253574527,
+       "births": 21,
+       "descAlive": 28
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.4043676918934973,
+       "births": 23,
+       "descAlive": 25
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.7241441246876106,
+       "births": 18,
+       "descAlive": 11
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.09090909090909091,
+       "survival": 0,
+       "energy": 2.586836955537004,
+       "births": 27,
+       "descAlive": 14
+      },
+      "intact": {
+       "survivalEarly": 0.09090909090909091,
+       "survival": 0,
+       "energy": 2.0207924357122864,
+       "births": 16,
+       "descAlive": 16
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.9929636285122334,
+       "births": 25,
+       "descAlive": 8
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.788395342036665,
+       "births": 21,
+       "descAlive": 32
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 1.8544940470791755,
+       "births": 19,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.1969022281509907,
+       "births": 23,
+       "descAlive": 39
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.8446556051745628,
+       "births": 19,
+       "descAlive": 26
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 1.8931749318610849,
+       "births": 19,
+       "descAlive": 8
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.7792324561402553,
+       "births": 23,
+       "descAlive": 20
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.5582955879183333,
+       "births": 27,
+       "descAlive": 7
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.7073425494873424,
+       "births": 23,
+       "descAlive": 30
+      },
+      "intact": {
+       "survivalEarly": 0.045454545454545456,
+       "survival": 0,
+       "energy": 2.2550444181666918,
+       "births": 22,
+       "descAlive": 0
+      }
+     }
+    }
+   ],
+   "arena": [
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 58.5,
+     "ablatedBirths": 24.75,
+     "intactAlive": 0.8524999999999999,
+     "ablatedAlive": 0.70125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 69.5,
+     "ablatedBirths": 62.5,
+     "intactAlive": 0.8674999999999999,
+     "ablatedAlive": 0.83
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 21.5,
+     "ablatedBirths": 14.25,
+     "intactAlive": 0.47500000000000003,
+     "ablatedAlive": 0.40375000000000005
+    },
+    {
+     "intactBirths": 65,
+     "ablatedBirths": 33.75,
+     "intactAlive": 0.5800000000000001,
+     "ablatedAlive": 0.43875
+    },
+    {
+     "intactBirths": 83.75,
+     "ablatedBirths": 82.5,
+     "intactAlive": 0.7637499999999999,
+     "ablatedAlive": 0.7512500000000001
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 34.75,
+     "ablatedBirths": 23.5,
+     "intactAlive": 0.46625,
+     "ablatedAlive": 0.39999999999999997
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.9612499999999999,
+     "ablatedAlive": 0.96375
+    },
+    {
+     "intactBirths": 25.75,
+     "ablatedBirths": 39,
+     "intactAlive": 0.465,
+     "ablatedAlive": 0.53625
+    },
+    {
+     "intactBirths": 110,
+     "ablatedBirths": 133.5,
+     "intactAlive": 0.8350000000000001,
+     "ablatedAlive": 0.93375
+    },
+    {
+     "intactBirths": 66.5,
+     "ablatedBirths": 69,
+     "intactAlive": 0.62125,
+     "ablatedAlive": 0.6225
+    },
+    {
+     "intactBirths": 75.5,
+     "ablatedBirths": 110.75,
+     "intactAlive": 0.7050000000000001,
+     "ablatedAlive": 0.82625
+    },
+    {
+     "intactBirths": 99.75,
+     "ablatedBirths": 82.25,
+     "intactAlive": 0.96125,
+     "ablatedAlive": 0.85
+    },
+    {
+     "intactBirths": 59.75,
+     "ablatedBirths": 38.75,
+     "intactAlive": 0.56125,
+     "ablatedAlive": 0.5137499999999999
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 69,
+     "ablatedBirths": 79,
+     "intactAlive": 0.47625000000000006,
+     "ablatedAlive": 0.455
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 65.25,
+     "ablatedBirths": 57,
+     "intactAlive": 0.69375,
+     "ablatedAlive": 0.59875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 54.75,
+     "ablatedBirths": 57.5,
+     "intactAlive": 0.7962499999999999,
+     "ablatedAlive": 0.83
+    },
+    {
+     "intactBirths": 46.5,
+     "ablatedBirths": 45,
+     "intactAlive": 0.6475,
+     "ablatedAlive": 0.6125
+    },
+    {
+     "intactBirths": 42.75,
+     "ablatedBirths": 26.5,
+     "intactAlive": 0.56875,
+     "ablatedAlive": 0.48624999999999996
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 66,
+     "ablatedBirths": 39.25,
+     "intactAlive": 0.645,
+     "ablatedAlive": 0.5675
+    },
+    {
+     "intactBirths": 15.75,
+     "ablatedBirths": 12.75,
+     "intactAlive": 0.71375,
+     "ablatedAlive": 0.69
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.9675,
+     "ablatedAlive": 0.96875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    }
+   ],
+   "minutes": 4.416066666666667,
+   "genomeLength": {
+    "mean": 629.2995951417004,
+    "sd": 23.709427732419922
+   },
+   "topology": {
+    "meanAcquiredUnits": 1.1555555555555554,
+    "meanAcquiredConnections": 5.2444444444444445,
+    "meanConnections": 289.8222222222222,
+    "liveUnits": 52,
+    "constantUnits": 0,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 44.4
+   }
+  },
+  {
+   "seed": 2,
+   "status": "ok",
+   "population": 520,
+   "withAcquiredUnits": 102,
+   "cohort": 102,
+   "half": 51,
+   "inconsistent": 0,
+   "replicates": [
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 6.94513196925492,
+       "births": 23,
+       "descAlive": 31
+      },
+      "intact": {
+       "survivalEarly": 0.37254901960784315,
+       "survival": 0,
+       "energy": 6.859357181739785,
+       "births": 43,
+       "descAlive": 6
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.3137254901960784,
+       "survival": 0,
+       "energy": 7.3586164801284815,
+       "births": 23,
+       "descAlive": 5
+      },
+      "intact": {
+       "survivalEarly": 0.39215686274509803,
+       "survival": 0,
+       "energy": 6.253889047944133,
+       "births": 30,
+       "descAlive": 26
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.27450980392156865,
+       "survival": 0,
+       "energy": 6.237297098025666,
+       "births": 40,
+       "descAlive": 35
+      },
+      "intact": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 7.147344223723017,
+       "births": 36,
+       "descAlive": 17
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.29411764705882354,
+       "survival": 0,
+       "energy": 5.601820636196547,
+       "births": 32,
+       "descAlive": 16
+      },
+      "intact": {
+       "survivalEarly": 0.27450980392156865,
+       "survival": 0,
+       "energy": 5.549938857831024,
+       "births": 23,
+       "descAlive": 9
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.2549019607843137,
+       "survival": 0,
+       "energy": 6.323387871789589,
+       "births": 41,
+       "descAlive": 26
+      },
+      "intact": {
+       "survivalEarly": 0.3137254901960784,
+       "survival": 0,
+       "energy": 6.552043369069376,
+       "births": 28,
+       "descAlive": 19
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 6.796350732165667,
+       "births": 36,
+       "descAlive": 6
+      },
+      "intact": {
+       "survivalEarly": 0.35294117647058826,
+       "survival": 0,
+       "energy": 6.885887532314983,
+       "births": 21,
+       "descAlive": 3
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.35294117647058826,
+       "survival": 0,
+       "energy": 8.289394676558187,
+       "births": 24,
+       "descAlive": 1
+      },
+      "intact": {
+       "survivalEarly": 0.23529411764705882,
+       "survival": 0,
+       "energy": 4.7386996484821315,
+       "births": 30,
+       "descAlive": 23
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4117647058823529,
+       "survival": 0,
+       "energy": 9.31650032513105,
+       "births": 35,
+       "descAlive": 34
+      },
+      "intact": {
+       "survivalEarly": 0.27450980392156865,
+       "survival": 0,
+       "energy": 4.937079637849112,
+       "births": 26,
+       "descAlive": 12
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.27450980392156865,
+       "survival": 0,
+       "energy": 4.663865705242652,
+       "births": 28,
+       "descAlive": 83
+      },
+      "intact": {
+       "survivalEarly": 0.39215686274509803,
+       "survival": 0,
+       "energy": 8.34370483201306,
+       "births": 25,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.2549019607843137,
+       "survival": 0,
+       "energy": 4.349337493204016,
+       "births": 28,
+       "descAlive": 4
+      },
+      "intact": {
+       "survivalEarly": 0.39215686274509803,
+       "survival": 0,
+       "energy": 8.343186463879281,
+       "births": 28,
+       "descAlive": 18
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.2549019607843137,
+       "survival": 0,
+       "energy": 5.450369806790782,
+       "births": 27,
+       "descAlive": 28
+      },
+      "intact": {
+       "survivalEarly": 0.29411764705882354,
+       "survival": 0,
+       "energy": 7.63294171271386,
+       "births": 31,
+       "descAlive": 68
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.29411764705882354,
+       "survival": 0,
+       "energy": 5.489019946990176,
+       "births": 36,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.43137254901960786,
+       "survival": 0,
+       "energy": 7.81168572269292,
+       "births": 32,
+       "descAlive": 18
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.23529411764705882,
+       "survival": 0,
+       "energy": 5.487663571444928,
+       "births": 27,
+       "descAlive": 18
+      },
+      "intact": {
+       "survivalEarly": 0.43137254901960786,
+       "survival": 0,
+       "energy": 6.64581382996421,
+       "births": 35,
+       "descAlive": 26
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.23529411764705882,
+       "survival": 0,
+       "energy": 5.6574586335957004,
+       "births": 21,
+       "descAlive": 2
+      },
+      "intact": {
+       "survivalEarly": 0.3137254901960784,
+       "survival": 0,
+       "energy": 6.536034994216881,
+       "births": 31,
+       "descAlive": 11
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.35294117647058826,
+       "survival": 0,
+       "energy": 6.608107562803854,
+       "births": 24,
+       "descAlive": 4
+      },
+      "intact": {
+       "survivalEarly": 0.29411764705882354,
+       "survival": 0,
+       "energy": 6.279608727594308,
+       "births": 30,
+       "descAlive": 25
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 6.411649094902918,
+       "births": 30,
+       "descAlive": 23
+      },
+      "intact": {
+       "survivalEarly": 0.3137254901960784,
+       "survival": 0,
+       "energy": 6.943299223395449,
+       "births": 18,
+       "descAlive": 26
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.39215686274509803,
+       "survival": 0,
+       "energy": 6.740682307398735,
+       "births": 24,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.29411764705882354,
+       "survival": 0,
+       "energy": 6.057383906000226,
+       "births": 26,
+       "descAlive": 32
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.37254901960784315,
+       "survival": 0,
+       "energy": 7.638408719130315,
+       "births": 31,
+       "descAlive": 92
+      },
+      "intact": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 6.998744611682731,
+       "births": 35,
+       "descAlive": 15
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.3137254901960784,
+       "survival": 0,
+       "energy": 5.9924946107318,
+       "births": 19,
+       "descAlive": 9
+      },
+      "intact": {
+       "survivalEarly": 0.23529411764705882,
+       "survival": 0,
+       "energy": 5.504274780096961,
+       "births": 26,
+       "descAlive": 15
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.39215686274509803,
+       "survival": 0,
+       "energy": 7.360333128286453,
+       "births": 33,
+       "descAlive": 41
+      },
+      "intact": {
+       "survivalEarly": 0.2549019607843137,
+       "survival": 0,
+       "energy": 5.131088563241881,
+       "births": 26,
+       "descAlive": 9
+      }
+     }
+    }
+   ],
+   "arena": [
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 55.75,
+     "ablatedBirths": 90.5,
+     "intactAlive": 0.5950000000000001,
+     "ablatedAlive": 0.7237500000000001
+    },
+    {
+     "intactBirths": 58.25,
+     "ablatedBirths": 57,
+     "intactAlive": 0.9924999999999999,
+     "ablatedAlive": 0.92375
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 144.5,
+     "ablatedBirths": 156,
+     "intactAlive": 0.92625,
+     "ablatedAlive": 0.98
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 56,
+     "ablatedBirths": 72,
+     "intactAlive": 0.6675000000000001,
+     "ablatedAlive": 0.77875
+    },
+    {
+     "intactBirths": 26.75,
+     "ablatedBirths": 27,
+     "intactAlive": 0.84375,
+     "ablatedAlive": 0.84375
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 67.5,
+     "ablatedBirths": 101,
+     "intactAlive": 0.72375,
+     "ablatedAlive": 0.81875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 94,
+     "ablatedBirths": 87.75,
+     "intactAlive": 0.85625,
+     "ablatedAlive": 0.8374999999999999
+    },
+    {
+     "intactBirths": 101.75,
+     "ablatedBirths": 102.75,
+     "intactAlive": 0.995,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 71.75,
+     "ablatedBirths": 64.75,
+     "intactAlive": 0.7425,
+     "ablatedAlive": 0.7475
+    },
+    {
+     "intactBirths": 48.5,
+     "ablatedBirths": 43.25,
+     "intactAlive": 0.7150000000000001,
+     "ablatedAlive": 0.63625
+    },
+    {
+     "intactBirths": 86,
+     "ablatedBirths": 86.5,
+     "intactAlive": 0.8200000000000001,
+     "ablatedAlive": 0.81875
+    },
+    {
+     "intactBirths": 94.75,
+     "ablatedBirths": 94,
+     "intactAlive": 0.735,
+     "ablatedAlive": 0.7675000000000001
+    },
+    {
+     "intactBirths": 90.25,
+     "ablatedBirths": 122.75,
+     "intactAlive": 0.71125,
+     "ablatedAlive": 0.98125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 38,
+     "ablatedBirths": 46.75,
+     "intactAlive": 0.56125,
+     "ablatedAlive": 0.61375
+    },
+    {
+     "intactBirths": 35.5,
+     "ablatedBirths": 34.75,
+     "intactAlive": 0.515,
+     "ablatedAlive": 0.51125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.85,
+     "ablatedAlive": 0.85
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 52.75,
+     "ablatedBirths": 59.75,
+     "intactAlive": 0.48000000000000004,
+     "ablatedAlive": 0.52
+    },
+    {
+     "intactBirths": 26,
+     "ablatedBirths": 40.25,
+     "intactAlive": 0.47375,
+     "ablatedAlive": 0.5475
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 51,
+     "ablatedBirths": 50.5,
+     "intactAlive": 0.6387499999999999,
+     "ablatedAlive": 0.62625
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 84.75,
+     "ablatedBirths": 91.25,
+     "intactAlive": 0.8362499999999999,
+     "ablatedAlive": 0.87
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    }
+   ],
+   "minutes": 16.514666666666667,
+   "genomeLength": {
+    "mean": 469.99615384615385,
+    "sd": 13.493872705480662
+   },
+   "topology": {
+    "meanAcquiredUnits": 1.0392156862745099,
+    "meanAcquiredConnections": 2.7549019607843137,
+    "meanConnections": 317.53921568627453,
+    "liveUnits": 106,
+    "constantUnits": 0,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 15.558823529411764
+   }
+  },
+  {
+   "seed": 3,
+   "status": "ok",
+   "population": 641,
+   "withAcquiredUnits": 30,
+   "cohort": 30,
+   "half": 15,
+   "inconsistent": 0,
+   "replicates": [
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.4666666666666667,
+       "survival": 0,
+       "energy": 6.940047041525197,
+       "births": 11,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.26666666666666666,
+       "survival": 0,
+       "energy": 5.004670169333322,
+       "births": 6,
+       "descAlive": 24
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 6.857371018851057,
+       "births": 7,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.6666666666666666,
+       "survival": 0,
+       "energy": 8.528300869933325,
+       "births": 13,
+       "descAlive": 54
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.4666666666666667,
+       "survival": 0,
+       "energy": 6.856229214966818,
+       "births": 9,
+       "descAlive": 9
+      },
+      "intact": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 6.688750764999988,
+       "births": 12,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 7.92861840199892,
+       "births": 11,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 7.411601023333321,
+       "births": 11,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 9.681715800000008,
+       "births": 14,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 7.18501937201105,
+       "births": 12,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 8.901606573333325,
+       "births": 11,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 7.144662159928651,
+       "births": 15,
+       "descAlive": 58
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.26666666666666666,
+       "survival": 0,
+       "energy": 5.747661726333325,
+       "births": 11,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 7.807589437678938,
+       "births": 11,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4666666666666667,
+       "survival": 0,
+       "energy": 7.40447651633332,
+       "births": 13,
+       "descAlive": 93
+      },
+      "intact": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 8.352937460405743,
+       "births": 8,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.4666666666666667,
+       "survival": 0,
+       "energy": 8.925985823999987,
+       "births": 12,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 7.810760846963246,
+       "births": 11,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 8.409833593533342,
+       "births": 11,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.2,
+       "survival": 0,
+       "energy": 4.030684360044913,
+       "births": 8,
+       "descAlive": 1
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 7.187623526199989,
+       "births": 12,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 8.754389216255264,
+       "births": 15,
+       "descAlive": 56
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.26666666666666666,
+       "survival": 0,
+       "energy": 4.583681885599991,
+       "births": 10,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 8.7382176327428,
+       "births": 13,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.4666666666666667,
+       "survival": 0,
+       "energy": 7.1826383540013365,
+       "births": 12,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.8,
+       "survival": 0,
+       "energy": 9.65898466406665,
+       "births": 12,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 8.776917079398514,
+       "births": 12,
+       "descAlive": 18
+      },
+      "intact": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 7.182939239933316,
+       "births": 14,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.3333333333333333,
+       "survival": 0,
+       "energy": 5.65079544,
+       "births": 8,
+       "descAlive": 3
+      },
+      "intact": {
+       "survivalEarly": 0.6666666666666666,
+       "survival": 0,
+       "energy": 9.047920065580932,
+       "births": 10,
+       "descAlive": 44
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 6.7457042899999795,
+       "births": 8,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 7.534639476311061,
+       "births": 11,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6666666666666666,
+       "survival": 0,
+       "energy": 8.391745715810801,
+       "births": 7,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 8.083701266133323,
+       "births": 13,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 8.701854525073726,
+       "births": 9,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 8.653979268066639,
+       "births": 16,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.5333333333333333,
+       "survival": 0,
+       "energy": 8.428269018306125,
+       "births": 13,
+       "descAlive": 35
+      },
+      "intact": {
+       "survivalEarly": 0.6,
+       "survival": 0,
+       "energy": 8.715322983199979,
+       "births": 12,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 5.823104729046003,
+       "births": 10,
+       "descAlive": 90
+      },
+      "intact": {
+       "survivalEarly": 0.4,
+       "survival": 0,
+       "energy": 6.457463793800002,
+       "births": 11,
+       "descAlive": 0
+      }
+     }
+    }
+   ],
+   "arena": [
+    {
+     "intactBirths": 99,
+     "ablatedBirths": 89.75,
+     "intactAlive": 0.78,
+     "ablatedAlive": 0.75
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 91.25,
+     "ablatedBirths": 133,
+     "intactAlive": 0.7012499999999999,
+     "ablatedAlive": 0.92625
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 116.25,
+     "ablatedBirths": 149.5,
+     "intactAlive": 0.82125,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 112,
+     "ablatedBirths": 73.75,
+     "intactAlive": 0.82875,
+     "ablatedAlive": 0.665
+    },
+    {
+     "intactBirths": 106.5,
+     "ablatedBirths": 134,
+     "intactAlive": 0.7025,
+     "ablatedAlive": 0.96
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 117.75,
+     "ablatedBirths": 95.75,
+     "intactAlive": 0.83375,
+     "ablatedAlive": 0.80625
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 111,
+     "ablatedBirths": 110.5,
+     "intactAlive": 0.86375,
+     "ablatedAlive": 0.8175
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 123.25,
+     "ablatedBirths": 104.75,
+     "intactAlive": 0.86,
+     "ablatedAlive": 0.78875
+    },
+    {
+     "intactBirths": 102,
+     "ablatedBirths": 87,
+     "intactAlive": 0.78125,
+     "ablatedAlive": 0.635
+    },
+    {
+     "intactBirths": 107.25,
+     "ablatedBirths": 113.5,
+     "intactAlive": 0.8775,
+     "ablatedAlive": 0.92875
+    },
+    {
+     "intactBirths": 110.25,
+     "ablatedBirths": 90.5,
+     "intactAlive": 0.9199999999999999,
+     "ablatedAlive": 0.7525
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 120.5,
+     "ablatedBirths": 133.25,
+     "intactAlive": 0.735,
+     "ablatedAlive": 0.84625
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 121.5,
+     "ablatedBirths": 109,
+     "intactAlive": 0.9125,
+     "ablatedAlive": 0.8300000000000001
+    }
+   ],
+   "minutes": 18.900216666666665,
+   "genomeLength": {
+    "mean": 473.7254290171607,
+    "sd": 23.493341424212144
+   },
+   "topology": {
+    "meanAcquiredUnits": 1,
+    "meanAcquiredConnections": 2.466666666666667,
+    "meanConnections": 278.53333333333336,
+    "liveUnits": 27,
+    "constantUnits": 3,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 19
+   }
+  },
+  {
+   "seed": 4,
+   "status": "ok",
+   "population": 102,
+   "withAcquiredUnits": 102,
+   "cohort": 102,
+   "half": 51,
+   "inconsistent": 0,
+   "replicates": [
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.2373890414523325,
+       "births": 49,
+       "descAlive": 9
+      },
+      "intact": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.0562994321926213,
+       "births": 43,
+       "descAlive": 14
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.5753990954973918,
+       "births": 52,
+       "descAlive": 26
+      },
+      "intact": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 1.8274791474093137,
+       "births": 41,
+       "descAlive": 128
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.09803921568627451,
+       "survival": 0,
+       "energy": 2.5483064949337617,
+       "births": 49,
+       "descAlive": 111
+      },
+      "intact": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 1.9793287764283392,
+       "births": 42,
+       "descAlive": 12
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.101486098554126,
+       "births": 43,
+       "descAlive": 94
+      },
+      "intact": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.4657108157570193,
+       "births": 53,
+       "descAlive": 30
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 1.6568016162220027,
+       "births": 39,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 2.486290893355784,
+       "births": 51,
+       "descAlive": 33
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.0841513999395493,
+       "births": 43,
+       "descAlive": 7
+      },
+      "intact": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 2.3718400876077426,
+       "births": 55,
+       "descAlive": 48
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.017479828293542,
+       "births": 41,
+       "descAlive": 100
+      },
+      "intact": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 2.185723321333863,
+       "births": 41,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 1.8700820804881544,
+       "births": 41,
+       "descAlive": 86
+      },
+      "intact": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.7844917363602755,
+       "births": 42,
+       "descAlive": 13
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 2.211453037112311,
+       "births": 48,
+       "descAlive": 11
+      },
+      "intact": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 1.5426411438322079,
+       "births": 30,
+       "descAlive": 72
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 1.8322544669072724,
+       "births": 39,
+       "descAlive": 26
+      },
+      "intact": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.8129171902679655,
+       "births": 51,
+       "descAlive": 21
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 1.881489713710948,
+       "births": 40,
+       "descAlive": 38
+      },
+      "intact": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.1251604995392204,
+       "births": 53,
+       "descAlive": 66
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.270749487455233,
+       "births": 43,
+       "descAlive": 71
+      },
+      "intact": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.213030272912113,
+       "births": 47,
+       "descAlive": 26
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.5952733295633728,
+       "births": 64,
+       "descAlive": 17
+      },
+      "intact": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.1344538820739176,
+       "births": 38,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 2.028522370396566,
+       "births": 51,
+       "descAlive": 101
+      },
+      "intact": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 1.9902701763165,
+       "births": 36,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0,
+       "survival": 0,
+       "energy": 1.7486865380287426,
+       "births": 33,
+       "descAlive": 9
+      },
+      "intact": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 2.0192834296576847,
+       "births": 48,
+       "descAlive": 185
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 1.8326104703596784,
+       "births": 34,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.436165697505839,
+       "births": 49,
+       "descAlive": 132
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.6392123915311165,
+       "births": 56,
+       "descAlive": 141
+      },
+      "intact": {
+       "survivalEarly": 0.0784313725490196,
+       "survival": 0,
+       "energy": 2.8118685717395064,
+       "births": 60,
+       "descAlive": 30
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.310377122640126,
+       "births": 50,
+       "descAlive": 1
+      },
+      "intact": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 2.0904809104884574,
+       "births": 43,
+       "descAlive": 69
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.0196078431372549,
+       "survival": 0,
+       "energy": 1.9851106539075138,
+       "births": 38,
+       "descAlive": 12
+      },
+      "intact": {
+       "survivalEarly": 0.0392156862745098,
+       "survival": 0,
+       "energy": 2.5008666901611485,
+       "births": 56,
+       "descAlive": 44
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 2.3922742554617793,
+       "births": 55,
+       "descAlive": 1
+      },
+      "intact": {
+       "survivalEarly": 0.058823529411764705,
+       "survival": 0,
+       "energy": 1.7884243384056349,
+       "births": 32,
+       "descAlive": 17
+      }
+     }
+    }
+   ],
+   "arena": [
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 25.25,
+     "ablatedBirths": 10.75,
+     "intactAlive": 0.43875,
+     "ablatedAlive": 0.35500000000000004
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 56.75,
+     "ablatedBirths": 45.25,
+     "intactAlive": 0.6875,
+     "ablatedAlive": 0.6224999999999999
+    },
+    {
+     "intactBirths": 30,
+     "ablatedBirths": 31,
+     "intactAlive": 0.59625,
+     "ablatedAlive": 0.6074999999999999
+    },
+    {
+     "intactBirths": 79.75,
+     "ablatedBirths": 52.5,
+     "intactAlive": 0.5137499999999999,
+     "ablatedAlive": 0.4125
+    },
+    {
+     "intactBirths": 2.75,
+     "ablatedBirths": 4.75,
+     "intactAlive": 0.21125,
+     "ablatedAlive": 0.265
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 29.5,
+     "ablatedBirths": 13.75,
+     "intactAlive": 0.42000000000000004,
+     "ablatedAlive": 0.35375
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.6799999999999999,
+     "ablatedAlive": 0.68125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 3.25,
+     "ablatedBirths": 3.25,
+     "intactAlive": 0.85,
+     "ablatedAlive": 0.8512500000000001
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 23,
+     "ablatedBirths": 9.25,
+     "intactAlive": 0.40124999999999994,
+     "ablatedAlive": 0.25125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.72875,
+     "ablatedAlive": 0.72875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.22375,
+     "ablatedAlive": 0.22375
+    },
+    {
+     "intactBirths": 77.5,
+     "ablatedBirths": 69,
+     "intactAlive": 0.53125,
+     "ablatedAlive": 0.4987499999999999
+    },
+    {
+     "intactBirths": 0.75,
+     "ablatedBirths": 0.75,
+     "intactAlive": 0.55375,
+     "ablatedAlive": 0.7050000000000001
+    },
+    {
+     "intactBirths": 40,
+     "ablatedBirths": 40.5,
+     "intactAlive": 0.5499999999999999,
+     "ablatedAlive": 0.575
+    },
+    {
+     "intactBirths": 10,
+     "ablatedBirths": 7.75,
+     "intactAlive": 0.4675,
+     "ablatedAlive": 0.4575
+    },
+    {
+     "intactBirths": 7,
+     "ablatedBirths": 7,
+     "intactAlive": 0.18375,
+     "ablatedAlive": 0.18375
+    },
+    {
+     "intactBirths": 27.5,
+     "ablatedBirths": 4.5,
+     "intactAlive": 0.48875,
+     "ablatedAlive": 0.30000000000000004
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 48.75,
+     "ablatedBirths": 22.25,
+     "intactAlive": 0.37375,
+     "ablatedAlive": 0.28
+    },
+    {
+     "intactBirths": 10,
+     "ablatedBirths": 14,
+     "intactAlive": 0.31,
+     "ablatedAlive": 0.35125000000000006
+    },
+    {
+     "intactBirths": 48,
+     "ablatedBirths": 95.5,
+     "intactAlive": 0.6074999999999999,
+     "ablatedAlive": 0.85875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 80.5,
+     "ablatedBirths": 76,
+     "intactAlive": 0.535,
+     "ablatedAlive": 0.52125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.685,
+     "ablatedAlive": 0.685
+    }
+   ],
+   "minutes": 4.081016666666667,
+   "genomeLength": {
+    "mean": 537.0098039215686,
+    "sd": 23.98426571572158
+   },
+   "topology": {
+    "meanAcquiredUnits": 1.0588235294117647,
+    "meanAcquiredConnections": 4.303921568627451,
+    "meanConnections": 259.38235294117646,
+    "liveUnits": 108,
+    "constantUnits": 0,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 37.46078431372549
+   }
+  },
+  {
+   "seed": 5,
+   "status": "cohort-too-small",
+   "population": 355,
+   "withAcquiredUnits": 1,
+   "cohort": 1,
+   "half": 0,
+   "inconsistent": 0,
+   "replicates": [],
+   "arena": [],
+   "minutes": 5.073033333333333,
+   "genomeLength": {
+    "mean": 488.912676056338,
+    "sd": 25.401025428882253
+   },
+   "topology": {
+    "meanAcquiredUnits": 1,
+    "meanAcquiredConnections": 4,
+    "meanConnections": 341,
+    "liveUnits": 1,
+    "constantUnits": 0,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 14
+   }
+  },
+  {
+   "seed": 6,
+   "status": "ok",
+   "population": 584,
+   "withAcquiredUnits": 300,
+   "cohort": 300,
+   "half": 150,
+   "inconsistent": 0,
+   "replicates": [
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.2866666666666667,
+       "survival": 0,
+       "energy": 10.38945593030399,
+       "births": 130,
+       "descAlive": 14
+      },
+      "intact": {
+       "survivalEarly": 0.38,
+       "survival": 0,
+       "energy": 13.871138352892169,
+       "births": 132,
+       "descAlive": 15
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.38666666666666666,
+       "survival": 0.006666666666666667,
+       "energy": 13.014574984780307,
+       "births": 155,
+       "descAlive": 48
+      },
+      "intact": {
+       "survivalEarly": 0.38,
+       "survival": 0,
+       "energy": 14.071794425079318,
+       "births": 143,
+       "descAlive": 13
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.37333333333333335,
+       "survival": 0,
+       "energy": 13.924927916556289,
+       "births": 136,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.38666666666666666,
+       "survival": 0,
+       "energy": 14.908659897698996,
+       "births": 124,
+       "descAlive": 13
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4266666666666667,
+       "survival": 0,
+       "energy": 16.021552037878237,
+       "births": 160,
+       "descAlive": 6
+      },
+      "intact": {
+       "survivalEarly": 0.31333333333333335,
+       "survival": 0,
+       "energy": 13.36296774384527,
+       "births": 116,
+       "descAlive": 5
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.4066666666666667,
+       "survival": 0,
+       "energy": 14.872105311996807,
+       "births": 147,
+       "descAlive": 2
+      },
+      "intact": {
+       "survivalEarly": 0.30666666666666664,
+       "survival": 0,
+       "energy": 11.212886320726323,
+       "births": 110,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.36666666666666664,
+       "survival": 0,
+       "energy": 12.636034843005834,
+       "births": 122,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.4266666666666667,
+       "survival": 0,
+       "energy": 12.686735691613325,
+       "births": 130,
+       "descAlive": 23
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.32,
+       "survival": 0,
+       "energy": 10.713496831924589,
+       "births": 139,
+       "descAlive": 24
+      },
+      "intact": {
+       "survivalEarly": 0.37333333333333335,
+       "survival": 0,
+       "energy": 11.959997891267792,
+       "births": 134,
+       "descAlive": 28
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.36666666666666664,
+       "survival": 0,
+       "energy": 13.760835224071492,
+       "births": 141,
+       "descAlive": 1
+      },
+      "intact": {
+       "survivalEarly": 0.4266666666666667,
+       "survival": 0,
+       "energy": 14.374290715238807,
+       "births": 139,
+       "descAlive": 2
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.36666666666666664,
+       "survival": 0,
+       "energy": 13.728631271051244,
+       "births": 142,
+       "descAlive": 5
+      },
+      "intact": {
+       "survivalEarly": 0.32,
+       "survival": 0,
+       "energy": 11.782540672306784,
+       "births": 118,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.37333333333333335,
+       "survival": 0,
+       "energy": 13.670157881563725,
+       "births": 152,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.41333333333333333,
+       "survival": 0.006666666666666667,
+       "energy": 14.217756533019733,
+       "births": 158,
+       "descAlive": 1
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.43333333333333335,
+       "survival": 0,
+       "energy": 15.395598859526947,
+       "births": 155,
+       "descAlive": 245
+      },
+      "intact": {
+       "survivalEarly": 0.4066666666666667,
+       "survival": 0,
+       "energy": 14.011508679895448,
+       "births": 144,
+       "descAlive": 7
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4066666666666667,
+       "survival": 0,
+       "energy": 15.429513483720932,
+       "births": 139,
+       "descAlive": 133
+      },
+      "intact": {
+       "survivalEarly": 0.38666666666666666,
+       "survival": 0,
+       "energy": 14.94846030407835,
+       "births": 136,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.4266666666666667,
+       "survival": 0,
+       "energy": 15.197591325202698,
+       "births": 146,
+       "descAlive": 16
+      },
+      "intact": {
+       "survivalEarly": 0.4066666666666667,
+       "survival": 0.006666666666666667,
+       "energy": 14.592057133921866,
+       "births": 138,
+       "descAlive": 78
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.37333333333333335,
+       "survival": 0,
+       "energy": 12.727051094567384,
+       "births": 149,
+       "descAlive": 12
+      },
+      "intact": {
+       "survivalEarly": 0.41333333333333333,
+       "survival": 0,
+       "energy": 13.691082002327976,
+       "births": 143,
+       "descAlive": 27
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.38666666666666666,
+       "survival": 0,
+       "energy": 12.23580547389352,
+       "births": 140,
+       "descAlive": 3
+      },
+      "intact": {
+       "survivalEarly": 0.35333333333333333,
+       "survival": 0,
+       "energy": 12.303169025610181,
+       "births": 115,
+       "descAlive": 0
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.41333333333333333,
+       "survival": 0,
+       "energy": 13.200560442635533,
+       "births": 141,
+       "descAlive": 0
+      },
+      "intact": {
+       "survivalEarly": 0.32666666666666666,
+       "survival": 0,
+       "energy": 12.06768738126843,
+       "births": 128,
+       "descAlive": 0
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.42,
+       "survival": 0,
+       "energy": 15.695747345612121,
+       "births": 146,
+       "descAlive": 23
+      },
+      "intact": {
+       "survivalEarly": 0.4066666666666667,
+       "survival": 0,
+       "energy": 14.484338774639948,
+       "births": 132,
+       "descAlive": 1
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.41333333333333333,
+       "survival": 0,
+       "energy": 12.483618171019662,
+       "births": 157,
+       "descAlive": 38
+      },
+      "intact": {
+       "survivalEarly": 0.42,
+       "survival": 0.006666666666666667,
+       "energy": 12.518439123982294,
+       "births": 143,
+       "descAlive": 2
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.38,
+       "survival": 0,
+       "energy": 10.540537742577694,
+       "births": 123,
+       "descAlive": 3
+      },
+      "intact": {
+       "survivalEarly": 0.35333333333333333,
+       "survival": 0,
+       "energy": 11.557229452968842,
+       "births": 136,
+       "descAlive": 1
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.4066666666666667,
+       "survival": 0,
+       "energy": 13.726028676328886,
+       "births": 154,
+       "descAlive": 72
+      },
+      "intact": {
+       "survivalEarly": 0.4666666666666667,
+       "survival": 0,
+       "energy": 13.985040112873303,
+       "births": 153,
+       "descAlive": 53
+      }
+     }
+    }
+   ],
+   "arena": [
+    {
+     "intactBirths": 131.25,
+     "ablatedBirths": 113.75,
+     "intactAlive": 0.84,
+     "ablatedAlive": 0.75125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 137.5,
+     "ablatedBirths": 133,
+     "intactAlive": 0.94,
+     "ablatedAlive": 0.92625
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 85,
+     "ablatedBirths": 74.75,
+     "intactAlive": 0.7225,
+     "ablatedAlive": 0.7025
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 82,
+     "ablatedBirths": 69.75,
+     "intactAlive": 0.855,
+     "ablatedAlive": 0.66125
+    },
+    {
+     "intactBirths": 82.75,
+     "ablatedBirths": 81.5,
+     "intactAlive": 0.79,
+     "ablatedAlive": 0.75875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.99625,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 90,
+     "ablatedBirths": 91.75,
+     "intactAlive": 0.72875,
+     "ablatedAlive": 0.72875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 133,
+     "ablatedBirths": 98,
+     "intactAlive": 0.98,
+     "ablatedAlive": 0.7675000000000001
+    },
+    {
+     "intactBirths": 137.25,
+     "ablatedBirths": 106.25,
+     "intactAlive": 0.865,
+     "ablatedAlive": 0.6950000000000001
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 75.75,
+     "ablatedBirths": 77.5,
+     "intactAlive": 0.9425,
+     "ablatedAlive": 0.92
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 113.25,
+     "ablatedBirths": 120.75,
+     "intactAlive": 0.775,
+     "ablatedAlive": 0.86875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 128,
+     "ablatedBirths": 137.5,
+     "intactAlive": 0.975,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 86.75,
+     "ablatedBirths": 86,
+     "intactAlive": 0.88,
+     "ablatedAlive": 0.81625
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 117.5,
+     "ablatedBirths": 148.5,
+     "intactAlive": 0.82875,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 99.5,
+     "ablatedBirths": 119.25,
+     "intactAlive": 0.75625,
+     "ablatedAlive": 0.865
+    },
+    {
+     "intactBirths": 144,
+     "ablatedBirths": 133.75,
+     "intactAlive": 0.8075,
+     "ablatedAlive": 0.7737499999999999
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 99.25,
+     "ablatedBirths": 100.75,
+     "intactAlive": 0.83,
+     "ablatedAlive": 0.89625
+    },
+    {
+     "intactBirths": 131.5,
+     "ablatedBirths": 134.75,
+     "intactAlive": 0.985,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 152.75,
+     "ablatedBirths": 120.75,
+     "intactAlive": 0.87125,
+     "ablatedAlive": 0.6975
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 126.5,
+     "ablatedBirths": 131,
+     "intactAlive": 1,
+     "ablatedAlive": 0.99
+    },
+    {
+     "intactBirths": 133.5,
+     "ablatedBirths": 114.25,
+     "intactAlive": 1,
+     "ablatedAlive": 0.8925
+    }
+   ],
+   "minutes": 15.152383333333333,
+   "genomeLength": {
+    "mean": 508.3767123287671,
+    "sd": 16.53623684268112
+   },
+   "topology": {
+    "meanAcquiredUnits": 1.2033333333333334,
+    "meanAcquiredConnections": 2.8533333333333335,
+    "meanConnections": 295.53333333333336,
+    "liveUnits": 339,
+    "constantUnits": 22,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 19.106666666666666
+   }
+  },
+  {
+   "seed": 7,
+   "status": "ok",
+   "population": 692,
+   "withAcquiredUnits": 173,
+   "cohort": 173,
+   "half": 86,
+   "inconsistent": 0,
+   "replicates": [
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6395348837209303,
+       "survival": 0.12790697674418605,
+       "energy": 13.45736665613962,
+       "births": 24,
+       "descAlive": 52
+      },
+      "intact": {
+       "survivalEarly": 0.7441860465116279,
+       "survival": 0.13953488372093023,
+       "energy": 15.162682373011679,
+       "births": 52,
+       "descAlive": 152
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.6395348837209303,
+       "survival": 0.09302325581395349,
+       "energy": 12.313907750825667,
+       "births": 23,
+       "descAlive": 45
+      },
+      "intact": {
+       "survivalEarly": 0.7558139534883721,
+       "survival": 0.16279069767441862,
+       "energy": 16.081969274677373,
+       "births": 39,
+       "descAlive": 173
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6744186046511628,
+       "survival": 0.12790697674418605,
+       "energy": 13.124204060973845,
+       "births": 30,
+       "descAlive": 114
+      },
+      "intact": {
+       "survivalEarly": 0.7325581395348837,
+       "survival": 0.12790697674418605,
+       "energy": 14.383564280346016,
+       "births": 35,
+       "descAlive": 104
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.6744186046511628,
+       "survival": 0.13953488372093023,
+       "energy": 14.253630367511708,
+       "births": 24,
+       "descAlive": 69
+      },
+      "intact": {
+       "survivalEarly": 0.7558139534883721,
+       "survival": 0.13953488372093023,
+       "energy": 14.576962373645403,
+       "births": 44,
+       "descAlive": 149
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.7093023255813954,
+       "survival": 0.10465116279069768,
+       "energy": 12.942713470392423,
+       "births": 28,
+       "descAlive": 105
+      },
+      "intact": {
+       "survivalEarly": 0.7325581395348837,
+       "survival": 0.12790697674418605,
+       "energy": 14.421072128141077,
+       "births": 40,
+       "descAlive": 87
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.7209302325581395,
+       "survival": 0.16279069767441862,
+       "energy": 14.899349341575592,
+       "births": 44,
+       "descAlive": 156
+      },
+      "intact": {
+       "survivalEarly": 0.6976744186046512,
+       "survival": 0.13953488372093023,
+       "energy": 14.2105333353896,
+       "births": 28,
+       "descAlive": 66
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.686046511627907,
+       "survival": 0.1511627906976744,
+       "energy": 14.268622293220975,
+       "births": 35,
+       "descAlive": 131
+      },
+      "intact": {
+       "survivalEarly": 0.7674418604651163,
+       "survival": 0.12790697674418605,
+       "energy": 14.78536392384597,
+       "births": 26,
+       "descAlive": 82
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.686046511627907,
+       "survival": 0.08139534883720931,
+       "energy": 12.047257267642497,
+       "births": 29,
+       "descAlive": 90
+      },
+      "intact": {
+       "survivalEarly": 0.7674418604651163,
+       "survival": 0.16279069767441862,
+       "energy": 15.42149988703493,
+       "births": 42,
+       "descAlive": 133
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.7325581395348837,
+       "survival": 0.10465116279069768,
+       "energy": 13.08813078013669,
+       "births": 25,
+       "descAlive": 90
+      },
+      "intact": {
+       "survivalEarly": 0.686046511627907,
+       "survival": 0.1511627906976744,
+       "energy": 15.013510728363421,
+       "births": 37,
+       "descAlive": 114
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.7325581395348837,
+       "survival": 0.12790697674418605,
+       "energy": 13.321349711430356,
+       "births": 25,
+       "descAlive": 80
+      },
+      "intact": {
+       "survivalEarly": 0.7093023255813954,
+       "survival": 0.11627906976744186,
+       "energy": 13.49428334436048,
+       "births": 39,
+       "descAlive": 131
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6976744186046512,
+       "survival": 0.13953488372093023,
+       "energy": 13.590795785511693,
+       "births": 34,
+       "descAlive": 101
+      },
+      "intact": {
+       "survivalEarly": 0.7209302325581395,
+       "survival": 0.12790697674418605,
+       "energy": 14.231701232343077,
+       "births": 40,
+       "descAlive": 117
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.6976744186046512,
+       "survival": 0.11627906976744186,
+       "energy": 13.521497905268248,
+       "births": 27,
+       "descAlive": 102
+      },
+      "intact": {
+       "survivalEarly": 0.7558139534883721,
+       "survival": 0.1511627906976744,
+       "energy": 15.017855871912811,
+       "births": 35,
+       "descAlive": 98
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.6744186046511628,
+       "survival": 0.06976744186046512,
+       "energy": 11.037305237851802,
+       "births": 20,
+       "descAlive": 71
+      },
+      "intact": {
+       "survivalEarly": 0.7441860465116279,
+       "survival": 0.16279069767441862,
+       "energy": 15.899070509436081,
+       "births": 48,
+       "descAlive": 125
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.6976744186046512,
+       "survival": 0.08139534883720931,
+       "energy": 11.221956162290768,
+       "births": 11,
+       "descAlive": 34
+      },
+      "intact": {
+       "survivalEarly": 0.7441860465116279,
+       "survival": 0.12790697674418605,
+       "energy": 15.23434122178204,
+       "births": 49,
+       "descAlive": 153
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.7325581395348837,
+       "survival": 0.11627906976744186,
+       "energy": 12.954063747680205,
+       "births": 29,
+       "descAlive": 97
+      },
+      "intact": {
+       "survivalEarly": 0.6744186046511628,
+       "survival": 0.1744186046511628,
+       "energy": 16.065067154610606,
+       "births": 28,
+       "descAlive": 112
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.7093023255813954,
+       "survival": 0.12790697674418605,
+       "energy": 13.62367942761627,
+       "births": 31,
+       "descAlive": 109
+      },
+      "intact": {
+       "survivalEarly": 0.6976744186046512,
+       "survival": 0.1744186046511628,
+       "energy": 16.063930627276296,
+       "births": 27,
+       "descAlive": 87
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.7558139534883721,
+       "survival": 0.16279069767441862,
+       "energy": 15.95836819335756,
+       "births": 33,
+       "descAlive": 102
+      },
+      "intact": {
+       "survivalEarly": 0.686046511627907,
+       "survival": 0.09302325581395349,
+       "energy": 11.940206230096015,
+       "births": 31,
+       "descAlive": 100
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.7325581395348837,
+       "survival": 0.11627906976744186,
+       "energy": 14.145728495162848,
+       "births": 25,
+       "descAlive": 106
+      },
+      "intact": {
+       "survivalEarly": 0.686046511627907,
+       "survival": 0.12790697674418605,
+       "energy": 12.811459292706482,
+       "births": 31,
+       "descAlive": 108
+      }
+     }
+    },
+    {
+     "ablated": {
+      "ablated": {
+       "survivalEarly": 0.686046511627907,
+       "survival": 0.13953488372093023,
+       "energy": 14.001709870797777,
+       "births": 28,
+       "descAlive": 103
+      },
+      "intact": {
+       "survivalEarly": 0.7441860465116279,
+       "survival": 0.16279069767441862,
+       "energy": 15.53357026076458,
+       "births": 33,
+       "descAlive": 102
+      }
+     },
+     "sham": {
+      "ablated": {
+       "survivalEarly": 0.7093023255813954,
+       "survival": 0.13953488372093023,
+       "energy": 14.016220482680309,
+       "births": 36,
+       "descAlive": 144
+      },
+      "intact": {
+       "survivalEarly": 0.7209302325581395,
+       "survival": 0.10465116279069768,
+       "energy": 14.086455332875016,
+       "births": 26,
+       "descAlive": 74
+      }
+     }
+    }
+   ],
+   "arena": [
+    {
+     "intactBirths": 192.75,
+     "ablatedBirths": 192.75,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 173,
+     "ablatedBirths": 174,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 173.5,
+     "ablatedBirths": 158.25,
+     "intactAlive": 0.82625,
+     "ablatedAlive": 0.76375
+    },
+    {
+     "intactBirths": 178.25,
+     "ablatedBirths": 182.75,
+     "intactAlive": 0.9625,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 156.5,
+     "ablatedBirths": 154,
+     "intactAlive": 0.93625,
+     "ablatedAlive": 0.9575
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 0.94125,
+     "ablatedAlive": 0.94125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 102.25,
+     "ablatedBirths": 97,
+     "intactAlive": 0.69125,
+     "ablatedAlive": 0.6837500000000001
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 199.75,
+     "ablatedBirths": 199.75,
+     "intactAlive": 0.9725,
+     "ablatedAlive": 0.96875
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 185.75,
+     "ablatedBirths": 185.75,
+     "intactAlive": 0.9975,
+     "ablatedAlive": 0.97125
+    },
+    {
+     "intactBirths": 182.25,
+     "ablatedBirths": 183.75,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 194.25,
+     "ablatedBirths": 196,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 202.25,
+     "ablatedBirths": 214,
+     "intactAlive": 0.9475,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 184.5,
+     "ablatedBirths": 194.75,
+     "intactAlive": 0.95,
+     "ablatedAlive": 0.99125
+    },
+    {
+     "intactBirths": 192.5,
+     "ablatedBirths": 191.75,
+     "intactAlive": 0.9625,
+     "ablatedAlive": 0.97125
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 151.25,
+     "ablatedBirths": 156.5,
+     "intactAlive": 0.8887499999999999,
+     "ablatedAlive": 0.91875
+    },
+    {
+     "intactBirths": 188.75,
+     "ablatedBirths": 190.75,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 0,
+     "ablatedBirths": 0,
+     "intactAlive": 1,
+     "ablatedAlive": 1
+    },
+    {
+     "intactBirths": 168.75,
+     "ablatedBirths": 170,
+     "intactAlive": 0.875,
+     "ablatedAlive": 0.8925
+    },
+    {
+     "intactBirths": 189.5,
+     "ablatedBirths": 184,
+     "intactAlive": 1,
+     "ablatedAlive": 0.9825
+    },
+    {
+     "intactBirths": 161.75,
+     "ablatedBirths": 151.5,
+     "intactAlive": 0.8600000000000001,
+     "ablatedAlive": 0.7999999999999999
+    }
+   ],
+   "minutes": 17.82133333333333,
+   "genomeLength": {
+    "mean": 470.7846820809249,
+    "sd": 24.293452745260616
+   },
+   "topology": {
+    "meanAcquiredUnits": 1.4739884393063585,
+    "meanAcquiredConnections": 4.867052023121388,
+    "meanConnections": 334.6242774566474,
+    "liveUnits": 253,
+    "constantUnits": 2,
+    "foldedUnits": 0,
+    "meanGenesRemoved": 19.069364161849713
+   }
+  },
+  {
+   "seed": 8,
+   "status": "extinct",
+   "population": 0,
+   "withAcquiredUnits": 0,
+   "cohort": 0,
+   "half": 0,
+   "inconsistent": 0,
+   "replicates": [],
+   "arena": [],
+   "minutes": 0.6748166666666666
+  }
+ ]
+}

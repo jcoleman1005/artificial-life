@@ -87,6 +87,19 @@ export const BRAIN_INPUT_COUNT = BRAIN_INPUTS.length;
 export const BRAIN_HIDDEN = 6;
 export const WEIGHT_LIMIT = 40;
 
+/**
+ * The brain inputs whose feature value is the same for every legal action
+ * within one decision (brainFeatures reads them from the organism's state
+ * and senses only, never from the action): the constant bias, energy,
+ * carried food, crowding and the three free memory registers. A hidden unit
+ * fed only by these adds the same offset to every action's score, so it
+ * cannot change which action wins (checked by a test).
+ */
+export const ACTION_INVARIANT_INPUTS: readonly BrainInput[] = ['bias', 'energy', 'carried', 'crowding', 'register0', 'register1', 'register2'];
+
+/** 1 at the BRAIN_INPUTS index of each ACTION_INVARIANT_INPUTS entry. */
+export const ACTION_INVARIANT_MASK: Readonly<Uint8Array> = Uint8Array.from(BRAIN_INPUTS, (name) => (ACTION_INVARIANT_INPUTS.includes(name) ? 1 : 0));
+
 export interface Brain {
   readonly skip: readonly number[]; // BRAIN_INPUT_COUNT
   readonly hidden: readonly number[]; // BRAIN_HIDDEN × BRAIN_INPUT_COUNT, row-major
@@ -316,6 +329,100 @@ export function brainScore(brain: Brain, x: readonly number[]): { score: number;
   return { score, direct, hidden };
 }
 
+// ---------------------------------------------------------------------------
+// DNA Stage 3: the growable brain (`dnaGrowableBrain`; docs/specs/dna.md)
+// ---------------------------------------------------------------------------
+
+/** Whether brains are compiled from the genome as growable circuits (Stage 3; needs DNA). */
+export const growableBrain = (config: Readonly<SimulationConfig>): boolean => config.dnaEnabled && config.dnaGrowableBrain;
+
+/**
+ * A sparse brain compiled from a genome (compileCircuit in dna.ts): skip
+ * connections plus one hidden layer of any number of units, with zero
+ * weights pruned. Scores exactly as the dense brain of the same weights
+ * (scoreCircuit vs brainScore, up to the sign of a zero). Derived from the
+ * genome, never saved.
+ */
+export interface Circuit {
+  /** Input indices with a nonzero skip weight, ascending. */
+  readonly skipIdx: Int32Array;
+  readonly skipW: Float64Array;
+  /** The output bias, plus the constant units folded in while no live unit precedes them. */
+  readonly bias0: number;
+  /** Length U + 1, CSR offsets into srcIdx/srcW; start === end marks a constant unit. */
+  readonly unitStart: Int32Array;
+  readonly unitBias: Float64Array;
+  /** Output weight; for a constant unit, the precomputed out × tanh(bias). */
+  readonly unitOut: Float64Array;
+  /** The (mapped) hidden unit index each entry came from. */
+  readonly unitId: Int32Array;
+  /** Input index per in-edge, ascending within each unit. */
+  readonly srcIdx: Int32Array;
+  readonly srcW: Float64Array;
+  /** Skip connections + in-edges + one out edge per evaluated or folded unit. */
+  readonly connections: number;
+  /** The same count restricted to units with unitId >= BRAIN_HIDDEN. */
+  readonly acquiredConnections: number;
+  /** Evaluated or folded units with unitId >= BRAIN_HIDDEN. */
+  readonly acquiredUnits: number;
+  /**
+   * Acquired units (unitId >= BRAIN_HIDDEN) that are not choice-invariant: a
+   * unit is choice-invariant when it is constant (no live in-edge) or every
+   * live in-edge comes from ACTION_INVARIANT_INPUTS, since it then adds the
+   * same offset to every action's score.
+   */
+  readonly effectiveAcquiredUnits: number;
+  /** In-edges plus the out edge of the effective acquired units. */
+  readonly effectiveAcquiredConnections: number;
+}
+
+/** Scratch for scoreCircuit: the direct contributions of the last call, by skip entry (no allocation per call). */
+const DIRECT = new Float64Array(BRAIN_INPUT_COUNT);
+let lastHidden = 0;
+
+/**
+ * A circuit's score for one feature vector. Allocates nothing; the direct
+ * contributions are left in DIRECT (by skip entry) and the hidden total in
+ * lastHidden, for evaluateBrain. Sums in the dense brain's order, so the
+ * score equals brainScore's for the same weights.
+ */
+export function scoreCircuit(c: Readonly<Circuit>, x: ArrayLike<number>): number {
+  const skipIdx = c.skipIdx;
+  const skipW = c.skipW;
+  let d = 0;
+  for (let k = 0; k < skipIdx.length; k++) {
+    const v = x[skipIdx[k]] * skipW[k];
+    DIRECT[k] = v;
+    d += v;
+  }
+  const unitStart = c.unitStart;
+  const srcIdx = c.srcIdx;
+  const srcW = c.srcW;
+  const units = unitStart.length - 1;
+  let hid = c.bias0;
+  for (let u = 0; u < units; u++) {
+    const s = unitStart[u];
+    const e = unitStart[u + 1];
+    if (s === e) {
+      hid += c.unitOut[u];
+      continue;
+    }
+    let sum = c.unitBias[u];
+    for (let j = s; j < e; j++) sum += srcW[j] * x[srcIdx[j]];
+    hid += c.unitOut[u] * Math.tanh(sum);
+  }
+  lastHidden = hid;
+  return d + hid;
+}
+
+/** The direct contribution of skip entry k and the hidden total from the latest scoreCircuit call. */
+export function lastCircuitDirect(k: number): number {
+  return DIRECT[k];
+}
+export function lastCircuitHidden(): number {
+  return lastHidden;
+}
+
 /**
  * Chooses among legal actions with the organism's brain. Scores carry the
  * nonzero direct contributions plus the hidden layer's total, so the
@@ -329,8 +436,21 @@ export function evaluateBrain(
   prng: PRNG
 ): { chosenAction: LegalAction; scores: ActionScore[] } {
   const canEatNow = legalActions.some((a) => a.type === 'EAT');
+  // Stage 3: a growable circuit when the organism has one (born with the switch on); the dense brain otherwise.
+  const circuit = growableBrain(config) ? organism.circuit : undefined;
   const scores: ActionScore[] = legalActions.map((action) => {
     const x = brainFeatures(action, organism, sensed, config, canEatNow, prng);
+    if (circuit) {
+      const score = scoreCircuit(circuit, x);
+      // Allocation here is the inspector's record, as on the dense path; the network itself allocates nothing.
+      const components: Record<string, number> = {};
+      for (let k = 0; k < circuit.skipIdx.length; k++) {
+        const v = DIRECT[k];
+        if (Math.abs(v) >= 0.001) components[BRAIN_INPUTS[circuit.skipIdx[k]]] = v;
+      }
+      components['hiddenLayer'] = lastHidden;
+      return { action, totalScore: Number(score.toFixed(3)), components };
+    }
     const { score, direct, hidden } = brainScore(organism.brain, x);
     // Unrounded here (rounding is costly in this hot path); the inspector rounds for display.
     const components: Record<string, number> = {};

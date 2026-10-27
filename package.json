@@ -15,6 +15,7 @@
     "sweep:overgrazing": "vite-node scripts/overgrazing-sweep.ts",
     "perf": "vite-node scripts/perf.ts",
     "census": "vite-node scripts/census.ts --",
+    "ablation": "vite-node scripts/ablation.ts --",
     "experiment": "vite-node scripts/experiment.ts --",
     "build:server": "vite build --ssr server/main.ts --outDir dist-server --emptyOutDir",
     "server": "npm run build && npm run build:server && node dist-server/main.js",

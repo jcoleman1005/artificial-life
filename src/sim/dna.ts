@@ -1,5 +1,5 @@
 import type { PRNG } from './prng';
-import { BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, mutateWeight, type Brain } from './brain';
+import { ACTION_INVARIANT_MASK, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
 import { lifeOf, LIFE_GENES, LIFE_TRAIT_BASE, LIFE_TRAIT_COUNT, clampLife, geneForTrait, inheritLifeValue, type LifeValues } from './lifehistory';
@@ -73,6 +73,8 @@ export interface Phenotype extends LifeValues {
   readonly herbivory?: number;
   readonly abilities: Abilities;
   readonly brain: Brain;
+  /** With dnaGrowableBrain: the sparse circuit the genome compiles to (compileCircuit). Derived, never saved. */
+  readonly circuit?: Circuit;
 }
 
 /** Trait values when a trait has no gene at all. Brain and register weights default to 0 (no connection). */
@@ -257,7 +259,287 @@ export function decodeOrganismDNA(dna: ArrayLike<number>, config: Readonly<Simul
       out: out.values,
       outBias: outBias.values[0],
     },
+    ...(growableBrain(config) ? { circuit: compileCircuit(dna, config) } : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Stage 3: the growable brain (`dnaGrowableBrain`)
+// ---------------------------------------------------------------------------
+
+export { growableBrain };
+
+/** Hidden units a genome can address with the growable brain: dnaMaxInternal, clamped to [BRAIN_HIDDEN, 256]. */
+export function internalUnits(config: Readonly<SimulationConfig>): number {
+  const m = Math.floor(config.dnaMaxInternal);
+  return Number.isFinite(m) ? clamp(m, BRAIN_HIDDEN, 256) : BRAIN_HIDDEN;
+}
+
+/** Module scratch for compileCircuit, grown to the largest unit count seen. */
+let cScratch: {
+  units: number;
+  skip: Float64Array;
+  skipSeen: Uint8Array;
+  w: Float64Array;
+  wSeen: Uint8Array;
+  bias: Float64Array;
+  biasSeen: Uint8Array;
+  out: Float64Array;
+  outSeen: Uint8Array;
+  srcIdx: Int32Array;
+  srcW: Float64Array;
+} | null = null;
+
+function circuitScratch(units: number) {
+  if (!cScratch || cScratch.units < units) {
+    cScratch = {
+      units,
+      skip: new Float64Array(BRAIN_INPUT_COUNT),
+      skipSeen: new Uint8Array(BRAIN_INPUT_COUNT),
+      w: new Float64Array(units * BRAIN_INPUT_COUNT),
+      wSeen: new Uint8Array(units * BRAIN_INPUT_COUNT),
+      bias: new Float64Array(units),
+      biasSeen: new Uint8Array(units),
+      out: new Float64Array(units),
+      outSeen: new Uint8Array(units),
+      srcIdx: new Int32Array(units * BRAIN_INPUT_COUNT),
+      srcW: new Float64Array(units * BRAIN_INPUT_COUNT),
+    };
+  } else {
+    cScratch.skip.fill(0);
+    cScratch.skipSeen.fill(0);
+    cScratch.w.fill(0, 0, units * BRAIN_INPUT_COUNT);
+    cScratch.wSeen.fill(0, 0, units * BRAIN_INPUT_COUNT);
+    cScratch.bias.fill(0, 0, units);
+    cScratch.biasSeen.fill(0, 0, units);
+    cScratch.out.fill(0, 0, units);
+    cScratch.outSeen.fill(0, 0, units);
+  }
+  return cScratch;
+}
+
+/** A brain gene that maps to no slot: it contributes nothing (but still costs dnaUpkeepPerGene like any gene). */
+const SILENT = -1;
+
+/**
+ * Where a unit field u lands among M = internalUnits hidden units: a founder
+ * unit (u < 6) is itself; a higher u wraps onto the acquired units only,
+ * 6 + ((u - 6) mod (M - 6)), so a wrapped gene never lands on a founder unit;
+ * with M = 6 there are no acquired units and it is SILENT.
+ */
+function mapUnitField(u: number, M: number): number {
+  if (u < BRAIN_HIDDEN) return u;
+  return M > BRAIN_HIDDEN ? BRAIN_HIDDEN + ((u - BRAIN_HIDDEN) % (M - BRAIN_HIDDEN)) : SILENT;
+}
+
+/**
+ * The hidden unit (of M) a brain gene builds with the growable brain, or -1
+ * for skip, output-bias, SILENT and non-brain genes. A hidden gene whose
+ * input field is >= BRAIN_INPUT_COUNT is SILENT.
+ */
+function mappedUnit(key: number, M: number): number {
+  const index = geneIndexOf(key);
+  switch (geneClassOf(key)) {
+    case GeneClass.brainHidden:
+      return (index & 0xff) < BRAIN_INPUT_COUNT ? mapUnitField(index >>> 8, M) : SILENT;
+    case GeneClass.brainHiddenBias:
+    case GeneClass.brainOut:
+      return mapUnitField(index, M);
+    default:
+      return -1;
+  }
+}
+
+const isBrainClass = (key: number): boolean => {
+  const c = geneClassOf(key);
+  return c >= GeneClass.brainSkip && c <= GeneClass.brainOutBias;
+};
+
+/**
+ * The growable brain a genome builds (Stage 3), M = internalUnits. A unit
+ * field u (a hidden gene's `index >>> 8`, a hidden-bias or output gene's
+ * whole index) maps by mapUnitField: u < 6 to unit u, else to an acquired
+ * unit 6 + ((u - 6) mod (M - 6)), or SILENT when M = 6. A skip gene with
+ * index >= 52, a hidden gene with input field (`index & 0xff`) >= 52 and an
+ * output-bias gene with index != 0 are SILENT: they contribute nothing, so
+ * the switch adds topology and never re-targets a gene onto a founder slot.
+ * Doses sum per slot as in decodeOrganismDNA. Zero
+ * weights are pruned; a unit with output weight 0 is dropped; a unit with no
+ * live input is a constant, folded into the output bias while no live unit
+ * precedes it (so the sum keeps the dense order). For a genome whose keys
+ * are all canonical (unit < 6, input < 52, output-bias index 0) the circuit
+ * scores exactly as the decoded dense brain, up to the sign of a zero.
+ */
+export function compileCircuit(dna: ArrayLike<number>, config: Readonly<SimulationConfig>): Circuit {
+  const M = internalUnits(config);
+  const I = BRAIN_INPUT_COUNT;
+  const sc = circuitScratch(M);
+  let outBias = 0;
+  let outBiasSeen = false;
+  const put = (values: Float64Array, seen: Uint8Array, i: number, dose: number) => {
+    values[i] = seen[i] ? values[i] + dose : dose;
+    seen[i] = 1;
+  };
+  for (let g = 0, n = geneCount(dna); g < n; g++) {
+    const at = g * GENE_WORDS;
+    const key = dna[at];
+    const index = geneIndexOf(key);
+    const cls = geneClassOf(key);
+    if (cls < GeneClass.brainSkip || cls > GeneClass.brainOutBias) continue;
+    const raw = geneDose(dna, at);
+    const dose = Number.isFinite(raw) ? raw : 0;
+    switch (cls) {
+      case GeneClass.brainSkip:
+        if (index < I) put(sc.skip, sc.skipSeen, index, dose);
+        break;
+      case GeneClass.brainHidden: {
+        const input = index & 0xff;
+        const u = mapUnitField(index >>> 8, M);
+        if (input < I && u !== SILENT) put(sc.w, sc.wSeen, u * I + input, dose);
+        break;
+      }
+      case GeneClass.brainHiddenBias: {
+        const u = mapUnitField(index, M);
+        if (u !== SILENT) put(sc.bias, sc.biasSeen, u, dose);
+        break;
+      }
+      case GeneClass.brainOut: {
+        const u = mapUnitField(index, M);
+        if (u !== SILENT) put(sc.out, sc.outSeen, u, dose);
+        break;
+      }
+      default: // brainOutBias
+        if (index !== 0) break;
+        outBias = outBiasSeen ? outBias + dose : dose;
+        outBiasSeen = true;
+        break;
+    }
+  }
+
+  const skipIdx: number[] = [];
+  const skipW: number[] = [];
+  for (let i = 0; i < I; i++) {
+    if (sc.skip[i] !== 0) {
+      skipIdx.push(i);
+      skipW.push(sc.skip[i]);
+    }
+  }
+  let bias0 = outBias;
+  const unitStart: number[] = [0];
+  const unitBias: number[] = [];
+  const unitOut: number[] = [];
+  const unitId: number[] = [];
+  let edges = 0;
+  let liveEmitted = false;
+  let connections = skipIdx.length;
+  let acquiredConnections = 0;
+  let acquiredUnits = 0;
+  let effectiveAcquiredConnections = 0;
+  let effectiveAcquiredUnits = 0;
+  for (let h = 0; h < M; h++) {
+    const out = sc.out[h];
+    if (out === 0) continue; // absent or zero: the unit contributes nothing
+    const row = h * I;
+    const first = edges;
+    for (let i = 0; i < I; i++) {
+      const w = sc.w[row + i];
+      if (w !== 0) {
+        sc.srcIdx[edges] = i;
+        sc.srcW[edges] = w;
+        edges++;
+      }
+    }
+    const inEdges = edges - first;
+    if (inEdges === 0 && !liveEmitted) {
+      bias0 = bias0 + out * Math.tanh(sc.bias[h]);
+    } else {
+      unitBias.push(sc.bias[h]);
+      unitOut.push(inEdges === 0 ? out * Math.tanh(sc.bias[h]) : out);
+      unitId.push(h);
+      unitStart.push(edges);
+      if (inEdges > 0) liveEmitted = true;
+    }
+    connections += inEdges + 1;
+    if (h >= BRAIN_HIDDEN) {
+      acquiredConnections += inEdges + 1;
+      acquiredUnits++;
+      let variant = false;
+      for (let j = first; j < edges && !variant; j++) variant = ACTION_INVARIANT_MASK[sc.srcIdx[j]] === 0;
+      if (variant) {
+        effectiveAcquiredConnections += inEdges + 1;
+        effectiveAcquiredUnits++;
+      }
+    }
+  }
+  return {
+    skipIdx: Int32Array.from(skipIdx),
+    skipW: Float64Array.from(skipW),
+    bias0,
+    unitStart: Int32Array.from(unitStart),
+    unitBias: Float64Array.from(unitBias),
+    unitOut: Float64Array.from(unitOut),
+    unitId: Int32Array.from(unitId),
+    srcIdx: sc.srcIdx.slice(0, edges),
+    srcW: sc.srcW.slice(0, edges),
+    connections,
+    acquiredConnections,
+    acquiredUnits,
+    effectiveAcquiredUnits,
+    effectiveAcquiredConnections,
+  };
+}
+
+export type StripLevel = 'effective' | 'units' | 'all';
+
+/**
+ * A genome without (some of) its acquired brain topology, for ablation:
+ * recompile the circuit from the result. With the growable brain the only
+ * expressed genes the growable-off decode ignores are those on units >= 6
+ * (wrapped keys never land on founder slots; see compileCircuit).
+ *
+ *   'units'      removes every expressed brain gene whose mapped unit is
+ *                >= 6. What is left compiles to a circuit that scores as the
+ *                dense brain does.
+ *   'all'        also removes the SILENT brain genes the growable-off decode
+ *                ignores (skip index >= 52, hidden input >= 52, output-bias
+ *                index != 0, and with M = 6 units >= 6). They are
+ *                phenotypically silent, so this scores as 'units' does; it
+ *                only also drops their dnaUpkeepPerGene.
+ *   'effective'  removes only the genes (in-edges, bias, out) of acquired
+ *                units that are choice-variant (counted in
+ *                circuit.effectiveAcquiredUnits), leaving choice-invariant
+ *                acquired units in place, so the stripped organism keeps
+ *                their upkeep and its choices change only where acquired
+ *                units could change them.
+ */
+export function stripAcquiredTopology(dna: ArrayLike<number>, config: Readonly<SimulationConfig>, level: StripLevel): Uint32Array {
+  const dense = { ...config, dnaGrowableBrain: false };
+  const M = internalUnits(config);
+  let variant: Set<number> | null = null;
+  if (level === 'effective') {
+    variant = new Set<number>();
+    const c = compileCircuit(dna, config);
+    for (let u = 0; u < c.unitId.length; u++) {
+      if (c.unitId[u] < BRAIN_HIDDEN) continue;
+      for (let j = c.unitStart[u]; j < c.unitStart[u + 1]; j++) {
+        if (ACTION_INVARIANT_MASK[c.srcIdx[j]] === 0) {
+          variant.add(c.unitId[u]);
+          break;
+        }
+      }
+    }
+  }
+  const words: number[] = [];
+  for (let g = 0, n = geneCount(dna); g < n; g++) {
+    const at = g * GENE_WORDS;
+    const key = dna[at];
+    if (isBrainClass(key)) {
+      const drop = variant ? variant.has(mappedUnit(key, M)) : level === 'all' ? !isExpressed(key, dense) : mappedUnit(key, M) >= BRAIN_HIDDEN;
+      if (drop) continue;
+    }
+    words.push(dna[at], dna[at + 1], dna[at + 2]);
+  }
+  return Uint32Array.from(words);
 }
 
 /**
@@ -314,16 +596,13 @@ function mutateDose(key: number, dose: number, config: Readonly<SimulationConfig
  * incoming weights, its bias and its output weight) travel together, so the
  * group is the unit; every other gene's group is its own key.
  */
-function crossGroup(key: number): number {
-  switch (geneClassOf(key)) {
-    case GeneClass.brainHidden:
-      return -1 - (geneIndexOf(key) >>> 8);
-    case GeneClass.brainHiddenBias:
-    case GeneClass.brainOut:
-      return -1 - geneIndexOf(key);
-    default:
-      return key; // keys are >= 0, hidden-unit groups < 0
-  }
+function crossGroup(key: number, unitCount: number): number {
+  const cls = geneClassOf(key);
+  if (cls !== GeneClass.brainHidden && cls !== GeneClass.brainHiddenBias && cls !== GeneClass.brainOut) return key; // keys are >= 0, hidden-unit groups < 0
+  if (unitCount === 0) return -1 - (cls === GeneClass.brainHidden ? geneIndexOf(key) >>> 8 : geneIndexOf(key));
+  // Growable brain: the unit the gene builds (compileCircuit's mapping); a SILENT gene builds none and is its own group.
+  const u = mappedUnit(key, unitCount);
+  return u === SILENT ? key : -1 - u;
 }
 
 /**
@@ -339,11 +618,16 @@ function crossGroup(key: number): number {
  * copies where `a` first has that key; keys only `b` has (picked from `b`)
  * follow at the end in `b`'s order. Two Stage 1 genomes share one layout,
  * so the child has that layout with each gene's dose from one parent.
+ *
+ * `unitCount` > 0 (the growable brain, Stage 3; unitCount = internalUnits):
+ * hidden units are grouped by the unit they map to (compileCircuit's
+ * mapping), so every gene that builds one expressed unit travels together; a
+ * SILENT brain gene is its own group. Canonical keys group as with 0.
  */
-export function crossGenomes(a: ArrayLike<number>, b: ArrayLike<number>, prng: PRNG): Uint32Array {
+export function crossGenomes(a: ArrayLike<number>, b: ArrayLike<number>, prng: PRNG, unitCount = 0): Uint32Array {
   const fromA = new Map<number, boolean>();
   const pickFor = (key: number) => {
-    const group = crossGroup(key);
+    const group = crossGroup(key, unitCount);
     if (!fromA.has(group)) fromA.set(group, prng.next() < 0.5);
   };
   const na = geneCount(a);
@@ -370,12 +654,12 @@ export function crossGenomes(a: ArrayLike<number>, b: ArrayLike<number>, prng: P
     const key = a[g * GENE_WORDS];
     const first = !keysInA.has(key);
     keysInA.add(key);
-    if (fromA.get(crossGroup(key))) copy(a, g);
+    if (fromA.get(crossGroup(key, unitCount))) copy(a, g);
     else if (first) for (const gb of bByKey.get(key) ?? []) copy(b, gb);
   }
   for (let g = 0; g < nb; g++) {
     const key = b[g * GENE_WORDS];
-    if (!keysInA.has(key) && !fromA.get(crossGroup(key))) copy(b, g);
+    if (!keysInA.has(key) && !fromA.get(crossGroup(key, unitCount))) copy(b, g);
   }
   return Uint32Array.from(words);
 }
@@ -462,16 +746,18 @@ export function pointMutationRate(key: number, config: Readonly<SimulationConfig
 /** Whether a gene points at a slot this build decodes (otherwise it is silent DNA). */
 export function isExpressed(key: number, config: Readonly<SimulationConfig>): boolean {
   const index = geneIndexOf(key);
+  // The growable brain expresses every brain gene compileCircuit maps to a slot (not the SILENT ones).
+  const M = growableBrain(config) ? internalUnits(config) : BRAIN_HIDDEN;
   switch (geneClassOf(key)) {
     case GeneClass.trait:
       return index <= LAST_BODY_TRAIT || (index === TraitId.herbivory && splitDiets(config)) || (index >= TraitId.memoryWeight0 && index < REGISTER_END);
     case GeneClass.brainSkip:
       return index < BRAIN_INPUT_COUNT;
     case GeneClass.brainHidden:
-      return index >>> 8 < BRAIN_HIDDEN && (index & 0xff) < BRAIN_INPUT_COUNT;
+      return (index & 0xff) < BRAIN_INPUT_COUNT && mapUnitField(index >>> 8, M) !== SILENT;
     case GeneClass.brainHiddenBias:
     case GeneClass.brainOut:
-      return index < BRAIN_HIDDEN;
+      return mapUnitField(index, M) !== SILENT; // switch off (M = 6): units < 6 only
     case GeneClass.brainOutBias:
       return index < 1;
     default:
@@ -479,24 +765,25 @@ export function isExpressed(key: number, config: Readonly<SimulationConfig>): bo
   }
 }
 
-/** Every slot a gene can express, as keys (the pool insertions draw from). */
-function slotKeys(config: Readonly<SimulationConfig>): number[] {
+/** Every slot a gene can express, as keys (the pool insertions draw from); with the growable brain, every addressable hidden unit. */
+function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
   const keys: number[] = [];
   for (let t = 0; t <= LAST_BODY_TRAIT; t++) keys.push(geneKey(GeneClass.trait, t));
   if (splitDiets(config)) keys.push(geneKey(GeneClass.trait, TraitId.herbivory));
   for (let i = 0; i < MEMORY_WEIGHT_COUNT; i++) keys.push(geneKey(GeneClass.trait, TraitId.memoryWeight0 + i));
   for (let i = 0; i < BRAIN_INPUT_COUNT; i++) keys.push(geneKey(GeneClass.brainSkip, i));
-  for (let h = 0; h < BRAIN_HIDDEN; h++) {
+  for (let h = 0; h < units; h++) {
     for (let i = 0; i < BRAIN_INPUT_COUNT; i++) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
     keys.push(geneKey(GeneClass.brainHiddenBias, h), geneKey(GeneClass.brainOut, h));
   }
   keys.push(geneKey(GeneClass.brainOutBias, 0));
   return keys;
 }
-let slotCache: { split: boolean; keys: number[] } | null = null;
+let slotCache: { split: boolean; units: number; keys: number[] } | null = null;
 function slotsFor(config: Readonly<SimulationConfig>): number[] {
   const split = splitDiets(config);
-  if (slotCache?.split !== split) slotCache = { split, keys: slotKeys(config) };
+  const units = growableBrain(config) ? internalUnits(config) : BRAIN_HIDDEN;
+  if (slotCache?.split !== split || slotCache.units !== units) slotCache = { split, units, keys: slotKeys(config, units) };
   return slotCache.keys;
 }
 

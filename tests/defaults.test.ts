@@ -29,6 +29,9 @@ describe('Default world', () => {
       dnaContinuousAbilities: DEFAULT_CONFIG.dnaContinuousAbilities,
       dnaSplitDiets: DEFAULT_CONFIG.dnaSplitDiets,
       dnaVariationEnabled: DEFAULT_CONFIG.dnaVariationEnabled,
+      dnaGrowableBrain: DEFAULT_CONFIG.dnaGrowableBrain,
+      dnaMaxInternal: DEFAULT_CONFIG.dnaMaxInternal,
+      dnaUpkeepPerConnection: DEFAULT_CONFIG.dnaUpkeepPerConnection,
       clutchGeneEnabled: DEFAULT_CONFIG.clutchGeneEnabled,
     }).toEqual({
       controller: 'brain',
@@ -52,6 +55,11 @@ describe('Default world', () => {
       dnaContinuousAbilities: false,
       dnaSplitDiets: false,
       dnaVariationEnabled: false,
+      // DNA Stage 3 (growable brain) stays off until its gate is signed off; its size cap and
+      // connection upkeep are pinned (docs/findings.md, Parameter log).
+      dnaGrowableBrain: false,
+      dnaMaxInternal: 16,
+      dnaUpkeepPerConnection: 0.00005,
       // The clutch gene (matings only) is a new feature, on by default.
       clutchGeneEnabled: true,
     });
