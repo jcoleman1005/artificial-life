@@ -11,6 +11,8 @@ import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
 import { fatRoom, maxEnergyOf, sensingRadiusOf, thresholdOf } from './lifehistory';
 
+const NEARBY: number[] = [];
+
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
  * Limited to sensingRadius cells. No global map knowledge is leaked.
@@ -45,79 +47,94 @@ export function senseEnvironment(
   let kinPullX = 0;
   let kinPullY = 0;
 
-  // Organisms in the window, as indices into snapshot.organisms
-  const nearbyIndices: number[] = [];
+  // Organisms in the window, as indices into snapshot.organisms (scratch, reused across calls)
+  const nearbyIndices = NEARBY;
+  nearbyIndices.length = 0;
 
-  // Scan local window [x - radius, x + radius] x [y - radius, y + radius]
+  const { gridHeight, organismGrid, obstacleGrid, foodGrid, carrionGrid } = snapshot;
+
+  // Nearest of each kind, kept as numbers and turned into entities once at the end. Ties
+  // go to the first cell in scan order (rows top to bottom, left to right), as strict `<` did.
+  let obsDx = 0, obsDy = 0;
+  let foodDx = 0, foodDy = 0, foodValue = 0;
+  let carrDx = 0, carrDy = 0, carrValue = 0;
+
+  // Scan local window [x - radius, x + radius] x [y - radius, y + radius]. The out-of-bounds
+  // cells count as obstacles, but only the nearest one on each side of a row can be the nearest
+  // overall, so the rest are skipped.
+  const xLo = Math.max(0, x - radius);
+  const xHi = Math.min(width - 1, x + radius);
   for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      if (dx === 0 && dy === 0) continue;
-
-      const targetX = x + dx;
-      const targetY = y + dy;
-      const manhattanDist = Math.abs(dx) + Math.abs(dy);
-
-      // Check boundary as an obstacle
-      const isOutOfBounds =
-        targetX < 0 ||
-        targetX >= snapshot.gridWidth ||
-        targetY < 0 ||
-        targetY >= snapshot.gridHeight;
-
-      if (isOutOfBounds) {
-        if (manhattanDist < minObstacleDist) {
-          minObstacleDist = manhattanDist;
-          nearestObstacle = {
-            x: targetX,
-            y: targetY,
-            distance: manhattanDist,
-            dx,
-            dy,
-          };
-        }
-        continue;
+    const targetY = y + dy;
+    const absDy = dy < 0 ? -dy : dy;
+    if (targetY < 0 || targetY >= gridHeight) {
+      // A whole row outside: its nearest cell is straight above or below.
+      if (absDy < minObstacleDist) {
+        minObstacleDist = absDy;
+        obsDx = 0;
+        obsDy = dy;
       }
-
-      const cell = targetY * width + targetX;
-      const occupant = snapshot.organismGrid[cell];
-      if (occupant >= 0) nearbyIndices.push(occupant);
-
-      // Check terrain obstacles
-      if (snapshot.obstacleGrid[cell] === 1) {
-        if (manhattanDist < minObstacleDist) {
-          minObstacleDist = manhattanDist;
-          nearestObstacle = {
-            x: targetX,
-            y: targetY,
-            distance: manhattanDist,
-            dx,
-            dy,
-          };
-        }
-      }
-
-      // Check food patches
-      const stock = snapshot.foodGrid[cell];
-      if (stock > 0) {
-        if (manhattanDist < minFoodDist) {
-          minFoodDist = manhattanDist;
-          nearestFood = {
-            x: targetX,
-            y: targetY,
-            distance: manhattanDist,
-            dx,
-            dy,
-            value: stock,
-          };
-        }
-      }
-
-      const carrion = snapshot.carrionGrid[cell];
-      if (carrion > 0 && manhattanDist < minCarrionDist) {
-        minCarrionDist = manhattanDist;
-        nearestCarrion = { x: targetX, y: targetY, distance: manhattanDist, dx, dy, value: carrion };
+      continue;
+    }
+    if (x - radius < 0) {
+      const dx = -x - 1; // the nearest cell off the left edge
+      const dist = -dx + absDy;
+      if (dist < minObstacleDist) {
+        minObstacleDist = dist;
+        obsDx = dx;
+        obsDy = dy;
       }
     }
+    const rowBase = targetY * width;
+    for (let targetX = xLo; targetX <= xHi; targetX++) {
+      const dx = targetX - x;
+      if (dx === 0 && dy === 0) continue;
+      const manhattanDist = (dx < 0 ? -dx : dx) + absDy;
+      const cell = rowBase + targetX;
+
+      const occupant = organismGrid[cell];
+      if (occupant >= 0) nearbyIndices.push(occupant);
+
+      if (obstacleGrid[cell] === 1 && manhattanDist < minObstacleDist) {
+        minObstacleDist = manhattanDist;
+        obsDx = dx;
+        obsDy = dy;
+      }
+
+      const stock = foodGrid[cell];
+      if (stock > 0 && manhattanDist < minFoodDist) {
+        minFoodDist = manhattanDist;
+        foodDx = dx;
+        foodDy = dy;
+        foodValue = stock;
+      }
+
+      const carrion = carrionGrid[cell];
+      if (carrion > 0 && manhattanDist < minCarrionDist) {
+        minCarrionDist = manhattanDist;
+        carrDx = dx;
+        carrDy = dy;
+        carrValue = carrion;
+      }
+    }
+    if (x + radius >= width) {
+      const dx = width - x; // the nearest cell off the right edge
+      const dist = dx + absDy;
+      if (dist < minObstacleDist) {
+        minObstacleDist = dist;
+        obsDx = dx;
+        obsDy = dy;
+      }
+    }
+  }
+  if (minObstacleDist < Infinity) {
+    nearestObstacle = { x: x + obsDx, y: y + obsDy, distance: minObstacleDist, dx: obsDx, dy: obsDy };
+  }
+  if (minFoodDist < Infinity) {
+    nearestFood = { x: x + foodDx, y: y + foodDy, distance: minFoodDist, dx: foodDx, dy: foodDy, value: foodValue };
+  }
+  if (minCarrionDist < Infinity) {
+    nearestCarrion = { x: x + carrDx, y: y + carrDy, distance: minCarrionDist, dx: carrDx, dy: carrDy, value: carrValue };
   }
 
   // Sense other organisms within local radius, in snapshot order (the sums
@@ -212,25 +229,9 @@ export function senseEnvironment(
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
   let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0);
   if (canReproduce) {
-    let hasValidCell = false;
-    const neighbors = [
-      { x: x, y: y - 1 },
-      { x: x, y: y + 1 },
-      { x: x + 1, y: y },
-      { x: x - 1, y: y },
-    ];
-    for (const nb of neighbors) {
-      if (
-        nb.x >= 0 &&
-        nb.x < snapshot.gridWidth &&
-        nb.y >= 0 &&
-        nb.y < snapshot.gridHeight &&
-        snapshot.obstacleGrid[nb.y * width + nb.x] === 0
-      ) {
-        hasValidCell = true;
-        break;
-      }
-    }
+    const open = (nx: number, ny: number) =>
+      nx >= 0 && nx < snapshot.gridWidth && ny >= 0 && ny < snapshot.gridHeight && snapshot.obstacleGrid[ny * width + nx] === 0;
+    const hasValidCell = open(x, y - 1) || open(x, y + 1) || open(x + 1, y) || open(x - 1, y);
     canReproduce = hasValidCell;
   }
 
