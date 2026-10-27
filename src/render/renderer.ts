@@ -1,4 +1,4 @@
-import type { CarrionPatch, FoodPatch, Plant } from '../sim/types';
+import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/types';
 import { plantHue } from '../sim/plants';
 import type { OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
@@ -13,8 +13,34 @@ import type { ActionType } from '../sim/types';
  */
 export type MotionStyle = 'smooth' | 'fluid';
 
-/** What an organism's colour shows: its visible tag, its founding family, or its diet (green plants to red meat). */
-export type ColorMode = 'tag' | 'lineage' | 'diet';
+/**
+ * What an organism's colour shows: its visible tag, its founding family, its diet (green plants to red meat),
+ * its metabolic rate (blue slow burners to orange-red fast ones) or its breeding strategy (cyan many-small-clutch
+ * "r" end to purple few-well-fed "K" end). The last two read the life-history genes, so they are neutral while
+ * those genes are off. Display only: nothing here feeds back into the world.
+ */
+export type ColorMode = 'tag' | 'lineage' | 'diet' | 'metabolism' | 'reproStrategy';
+
+/** Position of v in [min, max], 0..1 (0 when the range is empty). */
+const unit = (v: number, min: number, max: number): number => (max > min ? Math.min(1, Math.max(0, (v - min) / (max - min))) : 0);
+
+/** Hue for the metabolism mode: 215 (cool blue, slow) down to 12 (orange-red, fast). */
+export function metabolismHue(org: Pick<OrganismView, 'metabolicRate'>, config: Readonly<SimulationConfig>): number {
+  if (org.metabolicRate === undefined) return 215 - 0.5 * 203; // gene off: mid-scale, not a claim
+  return 215 - 203 * unit(org.metabolicRate, config.metabolismMin, config.metabolismMax);
+}
+
+/**
+ * Hue for the breeding-strategy mode: 185 (cyan) for a large clutch and a small investment, 275 (purple) for a
+ * single, well-provisioned child. The index averages whichever of the two genes exist; with neither, mid-scale.
+ */
+export function reproStrategyHue(org: Pick<OrganismView, 'investment' | 'clutchSize'>, config: Readonly<SimulationConfig>): number {
+  const terms: number[] = [];
+  if (org.investment !== undefined) terms.push(unit(org.investment, config.investmentMin, config.investmentMax));
+  if (org.clutchSize !== undefined) terms.push(1 - unit(org.clutchSize, config.clutchMin, config.clutchMax));
+  const k = terms.length > 0 ? terms.reduce((a, t) => a + t, 0) / terms.length : 0.5;
+  return 185 + 90 * k;
+}
 
 /**
  * One optional layer over the world (one at a time):
@@ -176,6 +202,8 @@ export class CanvasRenderer {
 
   public hueOf(org: OrganismView): number {
     if (this.colorMode === 'diet') return 120 - 120 * org.carnivory;
+    if (this.colorMode === 'metabolism') return metabolismHue(org, this.world.config);
+    if (this.colorMode === 'reproStrategy') return reproStrategyHue(org, this.world.config);
     return this.colorMode === 'tag' ? org.tag : lineageHue(org.lineage.id);
   }
 

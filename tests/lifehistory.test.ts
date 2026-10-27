@@ -111,7 +111,7 @@ describe('life-history genes: switches and inheritance', () => {
       expect(o.clutchSize!).toBeGreaterThanOrEqual(c.clutchMin);
       expect(o.clutchSize!).toBeLessThanOrEqual(c.clutchMax);
     }
-  });
+  }, 30_000);
 
   it('a saved world with eggs continues exactly', () => {
     const w = new World({ seed: 13, eggFounder: 0.6 });

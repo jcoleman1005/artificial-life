@@ -53,6 +53,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Simulation is independent of rendering; runs in a `SimulationHost` (Worker or server) behind `src/sim/protocol.ts`.
 - Observers (`WorldEventDetector`, `ActivityMaps`) never change the world; the feed shows world events only.
 - Overlays, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
+- Genome trends (2026-10-27): Trends tab has genome sections, trait histograms and colour modes Metabolism / Breeding; inspector shows gene dosage; all display only.
 - DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` off.
 - DNA mating: genomes cross by key (each key's copies from one parent; a hidden unit travels whole), then the clone mutation path, capped at `dnaMaxGenes`; dials mix per dial (2026-10-26).
 - DNA Stage 2 (`dnaVariationEnabled`, off until its gate is finished): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.

@@ -464,7 +464,13 @@ export function isExpressed(key: number, config: Readonly<SimulationConfig>): bo
   const index = geneIndexOf(key);
   switch (geneClassOf(key)) {
     case GeneClass.trait:
-      return index <= LAST_BODY_TRAIT || (index === TraitId.herbivory && splitDiets(config)) || (index >= TraitId.memoryWeight0 && index < REGISTER_END);
+      return (
+        index <= LAST_BODY_TRAIT ||
+        (index === TraitId.herbivory && splitDiets(config)) ||
+        (index >= TraitId.memoryWeight0 && index < REGISTER_END) ||
+        // A life-history gene is read while its switch is on (decodeOrganismDNA); with it off the gene is silent.
+        (geneForTrait(index)?.enabled(config) ?? false)
+      );
     case GeneClass.brainSkip:
       return index < BRAIN_INPUT_COUNT;
     case GeneClass.brainHidden:

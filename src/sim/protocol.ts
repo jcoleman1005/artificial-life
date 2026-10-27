@@ -40,6 +40,10 @@ export interface OrganismView {
   readonly carriedFood: number;
   /** Diet, 0 (plants) to 1 (meat). */
   readonly carnivory: number;
+  /** Life-history genes the colour modes and card read (absent while their switch is off). */
+  readonly metabolicRate?: number;
+  readonly investment?: number;
+  readonly clutchSize?: number;
   /** Only the latest decision (or none). */
   readonly recentHistory: readonly ActionView[];
 }
@@ -70,6 +74,9 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     age: org.age,
     carriedFood: org.carriedFood,
     carnivory: org.carnivory,
+    metabolicRate: org.metabolicRate,
+    investment: org.investment,
+    clutchSize: org.clutchSize,
     recentHistory: last
       ? [
           {

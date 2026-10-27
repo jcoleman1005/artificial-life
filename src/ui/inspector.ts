@@ -3,7 +3,8 @@ import { PLANT_TRAITS, PLANT_TRAIT_KEYS, plantHue } from '../sim/plants';
 import { setHTMLPreservingDetails } from './dom';
 import { givenName, organismName } from './names';
 import { carrionYield, plantYield } from '../sim/traits';
-import { birthCooldownOf, clutchSizeOf } from '../sim/lifehistory';
+import { LIFE_GENES, birthCooldownOf, clutchSizeOf } from '../sim/lifehistory';
+import { GENE_WORDS, GeneClass, TraitId, genomeStats, geneClassOf, geneCount, geneIndexOf, isExpressed } from '../sim/dna';
 import { describeDoing } from './organism-card';
 
 /** Pills for the life-history genes that are switched on in this world (and torpor / fat state). */
@@ -36,6 +37,107 @@ function abilityList(organism: Readonly<Organism>): string {
   const { diagonal, squeeze, leap } = organism.abilities;
   const names = [diagonal && 'Diagonal', squeeze && 'Squeeze', leap && 'Leap'].filter(Boolean);
   return names.length ? names.join(', ') : 'None';
+}
+
+/** One decoded trait against its range, with how many genes code for it. */
+export interface GenomeTraitRow {
+  readonly label: string;
+  readonly value: number;
+  readonly min: number;
+  readonly max: number;
+  /** Genes in the genome for this trait; null when the organism carries no genome. */
+  readonly copies: number | null;
+  /** The gene exists but this world does not read it (its switch is off). */
+  readonly silent: boolean;
+  readonly decimals: number;
+}
+
+/**
+ * Every decoded trait of an organism as a place in its range, with gene dosage (copies of the trait's gene).
+ * Read-only. Life-history rows appear when the gene is switched on or the genome still carries it (then silent).
+ */
+export function genomeTraitRows(o: Readonly<Organism>, c: Readonly<SimulationConfig>): GenomeTraitRow[] {
+  const copies = new Map<number, number>();
+  if (o.genome) {
+    for (let g = 0, n = geneCount(o.genome); g < n; g++) {
+      const key = o.genome[g * GENE_WORDS];
+      if (geneClassOf(key) === GeneClass.trait) copies.set(geneIndexOf(key), (copies.get(geneIndexOf(key)) ?? 0) + 1);
+    }
+  }
+  const rows: GenomeTraitRow[] = [];
+  const add = (label: string, traitId: number, value: number | undefined, min: number, max: number, decimals: number) => {
+    const n = o.genome ? (copies.get(traitId) ?? 0) : null;
+    if (value === undefined) {
+      // Not decoded in this world: show it only when the genome carries the gene (it is silent DNA).
+      if (n) rows.push({ label, value: 0, min, max, copies: n, silent: true, decimals });
+      return;
+    }
+    const silent = o.genome ? n! > 0 && !isExpressed(((GeneClass.trait << 16) | traitId) >>> 0, c) : false;
+    rows.push({ label, value, min, max, copies: n, silent, decimals });
+  };
+  add('Tag (hue)', TraitId.tag, o.tag, 0, 360, 0);
+  add('Carry capacity', TraitId.carryCapacity, o.carryCapacity, 0, c.maxCarryCapacity, 0);
+  add('Dispersal', TraitId.dispersal, o.dispersal, 1, c.maxDispersal, 0);
+  add('Memory span', TraitId.memorySpan, o.memorySpan, 0, c.maxMemorySpan, 0);
+  add('Meat eating', TraitId.carnivory, o.carnivory, 0, 1, 2);
+  add('Plant eating', TraitId.herbivory, o.herbivory, 0, 1, 2);
+  add('Diagonal', TraitId.diagonal, o.abilities.diagonal, 0, 1, 2);
+  add('Squeeze', TraitId.squeeze, o.abilities.squeeze, 0, 1, 2);
+  add('Leap', TraitId.leap, o.abilities.leap, 0, 1, 2);
+  const lifeLabels: Record<string, string> = {
+    reproThreshold: 'Breeding threshold',
+    investment: 'Investment per child',
+    fatCapacity: 'Fat capacity',
+    torporDepth: 'Rest efficiency',
+    eggRate: 'Egg share',
+    metabolicRate: 'Metabolic rate',
+    clutchSize: 'Clutch size',
+  };
+  for (const g of LIFE_GENES) {
+    add(lifeLabels[g.field], g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);
+  }
+  return rows;
+}
+
+/** The compact dosage bars for an organism's traits: bar = place in the trait's range, badge = gene dosage. */
+export function genomeBarsHtml(o: Readonly<Organism>, c: Readonly<SimulationConfig>): string {
+  const rows = genomeTraitRows(o, c)
+    .map((r) => {
+      const pct = r.max > r.min ? Math.max(0, Math.min(100, ((r.value - r.min) / (r.max - r.min)) * 100)) : 0;
+      const badge =
+        r.silent
+          ? '<span class="dose-badge dose-silent">silent</span>'
+          : r.copies !== null && r.copies > 1
+            ? `<span class="dose-badge dose-dup">×${r.copies} dosage</span>`
+            : r.copies === 0
+              ? '<span class="dose-badge">no gene · default</span>'
+              : '';
+      const range = `${Number(r.min.toFixed(2))}–${Number(r.max.toFixed(2))}`;
+      return `
+            <div class="weight-row genome-row${r.silent ? ' genome-silent' : ''}" title="range ${range}">
+              <span class="weight-name">${r.label}${badge}</span>
+              <span class="weight-num">${r.silent ? '–' : r.value.toFixed(r.decimals)}</span>
+              <div class="weight-track">
+                <div class="weight-fill${r.copies !== null && r.copies > 1 ? ' dup' : ''}" style="left: 0; width: ${r.silent ? 0 : pct.toFixed(1)}%;"></div>
+              </div>
+            </div>`;
+    })
+    .join('');
+  let summary = '<span class="muted">No genome (DNA is off): traits are inherited directly.</span>';
+  if (o.genome) {
+    const g = genomeStats([o.genome], c);
+    const t = g.meanByType;
+    summary = `<span class="muted">${g.minLength} genes · ${t.body + t.register} body &amp; register · ${t.brainSkip + t.brainHidden} brain connections · ${t.silent} silent${
+      g.multiCopySlots > 0 ? ` · ${g.multiCopySlots} duplicated slots` : ''
+    }</span>`;
+  }
+  return `
+        <details open class="inspector-section" data-key="genome-bars">
+          <summary><strong>Genome &amp; Traits</strong> <span class="muted">(bar = place in the trait's range)</span></summary>
+          <div class="genome-summary">${summary}</div>
+          <div class="weights-list">${rows}
+          </div>
+        </details>`;
 }
 
 const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
@@ -314,6 +416,8 @@ export class InspectorView {
             <div class="energy-bar" style="width: ${energyPct}%; background-color: ${energy > 30 ? '#4ade80' : '#f87171'};"></div>
           </div>
         </div>
+
+        ${genomeBarsHtml(organism, config)}
 
         <details ${config.controller === 'brain' ? '' : 'open'} class="inspector-section" data-key="dials-${config.controller}">
           <summary><strong>Inherited Dial Weights</strong>${

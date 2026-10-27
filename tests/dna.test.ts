@@ -86,8 +86,10 @@ const hash = (state: unknown) => createHash('sha256').update(canonical(state)).d
 
 /** A hash of the state with genomes and the DNA switch left out, for comparing DNA-on and DNA-off worlds. */
 function withoutDna(state: WorldState): string {
+  // The trend history is left out, as World.stateHash does: it only records the past, and its genome statistics exist only with DNA.
+  const { history: _history, ...rest } = state;
   return hash({
-    ...state,
+    ...rest,
     config: { ...state.config, dnaEnabled: null },
     organisms: state.organisms.map(({ genome: _genome, ...o }) => o),
     eggs: (state.eggs ?? []).map(({ child: { genome: _genome, ...child }, ...egg }) => ({ ...egg, child })),

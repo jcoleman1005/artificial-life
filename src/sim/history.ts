@@ -1,6 +1,9 @@
-import type { AbilityName, Organism, PlantTrait, PolicyWeights, WorldMetrics } from './types';
+import type { AbilityName, Organism, PlantTrait, PolicyWeights, SimulationConfig, WorldMetrics } from './types';
 import { PLANT_TRAIT_KEYS } from './plants';
-import { brainDrift, hiddenStrength } from './brain';
+import { BRAIN_HIDDEN, BRAIN_INPUT_COUNT, brainDrift, hiddenStrength } from './brain';
+import { LIFE_GENES, type LifeField } from './lifehistory';
+import { genomeStats } from './dna';
+import { carrionYield, plantYield } from './traits';
 
 export const POLICY_WEIGHT_KEYS = [
   'foodAttraction',
@@ -72,6 +75,8 @@ export interface HistorySample {
   /** Kills so far, and how many of the prey looked like strangers to their killer. */
   readonly killsTotal?: number;
   readonly killsOfStrangersTotal?: number;
+  /** Carrion meals eaten so far (absent in older samples). */
+  readonly carrionEatenTotal?: number;
   /** Children of mating so far, and how many of the pairs looked alike / like strangers (absent before sex). */
   readonly matingsTotal?: number;
   readonly matingsAlikeTotal?: number;
@@ -81,6 +86,146 @@ export interface HistorySample {
   readonly clutchesFailedTotal?: number;
   /** Plants (absent when plants are off, and in samples from before plants). */
   readonly plants?: PlantSample;
+  /**
+   * Life-history genes that are switched on (absent fields: switched off), as mean and SD over the
+   * living, plus `fat`, the fat actually held now (against `fatCapacity`). Absent in older samples.
+   */
+  readonly life?: Readonly<Partial<Record<LifeField | 'fat', WeightStat>>>;
+  /** Plant-eating efficiency (split diets only). */
+  readonly herbivory?: WeightStat;
+  /** Energy one plant meal / one carrion meal gives, over the living (what the diet trade-off leaves them). */
+  readonly yields?: { readonly plant: WeightStat; readonly carrion: WeightStat };
+  /** Brain wiring in use: connections with a non-zero weight, and hidden units that take input and drive the output. */
+  readonly topology?: { readonly connections: WeightStat; readonly hiddenUnits: WeightStat };
+  /** Genome measurements (only with DNA; see genomeStats). */
+  readonly genome?: GenomeSample;
+  /** How many organisms fall in each fifth of a trait's range (see DIST_TRAITS), lowest fifth first. */
+  readonly bins?: Readonly<Partial<Record<DistTrait, readonly number[]>>>;
+}
+
+/** The last fresh brain-wiring and genome measurements, and when they were taken (see MetricsHistory). */
+export interface SlowStats {
+  readonly tick: number;
+  readonly topology: NonNullable<HistorySample['topology']>;
+  readonly genome?: GenomeSample;
+}
+
+export interface GenomeSample {
+  /** Genes per genome. */
+  readonly length: WeightStat;
+  /** Mean number of slots carried by two or more genes, per genome (duplicate gene dosage). */
+  readonly duplicatedSlots: number;
+  /** Of the duplicated weight slots, the share whose copies are all identical (1 when there are none). */
+  readonly identicalShare: number;
+  /** Mean genes per genome that point at nothing this build decodes. */
+  readonly silent: number;
+}
+
+/** Traits whose population distribution is kept as a five-bin histogram in each sample. */
+export const DIST_TRAITS = ['carnivory', 'reproThreshold', 'clutchSize', 'metabolicRate'] as const;
+export type DistTrait = (typeof DIST_TRAITS)[number];
+export const DIST_BIN_COUNT = 5;
+/** Ticks between fresh brain-wiring and genome measurements; samples in between repeat the last (they move slowly). */
+export const SLOW_STATS_TICKS = 25;
+
+/** The range a trait's bins divide into fifths, or null when this world has no such trait. */
+export function distRange(trait: DistTrait, config: Readonly<SimulationConfig>): readonly [number, number] | null {
+  if (trait === 'carnivory') return [0, 1];
+  const gene = LIFE_GENES.find((g) => g.field === trait);
+  return gene && gene.enabled(config) ? [gene.min(config), gene.max(config)] : null;
+}
+
+/** Which fifth of [min, max] a value falls in (0..4); a degenerate range puts everything in the first. */
+export function binOf(value: number, min: number, max: number): number {
+  if (!(max > min)) return 0;
+  return Math.max(0, Math.min(DIST_BIN_COUNT - 1, Math.floor(((value - min) / (max - min)) * DIST_BIN_COUNT)));
+}
+
+/** Five-bin counts of each distribution trait that exists in this world. Read-only over the organisms. */
+export function computeBins(
+  organisms: readonly Organism[],
+  config: Readonly<SimulationConfig>
+): Partial<Record<DistTrait, number[]>> {
+  const out: Partial<Record<DistTrait, number[]>> = {};
+  for (const trait of DIST_TRAITS) {
+    const range = distRange(trait, config);
+    if (!range) continue;
+    const counts = new Array<number>(DIST_BIN_COUNT).fill(0);
+    for (const o of organisms) {
+      const v = o[trait];
+      if (v !== undefined) counts[binOf(v, range[0], range[1])]++;
+    }
+    out[trait] = counts;
+  }
+  return out;
+}
+
+/** Mean and SD of each switched-on life-history gene, and of the fat held. */
+export function computeLifeStats(organisms: readonly Organism[]): Partial<Record<LifeField | 'fat', WeightStat>> {
+  const out: Partial<Record<LifeField | 'fat', WeightStat>> = {};
+  for (const g of LIFE_GENES) {
+    const values: number[] = [];
+    for (const o of organisms) {
+      const v = o[g.field];
+      if (v !== undefined) values.push(v);
+    }
+    if (values.length > 0) out[g.field] = meanAndSd(values);
+  }
+  const fat: number[] = [];
+  for (const o of organisms) if (o.fat !== undefined) fat.push(o.fat);
+  if (fat.length > 0) out.fat = meanAndSd(fat);
+  return out;
+}
+
+/** Wiring in use per brain: non-zero connections (direct plus hidden-layer inputs), and hidden units that are wired in and out. */
+export function computeTopology(organisms: readonly Organism[]): { connections: WeightStat; hiddenUnits: WeightStat } {
+  const connections: number[] = [];
+  const units: number[] = [];
+  for (const o of organisms) {
+    const { skip, hidden, out } = o.brain;
+    let n = 0;
+    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) if (skip[i] !== 0) n++;
+    let recruited = 0;
+    for (let h = 0; h < BRAIN_HIDDEN; h++) {
+      let fanIn = 0;
+      for (let i = 0; i < BRAIN_INPUT_COUNT; i++) if (hidden[h * BRAIN_INPUT_COUNT + i] !== 0) fanIn++;
+      n += fanIn;
+      if (fanIn > 0 && out[h] !== 0) recruited++;
+    }
+    connections.push(n);
+    units.push(recruited);
+  }
+  return { connections: meanAndSd(connections), hiddenUnits: meanAndSd(units) };
+}
+
+/** An evenly spaced subset of at most `max` items (every k-th, no randomness); the whole list when it is short enough. */
+export function evenSubset<T>(items: readonly T[], max: number): readonly T[] {
+  if (items.length <= max) return items;
+  const stride = Math.ceil(items.length / max);
+  const out: T[] = [];
+  for (let i = 0; i < items.length; i += stride) out.push(items[i]);
+  return out;
+}
+
+/** Most genomes read per sample: the stats are means over an evenly spaced subset, so a sample's cost stays flat in the population. */
+export const GENOME_SAMPLE_MAX = 48;
+
+/**
+ * Genome length, duplicate dosage and silent genes, or undefined when no one carries a genome. Measured on up to
+ * GENOME_SAMPLE_MAX genomes taken at an even stride through the population (no randomness), since reading every
+ * gene of every organism on each sample would cost far more than the rest of the history put together.
+ */
+export function computeGenomeSample(organisms: readonly Organism[], config: Readonly<SimulationConfig>): GenomeSample | undefined {
+  const withGenome = organisms.filter((o) => o.genome);
+  if (withGenome.length === 0) return undefined;
+  const genomes = evenSubset(withGenome, GENOME_SAMPLE_MAX).map((o) => o.genome!);
+  const g = genomeStats(genomes, config);
+  return {
+    length: { mean: g.meanLength, sd: g.sdLength },
+    duplicatedSlots: g.multiCopySlots,
+    identicalShare: g.identicalShare,
+    silent: g.meanByType.silent,
+  };
 }
 
 export interface PlantSample {
@@ -137,6 +282,13 @@ export function computeWeightStats(
   return stats;
 }
 
+const CSV_LIFE_FIELDS = [...LIFE_GENES.map((g) => g.field), 'fat'] as const;
+
+/** A mean and SD as two CSV cells, blank when the statistic does not exist. */
+function optionalStat(stat: WeightStat | undefined): string[] {
+  return stat ? [stat.mean.toFixed(4), stat.sd.toFixed(4)] : ['', ''];
+}
+
 /**
  * Bounded record of world metrics over the whole run.
  *
@@ -147,6 +299,12 @@ export function computeWeightStats(
 export class MetricsHistory {
   private samples: HistorySample[] = [];
   private interval = 1;
+  /**
+   * The costlier wiring and genome measurements, reused by the samples in between so a run that samples every
+   * tick (the first 240 ticks) does not pay for them every tick. Saved with the history, so a restored world
+   * goes on sampling exactly as the original would have.
+   */
+  private slow: SlowStats | null = null;
 
   constructor(public readonly capacity = 240) {}
 
@@ -161,16 +319,18 @@ export class MetricsHistory {
   public clear(): void {
     this.samples = [];
     this.interval = 1;
+    this.slow = null;
   }
 
   /** Plain data for a snapshot. */
-  public exportState(): { samples: HistorySample[]; interval: number } {
-    return { samples: [...this.samples], interval: this.interval };
+  public exportState(): { samples: HistorySample[]; interval: number; slow?: SlowStats } {
+    return { samples: [...this.samples], interval: this.interval, ...(this.slow ? { slow: this.slow } : {}) };
   }
 
-  public importState(state: { samples: readonly HistorySample[]; interval: number }): void {
+  public importState(state: { samples: readonly HistorySample[]; interval: number; slow?: SlowStats }): void {
     this.samples = [...state.samples];
     this.interval = state.interval;
+    this.slow = state.slow ?? null;
   }
 
   /** Whether a sample is due at this tick (so callers can skip computing metrics). */
@@ -180,8 +340,20 @@ export class MetricsHistory {
     return !last || last.tick < tick;
   }
 
-  public record(metrics: WorldMetrics, organisms: readonly Organism[]): void {
+  /**
+   * Takes a sample if one is due. `config` adds the measurements that need the world's rules (genome,
+   * yields, trait histograms); without it those are left out. Read-only over the organisms.
+   */
+  public record(metrics: WorldMetrics, organisms: readonly Organism[], config?: Readonly<SimulationConfig>): void {
     if (!this.wantsSample(metrics.tick)) return;
+    if (!this.slow || metrics.tick < this.slow.tick || metrics.tick - this.slow.tick >= SLOW_STATS_TICKS) {
+      this.slow = {
+        tick: metrics.tick,
+        topology: computeTopology(evenSubset(organisms, GENOME_SAMPLE_MAX)),
+        ...(config ? { genome: computeGenomeSample(organisms, config) } : {}),
+      };
+    }
+    const { topology, genome } = this.slow;
 
     this.samples.push({
       tick: metrics.tick,
@@ -213,11 +385,27 @@ export class MetricsHistory {
       carnivory: meanAndSd(organisms.map((o) => o.carnivory)),
       killsTotal: metrics.killsTotal,
       killsOfStrangersTotal: metrics.killsOfStrangersTotal,
+      carrionEatenTotal: metrics.carrionEatenTotal,
       matingsTotal: metrics.matingsTotal,
       matingsAlikeTotal: metrics.matingsAlikeTotal,
       matingsOfStrangersTotal: metrics.matingsOfStrangersTotal,
       matingChildrenTotal: metrics.matingChildrenTotal,
       clutchesFailedTotal: metrics.clutchesFailedTotal,
+      life: computeLifeStats(organisms),
+      topology,
+      ...(organisms.some((o) => o.herbivory !== undefined)
+        ? { herbivory: meanAndSd(organisms.map((o) => o.herbivory ?? 0)) }
+        : {}),
+      ...(config
+        ? {
+            yields: {
+              plant: meanAndSd(organisms.map((o) => plantYield(o, config))),
+              carrion: meanAndSd(organisms.map((o) => carrionYield(o, config))),
+            },
+            bins: computeBins(organisms, config),
+            ...(genome ? { genome } : {}),
+          }
+        : {}),
       ...(metrics.plants
         ? {
             plants: {
@@ -294,6 +482,21 @@ export class MetricsHistory {
       'plant_deaths_lean_total',
       'plant_deaths_starved_total',
       ...PLANT_TRAIT_KEYS.flatMap((k) => [`plant_${k}_mean`, `plant_${k}_sd`]),
+      ...CSV_LIFE_FIELDS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
+      'herbivory_mean',
+      'herbivory_sd',
+      'plant_meal_yield_mean',
+      'carrion_meal_yield_mean',
+      'carrion_eaten_total',
+      'brain_connections_mean',
+      'brain_connections_sd',
+      'brain_hidden_units_mean',
+      'genome_genes_mean',
+      'genome_genes_sd',
+      'genome_duplicated_slots_mean',
+      'genome_identical_share',
+      'genome_silent_genes_mean',
+      ...DIST_TRAITS.flatMap((t) => Array.from({ length: DIST_BIN_COUNT }, (_, b) => `${t}_bin${b}`)),
     ];
     const rows = this.samples.map((s) =>
       [
@@ -355,6 +558,19 @@ export class MetricsHistory {
               ...PLANT_TRAIT_KEYS.flatMap((k) => [s.plants!.traits[k].mean.toFixed(4), s.plants!.traits[k].sd.toFixed(4)]),
             ]
           : new Array<string>(8 + PLANT_TRAIT_KEYS.length * 2).fill('')),
+        // Genome and life-history columns, blank where the world has no such thing.
+        ...CSV_LIFE_FIELDS.flatMap((k) => optionalStat(s.life?.[k])),
+        ...optionalStat(s.herbivory),
+        s.yields ? s.yields.plant.mean.toFixed(4) : '',
+        s.yields ? s.yields.carrion.mean.toFixed(4) : '',
+        s.carrionEatenTotal ?? '',
+        ...optionalStat(s.topology?.connections),
+        s.topology ? s.topology.hiddenUnits.mean.toFixed(4) : '',
+        ...optionalStat(s.genome?.length),
+        s.genome ? s.genome.duplicatedSlots.toFixed(4) : '',
+        s.genome ? s.genome.identicalShare.toFixed(4) : '',
+        s.genome ? s.genome.silent.toFixed(4) : '',
+        ...DIST_TRAITS.flatMap((t) => Array.from({ length: DIST_BIN_COUNT }, (_, b) => s.bins?.[t]?.[b] ?? '')),
       ].join(',')
     );
     return [header.join(','), ...rows].join('\n') + '\n';

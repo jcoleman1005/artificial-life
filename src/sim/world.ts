@@ -27,7 +27,7 @@ import {
   mutatePolicy,
 } from './policy';
 import { computeWorldMetrics } from './metrics';
-import { MetricsHistory, type HistorySample } from './history';
+import { MetricsHistory, type HistorySample, type SlowStats } from './history';
 import { inheritTag, tagSimilarity } from './tags';
 import { regionSeasonAt, seasonAt } from './seasons';
 import { CellHealth, fertileCells, type CellHealthState } from './grazing';
@@ -105,7 +105,7 @@ export interface WorldState {
   /** Eggs waiting to hatch (absent in saves from before eggs). */
   readonly eggs?: readonly SavedEgg[];
   readonly organisms: readonly SavedOrganism[];
-  readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
+  readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number; readonly slow?: SlowStats };
   /** Plant totals (absent in saves from before plants). */
   readonly plantCounters?: PlantCounters;
   /** Cell health (absent in saves from before overgrazing, or with it off). */
@@ -1707,7 +1707,7 @@ export class World {
   public updateMetrics(): void {
     this.cachedMetrics = null;
     if (this.history.wantsSample(this.tick)) {
-      this.history.record(this.getMetrics(), Array.from(this.organisms.values()));
+      this.history.record(this.getMetrics(), Array.from(this.organisms.values()), this.config);
     }
   }
 
