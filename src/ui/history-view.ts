@@ -89,6 +89,19 @@ function strangerKillShare(s: HistorySample, prev?: HistorySample): number {
   const kills = (s.killsTotal ?? 0) - (prev.killsTotal ?? 0);
   return kills > 0 ? ((s.killsOfStrangersTotal ?? 0) - (prev.killsOfStrangersTotal ?? 0)) / kills : 0;
 }
+/** Between two samples: the share of births that came from mating, and of matings between look-alikes. */
+function sexualBirthShare(s: HistorySample, prev?: HistorySample): number {
+  if (!prev) return 0;
+  const births = s.birthsTotal - prev.birthsTotal;
+  // Samples from before clutches counted one child per mating.
+  const children = (x: HistorySample) => x.matingChildrenTotal ?? x.matingsTotal ?? 0;
+  return births > 0 ? (children(s) - children(prev)) / births : 0;
+}
+function alikeMatingShare(s: HistorySample, prev?: HistorySample): number {
+  if (!prev) return 0;
+  const matings = (s.matingsTotal ?? 0) - (prev.matingsTotal ?? 0);
+  return matings > 0 ? ((s.matingsAlikeTotal ?? 0) - (prev.matingsAlikeTotal ?? 0)) / matings : 0;
+}
 const plantsGrazedOutPer100Ticks = ratePer100((s) => s.plants?.deathsGrazed ?? 0);
 const plantsLostLeanPer100Ticks = ratePer100((s) => s.plants?.deathsLean ?? 0);
 const plantsStarvedPer100Ticks = ratePer100((s) => (s.plants?.deathsShaded ?? 0) + (s.plants?.deathsStarved ?? 0));
@@ -224,6 +237,22 @@ export class HistoryView {
         fixedRange: [0, 1],
         value: strangerKillShare,
         format: (s, prev) => pct(strangerKillShare(s, prev)),
+        axisLabel: pct,
+      },
+      {
+        section: 'Reproduction',
+        label: 'Births from mating',
+        fixedRange: [0, 1],
+        value: sexualBirthShare,
+        format: (s, prev) => pct(sexualBirthShare(s, prev)),
+        axisLabel: pct,
+      },
+      {
+        section: 'Reproduction',
+        label: 'Matings between look-alikes',
+        fixedRange: [0, 1],
+        value: alikeMatingShare,
+        format: (s, prev) => pct(alikeMatingShare(s, prev)),
         axisLabel: pct,
       },
       {

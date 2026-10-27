@@ -53,6 +53,10 @@ export type ActionType =
   | 'ATTACK_SOUTH'
   | 'ATTACK_EAST'
   | 'ATTACK_WEST'
+  | 'MATE_NORTH'
+  | 'MATE_SOUTH'
+  | 'MATE_EAST'
+  | 'MATE_WEST'
   | 'REST';
 
 export interface LegalAction {
@@ -88,6 +92,14 @@ export interface LegalAction {
   readonly preyKillChance?: number;
   /** ATTACK only: the prey is the attacker's own child or parent. */
   readonly preyIsFamily?: boolean;
+  /** MATE only: the adjacent organism asked. A child is only made if it asks back the same tick. */
+  readonly mateId?: string;
+  /** MATE only: how alike the partner's tag looks (0..1). */
+  readonly mateSimilarity?: number;
+  /** MATE only: the partner is one's own child or parent. */
+  readonly mateIsFamily?: boolean;
+  /** MATE only: the partner has enough energy to reproduce (so could ask back). */
+  readonly mateReady?: boolean;
 }
 
 export interface PolicyWeights {
@@ -208,7 +220,11 @@ export type DecisionOutcome =
   | 'energy_too_low'
   | 'rested'
   /** An attack that did not kill (missed, or the prey got away). */
-  | 'missed';
+  | 'missed'
+  /** Asked a neighbour to mate and it did not ask back. */
+  | 'no_partner'
+  /** Mated, but the clutch was too poor to be viable (both parents paid; no children). */
+  | 'clutch_failed';
 
 export interface DecisionRecord {
   readonly tick: number;
@@ -223,6 +239,8 @@ export interface DecisionRecord {
 export interface LineageInfo {
   readonly id: string; // Clan / root ancestor lineage identifier
   readonly parentId: string | null;
+  /** The second parent, for a child of mating (it carries the first parent's lineage id). */
+  readonly mateId?: string;
   readonly generation: number;
   readonly birthTick: number;
 }
@@ -291,6 +309,8 @@ export interface Organism {
   readonly eggRate?: number;
   /** Metabolic rate multiplier on base upkeep; sets the pause between births. */
   readonly metabolicRate?: number;
+  /** Children per mating (clutchGeneEnabled; matings only, cloning makes one child). */
+  readonly clutchSize?: number;
   /** Fat held now (state; only with fatEnabled). */
   fat?: number;
   /** Ticks of torpor left, 0 or absent when awake (state; only with torporEnabled). */
@@ -522,6 +542,7 @@ export interface SimulationConfig {
   predationEnabled: boolean; // Allow ATTACK (brain only): a kill turns the prey into carrion
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
+  sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
   immigrationEnabled: boolean; // Newcomers arrive during the run (off: only the founders and their descendants)
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
@@ -584,6 +605,11 @@ export interface SimulationConfig {
   metabolismMin: number;
   metabolismMax: number;
   birthCooldown: number; // Ticks between births at rate 1 (shorter when faster, longer when slower)
+  clutchGeneEnabled: boolean; // Children per mating evolve (clutchSize; matings only; off: one child per mating)
+  clutchStep: number;
+  clutchMin: number;
+  clutchMax: number;
+  minViableChildEnergy: number; // A mating whose energy per child is below this fails: both parents pay, no children
   dnaVariationEnabled: boolean; // With DNA (Stage 2): mutation counts are Poisson-sampled, genes can be inserted, deleted and duplicated, and every gene costs dnaUpkeepPerGene
   dnaInsertionRate: number; // Per gene per birth: a new random gene appears at a random position
   dnaDeletionRate: number; // Per gene per birth: a gene is removed
@@ -642,6 +668,25 @@ export interface WorldMetrics {
   killsTotal: number;
   killsOfStrangersTotal: number;
   killsOfKinTotal: number;
+  /**
+   * Children made by mating so far (the rest of birthsTotal are clones), and
+   * how the partners looked to each other: alike (kin cut-off), strangers, or
+   * parent and child.
+   */
+  matingsTotal: number;
+  matingsAlikeTotal: number;
+  matingsOfStrangersTotal: number;
+  matingsInFamilyTotal: number;
+  /**
+   * Children of mating born so far (the rest of birthsTotal are clones);
+   * matings whose clutch failed the viability gate (minViableChildEnergy);
+   * children of mating not born (failed clutches, and children with no free
+   * cell), and the energy their parents paid for them, which is lost.
+   */
+  matingChildrenTotal: number;
+  clutchesFailedTotal: number;
+  matingChildrenLostTotal: number;
+  matingEnergyLostTotal: number;
   /** Carrion meals eaten so far, and carrion energy lying in the world now. */
   carrionEatenTotal: number;
   carrionStock: number;
@@ -668,6 +713,7 @@ export interface LifeMetrics {
   torporDepth: number | null;
   eggRate: number | null;
   metabolicRate: number | null;
+  clutchSize: number | null;
   /** Mean fat held, and organisms in torpor now. */
   fat: number | null;
   torpid: number | null;

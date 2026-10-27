@@ -17,7 +17,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - World: 60×60 default (30×30 preset); food only in `foodRegionCount` fertile discs.
 - Seasons: `seasonLength` cycle with a lean stretch; `staggeredSeasons` shifts each region.
 - Energy is the only need; limited local senses; signals are the one longer-range sense; no global map.
-- Legal actions: move, leap, eat, pick up, reproduce, give, signal, eat carrion, attack (brain only); explore is a tendency, not an action.
+- Legal actions: move, leap, eat, pick up, reproduce (clone), mate (brain only), give, signal, eat carrion, attack (brain only); explore is a tendency, not an action.
 - Movement costs only when successful; diagonals cost `diagonalMoveCost` and can't cut wall corners.
 - `targetOccupied` move input; `avoidOccupied` dial and `moveOccupied` brain input learn avoidance.
 - Movement abilities (diagonal, squeeze, leap): inherited, per-switch, `founderAbilities`, `abilityMutationRate`, `abilityUpkeep`.
@@ -26,13 +26,16 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Family pass-through: parents and children trade places; mover pays; seeded tie-break.
 - Energy bounded by 0 and max; zero means death.
 - Energy only comes from eating food; organisms share food, never energy.
-- Reproduction is asexual; offspring inherit weights with mutation.
+- Reproduction by cloning (REPRODUCE); offspring inherit weights with mutation.
+- Mating (`sexEnabled`, on; brain only): MATE needs mutual consent the same tick; genes come whole from one parent or the other, then mutate as for clones.
+- Mating rule (2026-10-27): both at their own threshold; each pays own energy × own investment + tax; carrier's clutch splits the shares; below `minViableChildEnergy` the clutch fails (paid, lost, counted); no eggs.
+- Clutch gene (`clutchGeneEnabled`, on; trait 46): children per mating, founders 1, 1–6; matings only.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
 - Carrion (`carrionEnabled`): bodies rot after `carrionLifetime`; eating one's newborn must return less than making it (tested).
 - Diet (`carnivory`): inherited; trades plant yield for carrion share.
 - Predation (`predationEnabled`, brain only): ATTACK adjacent organism; bites resolve after moves; kill leaves carrion, no energy.
 - Evolvable bodies so far: abilities, dispersal, carry capacity, memory span, diet.
-- Life-history genes (six switches, each the lock for its control arm; `src/sim/lifehistory.ts`): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate; all off reproduces the old world bit-identically.
+- Life-history genes (six switches, each the lock for its control arm; `src/sim/lifehistory.ts`): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate (and the clutch gene, below); all off reproduces the old world bit-identically.
 - Tribes are never assigned: inherited hue tag; graded kinship similarity (`kinSimilarity`, `strangerSimilarity`).
 - Giving food is need-aware (neighbour below half energy), delivered after all actions; `sharingEnabled` switch.
 - Childhood (`childhoodTicks`): children sense a food-carrying parent; `followFoodParent`.
@@ -42,7 +45,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Offspring are born adjacent with the parent's tag; compare tribe claims against a sharing-off control.
 - Hybrid controller: hard constraints define legal actions; a weighted policy chooses.
 - Food first as evolvable head starts (`eatPriority`, `hungerUrgency`); prefer head starts over fixed priorities.
-- Two controllers: brain (default; 47 inputs → 6 hidden → score, append-only `BRAIN_INPUTS`, `upgradeBrain`) and dials (readable reference; they only drift under the brain).
+- Two controllers: brain (default; 52 inputs → 6 hidden → score, append-only `BRAIN_INPUTS`, `upgradeBrain`) and dials (readable reference; they only drift under the brain).
 - Memory (`memoryEnabled`, brain only): named memories plus 3 free registers; span is an inherited costed trait.
 - Discrete ticks; simultaneous decisions from one pre-tick snapshot; seeded random tie-breaks.
 - Seeded PRNG only in simulation code; never `Math.random()`.
@@ -51,6 +54,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Observers (`WorldEventDetector`, `ActivityMaps`) never change the world; the feed shows world events only.
 - Overlays, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
 - DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` off.
+- DNA mating: genomes cross by key (each key's copies from one parent; a hidden unit travels whole), then the clone mutation path, capped at `dnaMaxGenes`; dials mix per dial (2026-10-26).
 - DNA Stage 2 (`dnaVariationEnabled`, off until its gate is finished): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.
 - Snapshots: `exportState()` / `fromState()` restore bit-identically; `SavedWorld` format; browser auto-save, branch points, files.
 - Experiments can start from a saved world (`--from saved.json`).
@@ -68,6 +72,9 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - TypeScript strict mode.
 - Avoid unnecessary dependencies and services.
 - Keep the stack small: add a database, authentication, cloud inference or a backend only when a feature needs it, and say why.
+- Tests verify mechanisms and invariants (physics, inheritance, determinism, conservation, that a path to a behaviour is physically possible); never assert that an evolved behaviour appears. When a test disables a feature to isolate a mechanism, say so in the test; `tests/defaults.test.ts` keeps the default config pinned. (2026-10-26)
+- Don't tune parameters (head starts, costs, rates) to make a behaviour emerge without logging the parameter, old and new values and why in the Parameter log in `docs/findings.md`; `tests/defaults.test.ts` pins the logged head starts.
+- Emergence is measured by controlled experiments (matched seeds, on/off arms, chance baselines) and reported plainly in `docs/findings.md`, null results included.
 - Write deterministic tests for energy accounting, action legality, conflict resolution, reproduction, inheritance, mutation, and seeded repeatability.
 - Record observable inputs, action scores, decisions, and energy changes.
 - Do not claim organisms learned during life unless lifetime learning is implemented.

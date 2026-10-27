@@ -24,7 +24,7 @@ import type { WorldState } from './world';
 
 /** What an organism did on its latest tick, as much as drawing needs. */
 export interface ActionView {
-  readonly chosenAction: Pick<LegalAction, 'type' | 'target' | 'recipientId' | 'swapWithId' | 'swapRelation' | 'preyId'>;
+  readonly chosenAction: Pick<LegalAction, 'type' | 'target' | 'recipientId' | 'swapWithId' | 'swapRelation' | 'preyId' | 'mateId'>;
   readonly outcome: DecisionOutcome;
 }
 
@@ -35,7 +35,7 @@ export interface OrganismView {
   readonly y: number;
   readonly energy: number;
   readonly tag: number;
-  readonly lineage: { readonly id: string; readonly parentId: string | null; readonly generation: number };
+  readonly lineage: { readonly id: string; readonly parentId: string | null; readonly mateId?: string; readonly generation: number };
   readonly age: number;
   readonly carriedFood: number;
   /** Diet, 0 (plants) to 1 (meat). */
@@ -66,7 +66,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     y: org.y,
     energy: org.energy,
     tag: org.tag,
-    lineage: { id: org.lineage.id, parentId: org.lineage.parentId, generation: org.lineage.generation },
+    lineage: { id: org.lineage.id, parentId: org.lineage.parentId, mateId: org.lineage.mateId, generation: org.lineage.generation },
     age: org.age,
     carriedFood: org.carriedFood,
     carnivory: org.carnivory,
@@ -80,6 +80,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
               swapWithId: last.chosenAction.swapWithId,
               swapRelation: last.chosenAction.swapRelation,
               preyId: last.chosenAction.preyId,
+              mateId: last.chosenAction.mateId,
             },
             outcome: last.outcome,
           },

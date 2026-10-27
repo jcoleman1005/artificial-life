@@ -73,6 +73,12 @@ export const BRAIN_INPUTS = [
   'attackAlike',
   'attackFamily',
   'attackHunger',
+  // Mating (brain only): asking an adjacent organism, who must ask back.
+  'isMate',
+  'mateFullness',
+  'mateAlike',
+  'mateFamily',
+  'mateReady',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -120,6 +126,11 @@ const HEAD_START: Readonly<Partial<Record<BrainInput, number>>> = {
   attackKillChance: 1,
   attackFamily: -2,
   attackHunger: 2,
+  // Mating starts a little behind cloning (same pull from a full belly, 0.2
+  // lower overall), so day one is unchanged and whether sex pays is left to
+  // evolve. Who to ask (by look, family, readiness) starts neutral.
+  isMate: 0,
+  mateFullness: 3.5,
 };
 
 export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEAD_START[name] ?? 0);
@@ -171,6 +182,25 @@ export function mutateBrain(parent: Brain, config: Readonly<SimulationConfig>, p
   };
 }
 
+/**
+ * A child brain from two parents: each direct connection from one parent or
+ * the other, and each hidden unit (its input weights, bias and output weight)
+ * whole from one parent, so units that work together stay together.
+ */
+export function crossBrains(a: Brain, b: Brain, prng: PRNG): Brain {
+  const skip = a.skip.map((w, i) => (prng.next() < 0.5 ? w : b.skip[i]));
+  const hidden: number[] = [];
+  const hiddenBias: number[] = [];
+  const out: number[] = [];
+  for (let h = 0; h < BRAIN_HIDDEN; h++) {
+    const from = prng.next() < 0.5 ? a : b;
+    hidden.push(...from.hidden.slice(h * BRAIN_INPUT_COUNT, (h + 1) * BRAIN_INPUT_COUNT));
+    hiddenBias.push(from.hiddenBias[h]);
+    out.push(from.out[h]);
+  }
+  return { skip, hidden, hiddenBias, out, outBias: prng.next() < 0.5 ? a.outBias : b.outBias };
+}
+
 /** Alignment of a unit move with an offset, scaled down with distance. */
 function aligned(dx: number, dy: number, target: { dx: number; dy: number; distance: number } | null, falloff: number) {
   if (!target) return 0;
@@ -195,6 +225,7 @@ export function brainFeatures(
   const isReproduce = type.startsWith('REPRODUCE_');
   const isSignal = type === 'SIGNAL';
   const isAttack = type.startsWith('ATTACK_');
+  const isMate = type.startsWith('MATE_');
   const hunger = 1 - sensed.energyRatio;
   const hungry = sensed.energyRatio < 0.5;
   const need = action.recipientNeed ?? 0;
@@ -257,6 +288,11 @@ export function brainFeatures(
     isAttack ? (action.preySimilarity ?? 0) : 0, // attackAlike
     isAttack && action.preyIsFamily ? 1 : 0, // attackFamily
     isAttack ? hunger * organism.carnivory : 0, // attackHunger
+    isMate ? 1 : 0, // isMate
+    isMate ? Math.max(0, organism.energy - threshold) / headroom : 0, // mateFullness
+    isMate ? (action.mateSimilarity ?? 0) : 0, // mateAlike
+    isMate && action.mateIsFamily ? 1 : 0, // mateFamily
+    isMate && action.mateReady ? 1 : 0, // mateReady
   ];
 }
 

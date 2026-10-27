@@ -6,6 +6,7 @@ import type {
   WorldSnapshot,
 } from './types';
 import { tagSimilarity } from './tags';
+import { isParentOf } from './family';
 import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
 import { fatRoom, thresholdOf } from './lifehistory';
@@ -142,11 +143,12 @@ export function senseEnvironment(
       kinPullX += (sign * weight * dx) / norm;
       kinPullY += (sign * weight * dy) / norm;
 
-      // In childhood, notice one's parent when it is carrying food.
+      // In childhood, notice one's parent (the nearer, if both parents) when it is carrying food.
       if (
-        organism.lineage.parentId === other.id &&
+        isParentOf(other, organism) &&
         organism.age < config.childhoodTicks &&
-        other.carriedFood > 0
+        other.carriedFood > 0 &&
+        (!parentWithFood || manhattanDist < parentWithFood.distance)
       ) {
         parentWithFood = {
           x: other.x,

@@ -1,4 +1,5 @@
 import { PRNG } from './prng';
+import { DIRECTION_OFFSETS } from './types';
 import type {
   ActionScore,
   CarrionPatch,
@@ -15,6 +16,8 @@ import type {
   WorldSnapshot,
 } from './types';
 import { createConfig } from './config';
+import { isParentOrChild } from './family';
+import { heritableOf, mixPolicies, recombine } from './sex';
 import { hashString } from './state-hash';
 import { senseEnvironment } from './sensors';
 import {
@@ -47,6 +50,8 @@ import {
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
 import {
   birthCooldownOf,
+  clutchSizeOf,
+  thresholdOf,
   fatRoom,
   founderLife,
   inheritLife,
@@ -59,7 +64,7 @@ import {
   LIFE_GENES,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
-import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
+import { capGenome, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -133,6 +138,14 @@ const WORLD_COUNTERS = [
   'killsTotal',
   'killsOfStrangersTotal',
   'killsOfKinTotal',
+  'matingsTotal',
+  'matingsAlikeTotal',
+  'matingsOfStrangersTotal',
+  'matingsInFamilyTotal',
+  'matingChildrenTotal',
+  'clutchesFailedTotal',
+  'matingChildrenLostTotal',
+  'matingEnergyLostTotal',
   'carrionEatenTotal',
   'carrionUnitsRotted',
   'eggsLaidTotal',
@@ -180,6 +193,16 @@ export class World {
   public killsTotal = 0;
   public killsOfStrangersTotal = 0;
   public killsOfKinTotal = 0;
+  /** Children made by mating, and how the pairs looked to each other (alike, strangers) or were related (parent and child). */
+  public matingsTotal = 0;
+  public matingsAlikeTotal = 0;
+  public matingsOfStrangersTotal = 0;
+  public matingsInFamilyTotal = 0;
+  /** Children of mating born; clutches that failed the viability gate; children of mating not born, and the energy paid for them. */
+  public matingChildrenTotal = 0;
+  public clutchesFailedTotal = 0;
+  public matingChildrenLostTotal = 0;
+  public matingEnergyLostTotal = 0;
   public carrionEatenTotal = 0;
   public carrionUnitsRotted = 0;
   /** Eggs laid, hatched and failed so far. */
@@ -188,6 +211,8 @@ export class World {
   public eggsDecayedTotal = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
+  /** The latest mating, for observers (not saved). */
+  public lastMating: { readonly tick: number; readonly tags: readonly [number, number] } | null = null;
   /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
   public plantCounters: PlantCounters = newPlantCounters();
   /** Soil fertility and season region per cell, built on first use (terrain and regions never change). */
@@ -229,12 +254,21 @@ export class World {
     this.killsTotal = 0;
     this.killsOfStrangersTotal = 0;
     this.killsOfKinTotal = 0;
+    this.matingsTotal = 0;
+    this.matingsAlikeTotal = 0;
+    this.matingsOfStrangersTotal = 0;
+    this.matingsInFamilyTotal = 0;
+    this.matingChildrenTotal = 0;
+    this.clutchesFailedTotal = 0;
+    this.matingChildrenLostTotal = 0;
+    this.matingEnergyLostTotal = 0;
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
     this.eggsLaidTotal = 0;
     this.eggsHatchedTotal = 0;
     this.eggsDecayedTotal = 0;
     this.lastKill = null;
+    this.lastMating = null;
     this.plantCounters = newPlantCounters();
     this.soilField = null;
     this.fertileList = null;
@@ -445,35 +479,51 @@ export class World {
   }
 
   /**
-   * A child's inherited body and brain: with DNA, decoded from the parent's
-   * genome after mutation (encoded first if the parent has none yet);
-   * otherwise each trait inherited directly. Both draw from the PRNG in the
-   * same order, so they give the same child.
+   * An organism's genome as a parent passes it on: its own, or encoded on the
+   * spot if it has none yet (DNA switched on mid-run). A parent from before
+   * split diets were on gets a herbivory gene that keeps its plant yield;
+   * likewise a parent from before a life-history switch changed gets those
+   * genes at their starting value (or loses them).
    */
-  private inheritBody(parent: Readonly<Organism>): Phenotype & { genome?: Uint32Array } {
+  private parentGenome(o: Readonly<Organism>): Uint32Array {
+    const needsHerbivory = splitDiets(this.config) && o.herbivory === undefined;
+    const lifeStale = !lifeMatchesConfig(o, this.config);
+    if (o.genome && !needsHerbivory && !lifeStale) return o.genome;
+    return encodeOrganismDNA(this.freshPhenotype(o, needsHerbivory));
+  }
+
+  /**
+   * A child's inherited body and brain. With DNA: the parent's genome (or,
+   * for a child of mating, the two parents' genomes crossed by key, see
+   * crossGenomes) goes through the clone mutation path, is capped at
+   * dnaMaxGenes, and the child is what it decodes to. Without DNA each trait
+   * is inherited directly, for a child of mating from the two parents'
+   * traits mixed by recombine. Both paths draw from the PRNG in the same
+   * order (with Stage 2 off), so they give the same child.
+   */
+  private inheritBody(parent: Readonly<Organism>, mate: Readonly<Organism> | null = null): Phenotype & { genome?: Uint32Array } {
     const { config, prng } = this;
     if (config.dnaEnabled) {
-      // A parent from before split diets were on gets a herbivory gene that keeps its plant yield.
-      const needsHerbivory = splitDiets(config) && parent.herbivory === undefined;
-      // Likewise a parent from before a life-history switch changed gets those genes at their starting value (or loses them).
-      const lifeStale = !lifeMatchesConfig(parent, config);
-      const parentGenome =
-        parent.genome && !needsHerbivory && !lifeStale
-          ? parent.genome
-          : encodeOrganismDNA(this.freshPhenotype(parent, needsHerbivory));
-      const genome = config.dnaVariationEnabled ? mutateGenomeVariation(parentGenome, config, prng) : mutateGenome(parentGenome, config, prng);
+      const start = mate ? crossGenomes(this.parentGenome(parent), this.parentGenome(mate), prng) : this.parentGenome(parent);
+      const mutated = config.dnaVariationEnabled ? mutateGenomeVariation(start, config, prng) : mutateGenome(start, config, prng);
+      const genome = capGenome(mutated, config.dnaMaxGenes);
       return { ...decodeOrganismDNA(genome, config), genome };
     }
+    let genes: Readonly<Organism> = parent;
+    if (mate) {
+      const { life, ...mixed } = recombine(heritableOf(parent, config), heritableOf(mate, config), prng);
+      genes = { ...parent, ...mixed, ...life };
+    }
     return {
-      tag: inheritTag(parent.tag, config, prng),
-      carryCapacity: inheritCarryCapacity(parent.carryCapacity, config, prng),
-      brain: mutateBrain(parent.brain, config, prng),
-      abilities: inheritAbilities(parent.abilities, config, prng),
-      dispersal: inheritDispersal(parent.dispersal, config, prng),
-      memorySpan: inheritMemorySpan(parent.memorySpan, config, prng),
-      memoryWeights: inheritMemoryWeights(parent.memoryWeights, config, prng),
-      carnivory: inheritCarnivory(parent.carnivory, config, prng),
-      ...inheritLife(parent, config, prng),
+      tag: inheritTag(genes.tag, config, prng),
+      carryCapacity: inheritCarryCapacity(genes.carryCapacity, config, prng),
+      brain: mutateBrain(genes.brain, config, prng),
+      abilities: inheritAbilities(genes.abilities, config, prng),
+      dispersal: inheritDispersal(genes.dispersal, config, prng),
+      memorySpan: inheritMemorySpan(genes.memorySpan, config, prng),
+      memoryWeights: inheritMemoryWeights(genes.memoryWeights, config, prng),
+      carnivory: inheritCarnivory(genes.carnivory, config, prng),
+      ...inheritLife(genes, config, prng),
     };
   }
 
@@ -901,6 +951,8 @@ export class World {
     const pendingSwaps = new Map<string, { mover: Organism; otherId: string }>();
     // Attacks land after all actions too, so prey that moved away escapes.
     const pendingAttacks: { attacker: Organism; preyId: string; chance: number }[] = [];
+    // Requests to mate, matched up after all actions: a child needs both to ask each other.
+    const pendingMatings: { organism: Organism; mateId: string }[] = [];
 
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
@@ -985,6 +1037,16 @@ export class World {
           break;
         }
 
+        case 'MATE_NORTH':
+        case 'MATE_SOUTH':
+        case 'MATE_EAST':
+        case 'MATE_WEST': {
+          // Costs nothing unless the partner asks back (resolved below).
+          if (chosenAction.mateId) pendingMatings.push({ organism, mateId: chosenAction.mateId });
+          outcome = 'no_partner'; // until the partner asks back
+          break;
+        }
+
         case 'MOVE_NORTH':
         case 'MOVE_SOUTH':
         case 'MOVE_EAST':
@@ -1051,39 +1113,7 @@ export class World {
               birthBlocked.add(`${birth.x},${birth.y}`);
               this.birthDistanceSum += birth.distance;
 
-              this.nextOrganismSeq++;
-              const childId = `org-${this.nextOrganismSeq}`;
-              const childPolicy = mutatePolicy(
-                organism.policy,
-                this.config,
-                this.prng
-              );
-              const inherited = this.inheritBody(organism);
-
-              const child: Organism = {
-                id: childId,
-                x: birth.x,
-                y: birth.y,
-                energy: childEnergy,
-                policy: childPolicy,
-                ...inherited,
-                memory: newMemory(birth.x, birth.y),
-                kills: 0,
-                lineage: {
-                  id: organism.lineage.id,
-                  parentId: organism.id,
-                  generation: organism.lineage.generation + 1,
-                  birthTick: this.tick,
-                },
-                age: 0,
-                offspringCount: 0,
-                foodEatenCount: 0,
-                carriedFood: 0,
-                foodGiven: 0,
-                foodReceived: 0,
-                signalTick: -1,
-                recentHistory: [],
-              };
+              const child = this.makeChild(organism, null, birth, childEnergy);
 
               if (this.config.metabolismGeneEnabled) organism.nextBirthTick = this.tick + birthCooldownOf(organism, this.config);
               if (lays) {
@@ -1208,6 +1238,21 @@ export class World {
       }
     }
 
+    // Matings: pairs who asked each other (in id order, once per pair). Both
+    // stayed put this tick, so they are still side by side.
+    const asked = new Map(pendingMatings.map((m) => [m.organism.id, m.mateId]));
+    for (const { organism, mateId } of pendingMatings) {
+      if (organism.id > mateId || asked.get(mateId) !== organism.id) continue;
+      const partner = this.organisms.get(mateId);
+      if (!partner) continue;
+      if (!this.mate(organism, partner, birthBlocked, newBorns)) {
+        for (const o of [organism, partner]) {
+          const record = o.recentHistory[0];
+          if (record && record.tick === this.tick) o.recentHistory[0] = { ...record, outcome: 'energy_too_low' };
+        }
+      }
+    }
+
     // Family members trade places (only the mover pays the move cost)
     for (const { mover, otherId } of pendingSwaps.values()) {
       const other = this.organisms.get(otherId);
@@ -1285,6 +1330,147 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+  }
+
+  /**
+   * A newborn with energy `energy` at `birth`. A clone takes its parent's
+   * genes. A child of mating takes each policy dial whole from one parent or
+   * the other (mixPolicies); with DNA its body and brain come from the two
+   * genomes crossed by key (crossGenomes), without DNA each trait whole from
+   * one parent (recombine). Either way the genes then mutate as a clone's do. The child
+   * belongs to the lineage of `parent`, the one it is born next to.
+   */
+  private makeChild(parent: Organism, mate: Organism | null, birth: { x: number; y: number }, energy: number): Organism {
+    const policySource = mate ? mixPolicies(parent.policy, mate.policy, this.prng) : parent.policy;
+    this.nextOrganismSeq++;
+    const policy = mutatePolicy(policySource, this.config, this.prng);
+    const inherited = this.inheritBody(parent, mate);
+    return {
+      id: `org-${this.nextOrganismSeq}`,
+      x: birth.x,
+      y: birth.y,
+      energy,
+      policy,
+      ...inherited,
+      memory: newMemory(birth.x, birth.y),
+      kills: 0,
+      lineage: {
+        id: parent.lineage.id,
+        parentId: parent.id,
+        ...(mate ? { mateId: mate.id } : {}),
+        generation: Math.max(parent.lineage.generation, mate?.lineage.generation ?? 0) + 1,
+        birthTick: this.tick,
+      },
+      age: 0,
+      offspringCount: 0,
+      foodEatenCount: 0,
+      carriedFood: 0,
+      foodGiven: 0,
+      foodReceived: 0,
+      signalTick: -1,
+      recentHistory: [],
+    };
+  }
+
+  /**
+   * Two organisms that asked each other this tick mate (docs/decisions.md,
+   * Mating). Consent: each must be at its own reproduction threshold and past
+   * its own birth cooldown, or nothing happens. The children are born next to
+   * one parent, the carrier, picked at random (the other if that one has no
+   * free cell; if neither has one, nothing happens). Each parent then pays
+   * its own share, floor(own energy × own investment), plus the birth tax.
+   * The carrier's clutch gene sets how many children share the two shares
+   * equally. If that is below minViableChildEnergy the clutch fails: both
+   * still pay and the energy is lost. Otherwise each child gets its own
+   * crossover and mutation and is placed like a clone's child (dispersing as
+   * the carrier's do); a child with no free cell left is not born and its
+   * energy is lost. Matings never lay eggs. Returns false when nothing
+   * happened.
+   */
+  private mate(a: Organism, b: Organism, blocked: Set<string>, newBorns: Organism[]): boolean {
+    const { config } = this;
+    const tax = config.reproductionMetabolismTax;
+    const ready = (o: Organism) => o.energy >= thresholdOf(o, config) && this.tick >= (o.nextBirthTick ?? 0);
+    if (!ready(a) || !ready(b)) return false;
+    const share = (o: Organism) => Math.floor(o.energy * investmentOf(o, config));
+    const shareA = share(a);
+    const shareB = share(b);
+    if (a.energy <= shareA + tax || b.energy <= shareB + tax || shareA + shareB <= 0) return false;
+
+    const free = (o: Organism) =>
+      DIRECTION_OFFSETS.map(({ dx, dy }) => ({ x: o.x + dx, y: o.y + dy })).filter(
+        (c) =>
+          c.x >= 0 &&
+          c.y >= 0 &&
+          c.x < config.gridWidth &&
+          c.y < config.gridHeight &&
+          !this.obstacles.has(`${c.x},${c.y}`) &&
+          !blocked.has(`${c.x},${c.y}`)
+      );
+    const first = this.prng.next() < 0.5 ? a : b;
+    const second = first === a ? b : a;
+    let carrier = first;
+    let cells = free(first);
+    if (cells.length === 0) {
+      carrier = second;
+      cells = free(second);
+    }
+    if (cells.length === 0) return false;
+    const other = carrier === a ? b : a;
+
+    // Both pay their own share and the tax, whatever becomes of the clutch.
+    const pool = shareA + shareB;
+    const paid = new Map<Organism, number>([
+      [a, shareA + tax],
+      [b, shareB + tax],
+    ]);
+    a.energy -= shareA + tax;
+    b.energy -= shareB + tax;
+    if (config.metabolismGeneEnabled) for (const o of [a, b]) o.nextBirthTick = this.tick + birthCooldownOf(o, config);
+    this.matingsTotal++;
+    const similarity = tagSimilarity(a.tag, b.tag);
+    if (similarity >= config.kinSimilarity) this.matingsAlikeTotal++;
+    if (similarity <= config.strangerSimilarity) this.matingsOfStrangersTotal++;
+    if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
+    this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
+
+    const clutch = clutchSizeOf(carrier, config);
+    const perChild = pool / clutch;
+    let born = 0;
+    if (perChild < config.minViableChildEnergy) {
+      this.clutchesFailedTotal++;
+    } else {
+      for (let k = 0; k < clutch; k++) {
+        if (k > 0) cells = free(carrier);
+        if (cells.length === 0) break; // no room for the rest
+        const target = this.prng.choice(cells);
+        const birth = this.birthCell(carrier, target, carrier.energy, blocked);
+        carrier.energy -= birth.extraCost;
+        paid.set(carrier, (paid.get(carrier) ?? 0) + birth.extraCost);
+        blocked.add(`${birth.x},${birth.y}`);
+        this.birthDistanceSum += birth.distance;
+        newBorns.push(this.makeChild(carrier, other, birth, perChild));
+        born++;
+      }
+    }
+    this.birthsTotal += born;
+    this.matingChildrenTotal += born;
+    this.matingChildrenLostTotal += clutch - born;
+    this.matingEnergyLostTotal += pool - perChild * born;
+
+    for (const parent of [carrier, other]) {
+      parent.offspringCount += born;
+      const record = parent.recentHistory[0];
+      if (record && record.tick === this.tick) {
+        parent.recentHistory[0] = {
+          ...record,
+          outcome: born > 0 ? 'success' : 'clutch_failed',
+          energyDelta: Number((record.energyDelta - (paid.get(parent) ?? 0)).toFixed(2)),
+          energyAfter: Number(parent.energy.toFixed(2)),
+        };
+      }
+    }
+    return true;
   }
 
   /** Food energy beyond what an organism can hold becomes fat, at a loss, up to its capacity. */
@@ -1597,6 +1783,14 @@ export class World {
       killsTotal: this.killsTotal,
       killsOfStrangersTotal: this.killsOfStrangersTotal,
       killsOfKinTotal: this.killsOfKinTotal,
+      matingsTotal: this.matingsTotal,
+      matingsAlikeTotal: this.matingsAlikeTotal,
+      matingsOfStrangersTotal: this.matingsOfStrangersTotal,
+      matingsInFamilyTotal: this.matingsInFamilyTotal,
+      matingChildrenTotal: this.matingChildrenTotal,
+      clutchesFailedTotal: this.clutchesFailedTotal,
+      matingChildrenLostTotal: this.matingChildrenLostTotal,
+      matingEnergyLostTotal: Number(this.matingEnergyLostTotal.toFixed(2)),
       carrionEatenTotal: this.carrionEatenTotal,
       carrionStock: Math.round(Array.from(this.carrion.values()).reduce((a, c) => a + c.stock, 0)),
       averageCarnivory:
@@ -1622,6 +1816,7 @@ export class World {
       torporDepth: mean(c.torporEnabled, (o) => o.torporDepth ?? 0),
       eggRate: mean(c.eggsEnabled, (o) => o.eggRate ?? 0),
       metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
+      clutchSize: mean(c.clutchGeneEnabled, (o) => o.clutchSize ?? 1),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       torpid: c.torporEnabled ? organisms.filter(isTorpid).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

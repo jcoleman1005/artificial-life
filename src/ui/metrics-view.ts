@@ -23,6 +23,7 @@ function lifeCards(metrics: WorldMetrics): string {
   if (life.eggRate !== null)
     out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(life.eggRate * 100)}% of births; ${life.eggsHatchedTotal} hatched, ${life.eggsDecayedTotal} failed)</small>`));
   if (life.metabolicRate !== null) out.push(card('Metabolism', `${life.metabolicRate.toFixed(2)}×`));
+  if (life.clutchSize !== null) out.push(card('Clutch', `${life.clutchSize.toFixed(2)} <small>(children per mating)</small>`));
   return out.join('');
 }
 
@@ -49,6 +50,11 @@ export class MetricsView {
     const kills = metrics.killsTotal ?? 0;
     const strangerShare = kills > 0 ? Math.round((100 * (metrics.killsOfStrangersTotal ?? 0)) / kills) : 0;
     const kinShare = kills > 0 ? Math.round((100 * (metrics.killsOfKinTotal ?? 0)) / kills) : 0;
+    const matings = metrics.matingsTotal ?? 0;
+    const matingChildren = metrics.matingChildrenTotal ?? 0;
+    const failedClutches = metrics.clutchesFailedTotal ?? 0;
+    const lostChildren = metrics.matingChildrenLostTotal ?? 0;
+    const matingAlikeShare = matings > 0 ? Math.round((100 * (metrics.matingsAlikeTotal ?? 0)) / matings) : 0;
 
     setHTMLPreservingDetails(
       this.container,
@@ -81,6 +87,10 @@ export class MetricsView {
         <div class="metric-card">
           <span class="m-label">Kills</span>
           <span class="m-val">${kills}${kills > 0 ? ` <small>(${strangerShare}% different colour, ${kinShare}% alike)</small>` : ''}</span>
+        </div>
+        <div class="metric-card">
+          <span class="m-label">Matings</span>
+          <span class="m-val">${matings}${matings > 0 ? ` <small>(${matingChildren} children, ${Math.round((100 * matingChildren) / Math.max(1, birthsTotal))}% of births; ${matingAlikeShare}% alike pairs${failedClutches + lostChildren > 0 ? `; ${failedClutches} clutches failed, ${lostChildren} children lost` : ''})</small>` : ''}</span>
         </div>
         <div class="metric-card">
           <span class="m-label">Diet</span>

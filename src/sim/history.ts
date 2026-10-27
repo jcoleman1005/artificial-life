@@ -72,6 +72,13 @@ export interface HistorySample {
   /** Kills so far, and how many of the prey looked like strangers to their killer. */
   readonly killsTotal?: number;
   readonly killsOfStrangersTotal?: number;
+  /** Children of mating so far, and how many of the pairs looked alike / like strangers (absent before sex). */
+  readonly matingsTotal?: number;
+  readonly matingsAlikeTotal?: number;
+  readonly matingsOfStrangersTotal?: number;
+  /** Children of mating born, and matings whose clutch failed (absent before clutches). */
+  readonly matingChildrenTotal?: number;
+  readonly clutchesFailedTotal?: number;
   /** Plants (absent when plants are off, and in samples from before plants). */
   readonly plants?: PlantSample;
 }
@@ -206,6 +213,11 @@ export class MetricsHistory {
       carnivory: meanAndSd(organisms.map((o) => o.carnivory)),
       killsTotal: metrics.killsTotal,
       killsOfStrangersTotal: metrics.killsOfStrangersTotal,
+      matingsTotal: metrics.matingsTotal,
+      matingsAlikeTotal: metrics.matingsAlikeTotal,
+      matingsOfStrangersTotal: metrics.matingsOfStrangersTotal,
+      matingChildrenTotal: metrics.matingChildrenTotal,
+      clutchesFailedTotal: metrics.clutchesFailedTotal,
       ...(metrics.plants
         ? {
             plants: {
@@ -267,6 +279,11 @@ export class MetricsHistory {
       'carnivory_sd',
       'kills_total',
       'kills_of_strangers_total',
+      'matings_total',
+      'matings_alike_total',
+      'matings_of_strangers_total',
+      'mating_children_total',
+      'clutches_failed_total',
       ...POLICY_WEIGHT_KEYS.flatMap((k) => [`${k}_mean`, `${k}_sd`]),
       'plants',
       'plant_edible_biomass',
@@ -315,6 +332,11 @@ export class MetricsHistory {
         (s.carnivory?.sd ?? 0).toFixed(4),
         s.killsTotal ?? 0,
         s.killsOfStrangersTotal ?? 0,
+        s.matingsTotal ?? 0,
+        s.matingsAlikeTotal ?? 0,
+        s.matingsOfStrangersTotal ?? 0,
+        s.matingChildrenTotal ?? s.matingsTotal ?? 0,
+        s.clutchesFailedTotal ?? 0,
         ...POLICY_WEIGHT_KEYS.flatMap((k) => [
           s.weights[k].mean.toFixed(4),
           s.weights[k].sd.toFixed(4),

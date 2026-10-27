@@ -46,7 +46,7 @@ export const GeneClass = {
 } as const;
 export type GeneClass = (typeof GeneClass)[keyof typeof GeneClass];
 
-/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–45 are the life-history genes (lifehistory.ts). */
+/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–46 are the life-history genes (lifehistory.ts). */
 export const TraitId = {
   tag: 0,
   carryCapacity: 1,
@@ -303,6 +303,86 @@ function mutateDose(key: number, dose: number, config: Readonly<SimulationConfig
     default:
       return dose; // reserved ids are copied unchanged
   }
+}
+
+// ---------------------------------------------------------------------------
+// Sexual reproduction: crossing two genomes by key
+// ---------------------------------------------------------------------------
+
+/**
+ * The unit a gene is inherited in. A hidden brain unit's genes (all its
+ * incoming weights, its bias and its output weight) travel together, so the
+ * group is the unit; every other gene's group is its own key.
+ */
+function crossGroup(key: number): number {
+  switch (geneClassOf(key)) {
+    case GeneClass.brainHidden:
+      return -1 - (geneIndexOf(key) >>> 8);
+    case GeneClass.brainHiddenBias:
+    case GeneClass.brainOut:
+      return -1 - geneIndexOf(key);
+    default:
+      return key; // keys are >= 0, hidden-unit groups < 0
+  }
+}
+
+/**
+ * A child genome from two parents, before mutation. For each gene group
+ * present in either parent (a key, or a whole hidden brain unit), one parent
+ * is picked at random (one PRNG draw per group, in order of first
+ * appearance in `a`, then in `b`), and the child takes all of that parent's
+ * genes in the group: every copy of a duplicated key travels together, and
+ * if the picked parent lacks the key, the child lacks it too.
+ *
+ * Layout: the child follows `a`'s gene order. A group picked from `a` keeps
+ * its genes where `a` has them; a key picked from `b` puts all of `b`'s
+ * copies where `a` first has that key; keys only `b` has (picked from `b`)
+ * follow at the end in `b`'s order. Two Stage 1 genomes share one layout,
+ * so the child has that layout with each gene's dose from one parent.
+ */
+export function crossGenomes(a: ArrayLike<number>, b: ArrayLike<number>, prng: PRNG): Uint32Array {
+  const fromA = new Map<number, boolean>();
+  const pickFor = (key: number) => {
+    const group = crossGroup(key);
+    if (!fromA.has(group)) fromA.set(group, prng.next() < 0.5);
+  };
+  const na = geneCount(a);
+  const nb = geneCount(b);
+  for (let g = 0; g < na; g++) pickFor(a[g * GENE_WORDS]);
+  for (let g = 0; g < nb; g++) pickFor(b[g * GENE_WORDS]);
+
+  // b's genes by key, in b's order.
+  const bByKey = new Map<number, number[]>();
+  for (let g = 0; g < nb; g++) {
+    const key = b[g * GENE_WORDS];
+    const list = bByKey.get(key);
+    if (list) list.push(g);
+    else bByKey.set(key, [g]);
+  }
+
+  const words: number[] = [];
+  const copy = (src: ArrayLike<number>, g: number) => {
+    const at = g * GENE_WORDS;
+    words.push(src[at], src[at + 1], src[at + 2]);
+  };
+  const keysInA = new Set<number>();
+  for (let g = 0; g < na; g++) {
+    const key = a[g * GENE_WORDS];
+    const first = !keysInA.has(key);
+    keysInA.add(key);
+    if (fromA.get(crossGroup(key))) copy(a, g);
+    else if (first) for (const gb of bByKey.get(key) ?? []) copy(b, gb);
+  }
+  for (let g = 0; g < nb; g++) {
+    const key = b[g * GENE_WORDS];
+    if (!keysInA.has(key) && !fromA.get(crossGroup(key))) copy(b, g);
+  }
+  return Uint32Array.from(words);
+}
+
+/** A genome cut to at most `maxGenes` genes (the genes past the cap are dropped). */
+export function capGenome(dna: Uint32Array, maxGenes: number): Uint32Array {
+  return geneCount(dna) > maxGenes ? dna.slice(0, Math.max(0, maxGenes) * GENE_WORDS) : dna;
 }
 
 /** The phenotype fields of an organism (what encodeOrganismDNA reads). */

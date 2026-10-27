@@ -337,7 +337,9 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
   });
 
   it('both efficiencies evolve independently in a running world', () => {
-    const world = new World({ ...SMALL, seed: 'dna-split', dnaSplitDiets: true });
+    // traitMutationRate 0.2 (default 0.1) so both traits mutate within 200 ticks on any PRNG stream:
+    // at 0.1 whether a carnivory mutation survives depends on the seed's luck (it did not once mating joined).
+    const world = new World({ ...SMALL, seed: 'dna-split', dnaSplitDiets: true, traitMutationRate: 0.2 });
     for (let t = 0; t < 200; t++) world.step();
     const organisms = [...world.organisms.values()];
     expect(organisms.some((o) => o.herbivory !== 1)).toBe(true);
@@ -355,9 +357,11 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
     const config = { ...legacy.config, dnaSplitDiets: true };
     const old = [...legacy.organisms.values()][0];
     expect(plantYield(old, config)).toBeCloseTo(config.foodEnergyYield * (1 - config.dietTradeoff * old.carnivory), 12);
+    // Eggs laid before the switch were made under the old config and hatch as they were, so they are left out.
+    const laidBefore = new Set(legacy.eggs.keys());
     const world = World.fromState({ ...legacy.exportState(), config });
     for (let t = 0; t < 60; t++) world.step();
-    const born = [...world.organisms.values()].filter((o) => o.lineage.birthTick > 60);
+    const born = [...world.organisms.values()].filter((o) => o.lineage.birthTick > 60 && !laidBefore.has(o.id));
     expect(born.length).toBeGreaterThan(0);
     for (const o of born) expect(o.herbivory).toBeGreaterThan(0.5);
   }, 30_000);
@@ -448,12 +452,14 @@ describe('DNA Stage 2: variation operators (dnaVariationEnabled)', () => {
   });
 
   it('insertions and duplications stop at dnaMaxGenes', () => {
-    const cfg = createConfig({ dnaVariationEnabled: true, dnaMaxGenes: 400, dnaInsertionRate: 0.05, dnaDuplicationRate: 0.05, dnaDeletionRate: 0 });
+    // The cap sits 20 genes above a founder's length (which grows when brain inputs are appended).
+    const cap = geneCount(founder()) + 20;
+    const cfg = createConfig({ dnaVariationEnabled: true, dnaMaxGenes: cap, dnaInsertionRate: 0.05, dnaDuplicationRate: 0.05, dnaDeletionRate: 0 });
     const prng = new PRNG(17);
     let dna = founder();
     for (let i = 0; i < 100; i++) dna = mutateGenomeVariation(dna, cfg, prng);
-    expect(geneCount(dna)).toBeLessThanOrEqual(400);
-    expect(geneCount(dna)).toBeGreaterThan(390);
+    expect(geneCount(dna)).toBeLessThanOrEqual(cap);
+    expect(geneCount(dna)).toBeGreaterThan(cap - 10);
   });
 
   it('dosage compensation makes a duplication phenotype-neutral; without it a duplicated weight doubles', () => {

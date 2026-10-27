@@ -11,6 +11,7 @@ import { PRNG } from './prng';
 import { isKin, shareWeightFor, tagSimilarity } from './tags';
 import { isLeapAction, unitDirectionOf } from './directions';
 import { carrionYield, killChance } from './traits';
+import { isParentOf, isParentOrChild } from './family';
 import { thresholdOf } from './lifehistory';
 
 export const WEIGHT_MIN = -2.0;
@@ -167,9 +168,9 @@ export function getLegalActions(
     // else can be squeezed past (at extra cost) by an organism with that ability.
     const occupant = occupantAt(targetX, targetY);
     const swapRelation =
-      occupant?.lineage.parentId === organism.id
+      occupant && isParentOf(organism, occupant)
         ? 'child'
-        : occupant && organism.lineage.parentId === occupant.id
+        : occupant && isParentOf(occupant, organism)
           ? 'parent'
           : occupant && config.squeezeEnabled && organism.abilities.squeeze > 0
             ? 'squeeze'
@@ -282,7 +283,7 @@ export function getLegalActions(
         recipientSimilarity: Number(tagSimilarity(organism.tag, recipient.tag).toFixed(3)),
         recipientIsKin: isKin(organism.tag, recipient.tag, config),
         recipientNeed: Number(((half - recipient.energy) / half).toFixed(3)),
-        recipientIsChild: recipient.lineage.parentId === organism.id,
+        recipientIsChild: isParentOf(organism, recipient),
       });
     }
   }
@@ -311,7 +312,33 @@ export function getLegalActions(
         preyId: prey.id,
         preySimilarity: Number(tagSimilarity(organism.tag, prey.tag).toFixed(3)),
         preyKillChance: Number(killChance(organism, prey, config).toFixed(3)),
-        preyIsFamily: prey.lineage.parentId === organism.id || organism.lineage.parentId === prey.id,
+        preyIsFamily: isParentOrChild(organism, prey),
+      });
+    }
+  }
+
+  // 5d. Ask an orthogonally adjacent organism to mate (brain only, like
+  // attacks). It only makes a child if that one asks back this same tick;
+  // whether to ask, and whom, is the brain's to evolve. Each must be at its
+  // own reproduction threshold and past its own birth cooldown.
+  const readyToBreed = (o: Readonly<Organism>) => o.energy >= thresholdOf(o, config) && snapshot.tick >= (o.nextBirthTick ?? 0);
+  if (config.sexEnabled && config.controller === 'brain' && readyToBreed(organism)) {
+    const candidateMates: { type: LegalAction['type']; dx: number; dy: number }[] = [
+      { type: 'MATE_NORTH', dx: 0, dy: -1 },
+      { type: 'MATE_SOUTH', dx: 0, dy: 1 },
+      { type: 'MATE_EAST', dx: 1, dy: 0 },
+      { type: 'MATE_WEST', dx: -1, dy: 0 },
+    ];
+    for (const ask of candidateMates) {
+      const partner = occupantAt(x + ask.dx, y + ask.dy);
+      if (!partner) continue;
+      actions.push({
+        type: ask.type,
+        target: { x: partner.x, y: partner.y },
+        mateId: partner.id,
+        mateSimilarity: Number(tagSimilarity(organism.tag, partner.tag).toFixed(3)),
+        mateIsFamily: isParentOrChild(organism, partner),
+        mateReady: readyToBreed(partner),
       });
     }
   }

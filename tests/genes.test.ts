@@ -65,7 +65,10 @@ describe('stateHash', () => {
     expect(hashString('alife')).not.toBe(hashString('alifE'));
   });
 
-  it('matches for the same seed, differs for another, and survives a snapshot round trip', () => {
+  // Two 30×30 worlds for 800 ticks: up to a minute or two when the population grows large, so it
+  // yields to the event loop now and then (vitest's worker RPC) and has a longer timeout.
+  it('matches for the same seed, differs for another, and survives a snapshot round trip', async () => {
+    const breathe = () => new Promise((resolve) => setImmediate(resolve));
     const a = new World({ ...SMALL, seed: 'hash' });
     const b = new World({ ...SMALL, seed: 'hash' });
     const other = new World({ ...SMALL, seed: 'hash-2' });
@@ -74,15 +77,17 @@ describe('stateHash', () => {
       a.step();
       b.step();
       if (t % 200 === 0) expect(a.stateHash()).toBe(b.stateHash());
+      if (t % 50 === 0) await breathe();
     }
     const restored = World.fromState(JSON.parse(JSON.stringify(a.exportState())));
     expect(restored.stateHash()).toBe(a.stateHash());
     for (let t = 0; t < 200; t++) {
       a.step();
       restored.step();
+      if (t % 50 === 0) await breathe();
     }
     expect(restored.stateHash()).toBe(a.stateHash());
     b.step();
     expect(b.stateHash()).not.toBe(a.stateHash());
-  }, 60_000);
+  }, 180_000);
 });

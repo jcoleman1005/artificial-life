@@ -3,7 +3,7 @@ import { PLANT_TRAITS, PLANT_TRAIT_KEYS, plantHue } from '../sim/plants';
 import { setHTMLPreservingDetails } from './dom';
 import { givenName, organismName } from './names';
 import { carrionYield, plantYield } from '../sim/traits';
-import { birthCooldownOf } from '../sim/lifehistory';
+import { birthCooldownOf, clutchSizeOf } from '../sim/lifehistory';
 import { describeDoing } from './organism-card';
 
 /** Pills for the life-history genes that are switched on in this world (and torpor / fat state). */
@@ -19,6 +19,10 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (o.eggRate !== undefined) out.push(pill('Lays eggs', `${Math.round(o.eggRate * 100)}% of births`));
   if (o.metabolicRate !== undefined)
     out.push(pill('Metabolism', `${o.metabolicRate.toFixed(2)}× · ${birthCooldownOf(o, c)} ticks between births`));
+  if (o.clutchSize !== undefined) {
+    const n = clutchSizeOf(o, c);
+    out.push(pill('Clutch', `${n} ${n === 1 ? 'child' : 'children'} per mating`));
+  }
   return out.join('');
 }
 
@@ -247,7 +251,7 @@ export class InspectorView {
             <div class="header-pre">
               ${energy > 0 ? describeDoing(organism, nameOf) : 'Died'} · ${organism.id} · ${lineage.id} · tag ${Math.round(organism.tag)}°${
                 lineage.parentId === null && lineage.birthTick > 0 ? ` · spontaneously generated (tick ${lineage.birthTick})` : ''
-              }${lineage.parentId ? ` · child of ${givenName(lineage.parentId)}` : ''}
+              }${lineage.parentId ? ` · child of ${givenName(lineage.parentId)}${lineage.mateId ? ` and ${givenName(lineage.mateId)}` : ''}` : ''}
             </div>
           </div>
           <button type="button" class="btn-close-inspector" aria-label="Deselect">✕</button>
