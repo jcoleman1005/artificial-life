@@ -60,6 +60,9 @@ import {
   lifeMatchesConfig,
   torporUpkeepFactor,
   LIFE_GENES,
+  maxEnergyOf,
+  metabolicRateOf,
+  sizeOf,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
 import { capGenome, compileCircuit, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, growableBrain, internalUnits, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
@@ -453,7 +456,7 @@ export class World {
       id: `org-${this.nextOrganismSeq}`,
       x,
       y,
-      energy: this.config.initialEnergy,
+      energy: this.config.initialEnergy * sizeOf(phenotype, this.config),
       policy,
       ...phenotype,
       ...(genome ? { genome } : {}),
@@ -700,6 +703,24 @@ export class World {
   }
 
   /**
+   * Resolves a tie between multiple contenders for the same cell, weighted
+   * by each contender's metabolic rate when the metabolism gene is enabled.
+   */
+  private pickContenderByMetabolicRate<T extends { organism: Organism }>(contenders: T[]): T {
+    if (!this.config.metabolismGeneEnabled || contenders.length === 1) {
+      return this.prng.choice(contenders);
+    }
+    let total = 0;
+    for (const c of contenders) total += metabolicRateOf(c.organism, this.config);
+    let roll = this.prng.nextFloat(0, total);
+    for (const c of contenders) {
+      roll -= metabolicRateOf(c.organism, this.config);
+      if (roll <= 0) return c;
+    }
+    return contenders[contenders.length - 1];
+  }
+
+  /**
    * Advances the simulation by exactly one discrete tick.
    * Enforces simultaneous decisions, fair seeded tie-breakers, and explicit energy accounting.
    */
@@ -786,8 +807,8 @@ export class World {
 
     for (const contenders of cellToMoveContenders.values()) {
       if (contenders.length > 1) {
-        // Pick one winner using seeded PRNG
-        const winner = this.prng.choice(contenders);
+        // Pick one winner using seeded PRNG (weighted by metabolicRate when gene is enabled)
+        const winner = this.pickContenderByMetabolicRate(contenders);
         for (const c of contenders) {
           if (c !== winner) {
             c.approved = false;
@@ -899,7 +920,7 @@ export class World {
 
     for (const contenders of reproContenders.values()) {
       if (contenders.length > 1) {
-        const winner = this.prng.choice(contenders);
+        const winner = this.pickContenderByMetabolicRate(contenders);
         for (const c of contenders) {
           if (c !== winner) {
             c.approved = false;
@@ -955,12 +976,13 @@ export class World {
           const patch = this.foodPatches.get(key);
           // Eat from the patch underfoot if there is one, otherwise from carried food.
           const fromPatch = patch !== undefined && patch.stock > 0;
+          const maxEnergy = maxEnergyOf(organism, this.config);
           if (
             (fromPatch || organism.carriedFood > 0) &&
-            (organism.energy < this.config.maxEnergy || fatRoom(organism, this.config) >= 1)
+            (organism.energy < maxEnergy || fatRoom(organism, this.config) >= 1)
           ) {
             const meal = plantYield(organism, this.config);
-            const energyGain = Math.min(this.config.maxEnergy - organism.energy, meal);
+            const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
             this.storeSurplus(organism, meal - energyGain);
             if (fromPatch) {
@@ -984,7 +1006,8 @@ export class World {
           if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
             const taken = Math.min(patch.stock, this.config.carrionBite);
             const meal = taken * organism.carnivory;
-            const energyGain = Math.min(this.config.maxEnergy - organism.energy, meal);
+            const maxEnergy = maxEnergyOf(organism, this.config);
+            const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
             this.storeSurplus(organism, meal - energyGain);
             patch.stock -= taken;
@@ -1039,7 +1062,7 @@ export class World {
           // Diagonals cost more (longer step); squeezing past a stranger and
           // leaping cost more again. Nothing is paid for a move that fails.
           const cost = moveEnergyCost(
-            organism.abilities,
+            organism,
             {
               leap: isLeapAction(chosenAction.type),
               diagonal: isDiagonalMove(chosenAction.type),
@@ -1161,7 +1184,7 @@ export class World {
 
       // Fat is drawn on when energy runs low.
       if (this.config.fatEnabled && (organism.fat ?? 0) > 0) {
-        const floor = this.config.maxEnergy * this.config.fatReleaseLevel;
+        const floor = maxEnergyOf(organism, this.config) * this.config.fatReleaseLevel;
         if (organism.energy < floor) {
           const drawn = Math.min(organism.fat ?? 0, this.config.fatReleaseRate, floor - organism.energy);
           organism.fat = (organism.fat ?? 0) - drawn;
@@ -1234,7 +1257,8 @@ export class World {
       const recipient = this.organisms.get(gift.recipientId);
       if (!recipient) continue;
       const meal = plantYield(recipient, this.config);
-      const gain = Math.min(this.config.maxEnergy - recipient.energy, meal);
+      const maxEnergy = maxEnergyOf(recipient, this.config);
+      const gain = Math.min(maxEnergy - recipient.energy, meal);
       recipient.energy += gain;
       this.storeSurplus(recipient, meal - gain);
       recipient.foodReceived += 1;
@@ -1313,7 +1337,7 @@ export class World {
       id: `org-${this.nextOrganismSeq}`,
       x: birth.x,
       y: birth.y,
-      energy,
+      energy: Math.min(energy, maxEnergyOf(inherited, this.config)),
       policy,
       ...inherited,
       memory: newMemory(birth.x, birth.y),
@@ -1816,6 +1840,9 @@ export class World {
       eggRate: mean(c.eggsEnabled, (o) => o.eggAllocation ?? o.eggRate ?? 0),
       metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
       clutchSize: mean(c.clutchGeneEnabled, (o) => o.clutchSize ?? 1),
+      size: mean(c.sizeGeneEnabled, (o) => o.size ?? 1),
+      sensingRadius: mean(c.sensingGeneEnabled, (o) => o.sensingRadius ?? c.sensingRadius),
+      digestiveEfficiency: mean(c.digestiveGeneEnabled, (o) => o.digestiveEfficiency ?? 1),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

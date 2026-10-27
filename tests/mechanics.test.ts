@@ -50,6 +50,8 @@ describe('Artificial Life Core Mechanics', () => {
       abilityUpkeep: 0,
       fatEnabled: false, // no fat upkeep either
       torporEnabled: false, // a boxed-in organism would rest into torpor and live longer
+      sensingGeneEnabled: false, // only base metabolism
+      digestiveGeneEnabled: false,
       moveCost: 2.0,
       maxEnergy: 50,
       initialEnergy: 10,

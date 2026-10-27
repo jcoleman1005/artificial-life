@@ -515,7 +515,7 @@ export class CanvasRenderer {
 
     // Sensing range of the selected organism: a soft dashed square
     if (selectedOrg) {
-      const radius = config.sensingRadius;
+      const radius = Math.round(selectedOrg.sensingRadius ?? config.sensingRadius);
       const x0 = Math.max(0, selectedOrg.x - radius) * cellSize;
       const y0 = Math.max(0, selectedOrg.y - radius) * cellSize;
       const x1 = Math.min(gridWidth, selectedOrg.x + radius + 1) * cellSize;
@@ -900,11 +900,13 @@ export class CanvasRenderer {
   private drawOrganism(org: OrganismView, detail: number): void {
     const { ctx, cellSize } = this;
     const [cx, cy] = this.displayCentre(org);
-    const maxEnergy = this.world.config.maxEnergy;
+    const config = this.world.config;
+    const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1);
     const energyRatio = Math.max(0, Math.min(1, org.energy / maxEnergy));
     const hue = this.hueOf(org);
-    // Size by energy, from 60% to 100% of the largest orb, so glyphs stay readable.
-    const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio));
+    const sizeScale = config.sizeGeneEnabled ? Math.sqrt(org.size ?? 1) : 1;
+    // Size by energy and body size, so glyphs stay readable and mice vs elephants are visible.
+    const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio) * sizeScale);
 
     if (detail <= 0) {
       // Tiny cells: a plain dot with a faint halo

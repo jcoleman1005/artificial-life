@@ -26,6 +26,15 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
     const n = clutchSizeOf(o, c);
     out.push(pill('Clutch', `${n.toFixed(2)} children per mating`));
   }
+  if (o.size !== undefined) {
+    out.push(pill('Size', `${o.size.toFixed(2)}× (Emax ${(c.maxEnergy * o.size).toFixed(0)})`));
+  }
+  if (o.sensingRadius !== undefined) {
+    out.push(pill('Vision', `${o.sensingRadius.toFixed(1)} cells`));
+  }
+  if (o.digestiveEfficiency !== undefined) {
+    out.push(pill('Digestion', `${Math.round(o.digestiveEfficiency * 100)}%`));
+  }
   return out.join('');
 }
 

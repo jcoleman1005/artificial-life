@@ -40,6 +40,9 @@ export interface OrganismView {
   readonly carriedFood: number;
   /** Diet, 0 (plants) to 1 (meat). */
   readonly carnivory: number;
+  readonly size?: number;
+  readonly sensingRadius?: number;
+  readonly digestiveEfficiency?: number;
   /** Only the latest decision (or none). */
   readonly recentHistory: readonly ActionView[];
 }
@@ -70,6 +73,9 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     age: org.age,
     carriedFood: org.carriedFood,
     carnivory: org.carnivory,
+    ...(org.size !== undefined ? { size: org.size } : {}),
+    ...(org.sensingRadius !== undefined ? { sensingRadius: org.sensingRadius } : {}),
+    ...(org.digestiveEfficiency !== undefined ? { digestiveEfficiency: org.digestiveEfficiency } : {}),
     recentHistory: last
       ? [
           {

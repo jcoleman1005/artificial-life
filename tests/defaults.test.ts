@@ -33,6 +33,9 @@ describe('Default world', () => {
       dnaMaxInternal: DEFAULT_CONFIG.dnaMaxInternal,
       dnaUpkeepPerConnection: DEFAULT_CONFIG.dnaUpkeepPerConnection,
       clutchGeneEnabled: DEFAULT_CONFIG.clutchGeneEnabled,
+      sizeGeneEnabled: DEFAULT_CONFIG.sizeGeneEnabled,
+      sensingGeneEnabled: DEFAULT_CONFIG.sensingGeneEnabled,
+      digestiveGeneEnabled: DEFAULT_CONFIG.digestiveGeneEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -62,6 +65,10 @@ describe('Default world', () => {
       dnaUpkeepPerConnection: 0.00005,
       // The clutch gene (matings only) is a new feature, on by default.
       clutchGeneEnabled: true,
+      // Tier 1 physical & energetic architecture basic genes
+      sizeGeneEnabled: true,
+      sensingGeneEnabled: true,
+      digestiveGeneEnabled: true,
     });
   });
 

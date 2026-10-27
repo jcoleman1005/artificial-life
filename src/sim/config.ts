@@ -151,6 +151,26 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   // 10: two birth taxes; ~40 ticks of base upkeep; 40% of a meal (foodEnergyYield 25); a third of a
   // founder clone child (65 × 0.45 ≈ 29). Founder pairs pass with clutches of 1–5, fail at 6.
   minViableChildEnergy: 10,
+  // Tier 1 physical & energetic architecture genes
+  sizeGeneEnabled: true,
+  sizeFounder: 1.0,
+  sizeStep: 0.1,
+  sizeMin: 0.4,
+  sizeMax: 2.5,
+  sizeMetabolismExponent: 0.75,
+  sensingGeneEnabled: true,
+  sensingFounder: 3,
+  sensingStep: 0.5,
+  sensingMin: 1,
+  sensingMax: 6,
+  sensingUpkeepPerCell: 0.003,
+  digestiveGeneEnabled: true,
+  digestiveFounder: 1.0,
+  digestiveStep: 0.08,
+  digestiveMin: 0.5,
+  digestiveMax: 1.5,
+  digestiveUpkeepRate: 0.04,
+  fatDragCoeff: 0.5,
   dnaVariationEnabled: false, // Stage 2 (needs dnaEnabled; docs/specs/dna.md)
   dnaInsertionRate: 0.001,
   dnaDeletionRate: 0.001,

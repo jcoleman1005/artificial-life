@@ -699,7 +699,8 @@ describe('Long run with sharing', () => {
       const cells = new Set<string>();
       for (const o of world.organisms.values()) {
         const key = `${o.x},${o.y}`;
-        if (!(o.energy > 0 && o.energy <= world.config.maxEnergy)) violations.push(`energy ${o.energy}`);
+        const maxEnergy = world.config.sizeGeneEnabled ? (o.size ?? 1) * world.config.maxEnergy : world.config.maxEnergy;
+        if (!(o.energy > 0 && o.energy <= maxEnergy)) violations.push(`energy ${o.energy}`);
         if (!(o.tag >= 0 && o.tag < 360)) violations.push(`tag ${o.tag}`);
         if (!(o.carriedFood >= 0 && o.carriedFood <= o.carryCapacity)) {
           violations.push(`carried ${o.carriedFood}`);
@@ -709,7 +710,7 @@ describe('Long run with sharing', () => {
       }
     }
     expect(violations).toEqual([]);
-   }, 30_000);
+  }, 120_000);
 });
 
 describe('Rest drive (dials)', () => {

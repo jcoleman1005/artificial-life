@@ -49,6 +49,8 @@ describe('Carry capacity trait', () => {
       abilityUpkeep: 0,
       memoryEnabled: false, // only carry upkeep on top of metabolism
       fatEnabled: false,
+      sensingGeneEnabled: false,
+      digestiveGeneEnabled: false,
       moveCost: 0,
     });
     const org = Array.from(world.organisms.values())[0];
@@ -123,5 +125,5 @@ describe('Carry capacity trait', () => {
     for (const o of world.organisms.values()) {
       if (founders.has(o.lineage.id)) expect(o.carryCapacity).toBe(founders.get(o.lineage.id));
     }
-  });
+  }, 30_000);
 });

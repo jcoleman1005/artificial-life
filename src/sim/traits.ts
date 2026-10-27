@@ -1,5 +1,6 @@
 import type { PRNG } from './prng';
 import type { Abilities, AbilityName, Organism, SimulationConfig } from './types';
+import { digestiveEfficiencyOf, maxEnergyOf, sizeOf } from './lifehistory';
 
 /** Carry capacity for a founder (pioneer or immigrant): 1–3 units. */
 export function founderCarryCapacity(config: Readonly<SimulationConfig>, prng: PRNG): number {
@@ -88,11 +89,25 @@ export function inheritAbilityEfficiency(parent: number, config: Readonly<Simula
  * squeeze squeezeCostMultiplier + 1 − e (3 − e), leap leapCostMultiplier + 1 − e (3.5 − e).
  */
 export function moveEnergyCost(
-  abilities: Readonly<Abilities>,
+  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity'>>,
   move: { readonly leap: boolean; readonly diagonal: boolean; readonly squeeze: boolean },
   config: Readonly<SimulationConfig>
 ): number {
-  const { moveCost } = config;
+  const isOrganism = 'abilities' in subject || 'size' in subject || 'fat' in subject;
+  const abilities = isOrganism ? (subject as Pick<Organism, 'abilities'>).abilities : (subject as Abilities);
+  let moveCost = config.moveCost;
+  if (isOrganism) {
+    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity'>;
+    const size = sizeOf(org, config);
+    moveCost *= size;
+    if (config.fatEnabled && config.fatDragCoeff > 0) {
+      const fat = org.fat ?? 0;
+      if (fat > 0) {
+        const capacity = maxEnergyOf(org, config) + Math.max(1, org.fatCapacity ?? 0);
+        moveCost *= 1 + config.fatDragCoeff * (fat / capacity);
+      }
+    }
+  }
   if (!continuousAbilities(config)) {
     return move.leap
       ? moveCost * config.leapCostMultiplier
@@ -114,10 +129,32 @@ export function herbivoryOf(organism: Readonly<Pick<Organism, 'carnivory' | 'her
 
 /** Energy spent per tick just staying alive, including the upkeep of body traits. */
 export function metabolismCost(organism: Readonly<Organism>, config: Readonly<SimulationConfig>): number {
+  const sizeFactor =
+    config.sizeGeneEnabled && organism.size !== undefined
+      ? Math.pow(organism.size, config.sizeMetabolismExponent ?? 0.75)
+      : 1;
+  const metabolicRate =
+    config.metabolismGeneEnabled && organism.metabolicRate !== undefined ? organism.metabolicRate : 1;
+  const baseCost = config.tickMetabolismCost * sizeFactor * metabolicRate;
+
+  // Sensory upkeep: neural/receptor maintenance scaling with area (radius^2)
+  const sensoryUpkeep =
+    config.sensingGeneEnabled && organism.sensingRadius !== undefined
+      ? config.sensingUpkeepPerCell * (organism.sensingRadius * organism.sensingRadius)
+      : 0;
+
+  // Digestive organ upkeep: maintaining nutrient extraction machinery
+  const digestiveUpkeep =
+    config.digestiveGeneEnabled && organism.digestiveEfficiency !== undefined
+      ? config.digestiveUpkeepRate * organism.digestiveEfficiency
+      : 0;
+
   return (
-    (config.metabolismGeneEnabled ? config.tickMetabolismCost * (organism.metabolicRate ?? 1) : config.tickMetabolismCost) +
+    baseCost +
+    sensoryUpkeep +
+    digestiveUpkeep +
     config.carryUpkeep * organism.carryCapacity +
-    (config.fatEnabled ? config.fatUpkeep * (organism.fatCapacity ?? 0) : 0) +
+    (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
     // An ability only costs anything in worlds where it is enabled.
     config.abilityUpkeep *
@@ -145,15 +182,17 @@ export function inheritCarnivory(parent: number, config: Readonly<SimulationConf
 }
 
 /** Energy from one unit of plant food: less for meat eaters, when carrion is on; herbivory × yield with split diets. */
-export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herbivory'>>, config: Readonly<SimulationConfig>): number {
-  if (splitDiets(config)) return config.foodEnergyYield * herbivoryOf(organism, config);
-  if (!config.carrionEnabled) return config.foodEnergyYield;
-  return config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory);
+export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herbivory' | 'digestiveEfficiency'>>, config: Readonly<SimulationConfig>): number {
+  const eff = digestiveEfficiencyOf(organism, config);
+  if (splitDiets(config)) return config.foodEnergyYield * herbivoryOf(organism, config) * eff;
+  if (!config.carrionEnabled) return config.foodEnergyYield * eff;
+  return config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory) * eff;
 }
 
 /** Energy from a full carrion meal (carrionBite of carrion energy); 0 when carrion is off. */
-export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory'>>, config: Readonly<SimulationConfig>): number {
-  return config.carrionEnabled ? config.carrionBite * organism.carnivory : 0;
+export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency'>>, config: Readonly<SimulationConfig>): number {
+  const eff = digestiveEfficiencyOf(organism, config);
+  return config.carrionEnabled ? config.carrionBite * organism.carnivory * eff : 0;
 }
 
 /** Carrion energy a body leaves: a fixed amount plus a share of what it still held. Never more than the body cost. */

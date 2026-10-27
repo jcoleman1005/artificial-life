@@ -33,6 +33,15 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate (a seventh, clutch size for matings, came with the mating rule on 2026-10-27). Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Next: watch long runs for whether the genes drift (add history charts for them), and re-gate those three alone with eggs on.
 
+## Tier 1 basic physical genes (built 2026-10-27)
+
+Five foundational physical and energetic architecture genes (`size`, `sensingRadius`, `metabolicRate`, `digestiveEfficiency`, and `energyReserveCap` with fat drag; traits 47–49 in `src/sim/lifehistory.ts`, tests `tests/tier1_genes.test.ts`). Each is a direct morphological or physiological slider with thermodynamic and kinetic costs (never scripted behaviors), decoded once at birth into flat arrays, with safe zero-dose fallback reproducing legacy behavior. All on by default (`sizeGeneEnabled`, `sensingGeneEnabled`, `digestiveGeneEnabled`).
+- `size`: scales $E_{\max} = 100 \times \text{size}$, basal metabolism $\propto \text{size}^{0.75}$ (Kleiber's law), movement cost linearly with mass, and visual radius in renderer ($r \propto \sqrt{\text{size}}$).
+- `sensingRadius`: restricts perceptual Chebyshev window ($1 \dots 6$ cells); charges continuous sensory area upkeep ($\text{sensingUpkeepPerCell} \times \text{radius}^2$).
+- `metabolicRate`: scales base metabolism; higher rate buys weighted priority in cell movement and reproduction conflicts; low rate amplifies torpor rest efficiency.
+- `digestiveEfficiency`: scales plant and carrion food extraction yield ($0.5 \dots 1.5\times$); charges continuous gut organ upkeep per tick.
+- `energyReserveCap`: fat storage decoupled from structural body size; loaded fat applies dynamic kinetic drag to movement costs ($\text{drag} = 1 + \text{dragCoeff} \times \frac{\text{fat}}{\text{fatCapacity} + E_{\max}}$).
+
 ## In progress: DNA (2026-10-26)
 
 Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled`; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain (not the dials) are decoded from a genome, bit-identical to a legacy world. Stage 1b is built as two toggles, off by default, with gates in `docs/experiments/dna-1b*.txt` (continuous abilities: met; split diets: plant eaters met, meat eaters not yet seen in 3,000 ticks). Both await the user's review of their gates; meanwhile Stage 2 was built on top (below).

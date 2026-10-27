@@ -313,6 +313,12 @@ export interface Organism {
   readonly metabolicRate?: number;
   /** Children per mating (clutchGeneEnabled; matings only, cloning makes one child). */
   readonly clutchSize?: number;
+  /** Body mass / radius slider (sizeGeneEnabled). Scales maxEnergy linearly, increases basal metabolism (size^0.75) and movement costs. */
+  readonly size?: number;
+  /** Perceptual radius in cells (sensingGeneEnabled). Scans [x - r, x + r] x [y - r, y + r]; charges sensory upkeep per tick (radius^2). */
+  readonly sensingRadius?: number;
+  /** Nutrient extraction efficiency (digestiveGeneEnabled). Scales energy absorbed from plant and carrion meals; charges gut organ upkeep. */
+  readonly digestiveEfficiency?: number;
   /** Fat held now (state; only with fatEnabled). */
   fat?: number;
   /** Chose REST last tick, so acting now pays the wake cost (state; only with torporEnabled). */
@@ -617,6 +623,25 @@ export interface SimulationConfig {
   clutchMin: number;
   clutchMax: number;
   minViableChildEnergy: number; // A mating whose energy per child is below this fails: both parents pay, no children
+  sizeGeneEnabled: boolean; // Body size / mass evolves (scales maxEnergy linearly, metabolism as size^0.75, move cost with mass)
+  sizeFounder: number;
+  sizeStep: number;
+  sizeMin: number;
+  sizeMax: number;
+  sizeMetabolismExponent: number; // Exponent for Kleiber's Law allometric scaling (default 0.75)
+  sensingGeneEnabled: boolean; // Sensory radius evolves (1..6 cells, charges upkeep scaling with radius^2)
+  sensingFounder: number;
+  sensingStep: number;
+  sensingMin: number;
+  sensingMax: number;
+  sensingUpkeepPerCell: number; // Upkeep per tick per squared cell radius
+  digestiveGeneEnabled: boolean; // Digestive efficiency evolves (scales plant/carrion meal extraction, charges organ upkeep)
+  digestiveFounder: number;
+  digestiveStep: number;
+  digestiveMin: number;
+  digestiveMax: number;
+  digestiveUpkeepRate: number; // Upkeep per tick per unit of digestive efficiency
+  fatDragCoeff: number; // Dynamic movement drag multiplier based on fat stored
   dnaVariationEnabled: boolean; // With DNA (Stage 2): mutation counts are Poisson-sampled, genes can be inserted, deleted and duplicated, and every gene costs dnaUpkeepPerGene
   dnaInsertionRate: number; // Per gene per birth: a new random gene appears at a random position
   dnaDeletionRate: number; // Per gene per birth: a gene is removed
@@ -725,6 +750,9 @@ export interface LifeMetrics {
   eggRate?: number | null;
   metabolicRate: number | null;
   clutchSize: number | null;
+  size: number | null;
+  sensingRadius: number | null;
+  digestiveEfficiency: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;

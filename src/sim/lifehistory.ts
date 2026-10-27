@@ -20,7 +20,17 @@ import type { Organism, SimulationConfig } from './types';
  * fixed value applies, so the world is bit-identical to one without the gene.
  */
 
-export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggAllocation' | 'metabolicRate' | 'clutchSize';
+export type LifeField =
+  | 'reproThreshold'
+  | 'investment'
+  | 'fatCapacity'
+  | 'torporDepth'
+  | 'eggAllocation'
+  | 'metabolicRate'
+  | 'clutchSize'
+  | 'size'
+  | 'sensingRadius'
+  | 'digestiveEfficiency';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -99,6 +109,33 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.clutchMin,
     max: (c) => c.clutchMax,
   },
+  {
+    field: 'size',
+    traitId: 47,
+    enabled: (c) => c.sizeGeneEnabled,
+    founder: (c) => c.sizeFounder,
+    step: (c) => c.sizeStep,
+    min: (c) => c.sizeMin,
+    max: (c) => c.sizeMax,
+  },
+  {
+    field: 'sensingRadius',
+    traitId: 48,
+    enabled: (c) => c.sensingGeneEnabled,
+    founder: (c) => c.sensingFounder,
+    step: (c) => c.sensingStep,
+    min: (c) => c.sensingMin,
+    max: (c) => c.sensingMax,
+  },
+  {
+    field: 'digestiveEfficiency',
+    traitId: 49,
+    enabled: (c) => c.digestiveGeneEnabled,
+    founder: (c) => c.digestiveFounder,
+    step: (c) => c.digestiveStep,
+    min: (c) => c.digestiveMin,
+    max: (c) => c.digestiveMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -161,8 +198,20 @@ export function inheritLife(parent: Readonly<Organism>, config: Readonly<Simulat
 
 // --- reading the genes, with the world's fixed value when a gene is off ---
 
-export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold'>>, c: Readonly<SimulationConfig>): number =>
-  o.reproThreshold ?? c.reproductionThreshold;
+export const sizeOf = (o: Readonly<Pick<Organism, 'size'>>, c: Readonly<SimulationConfig>): number =>
+  c.sizeGeneEnabled ? (o.size ?? 1) : 1;
+
+export const maxEnergyOf = (o: Readonly<Pick<Organism, 'size'>>, c: Readonly<SimulationConfig>): number =>
+  c.maxEnergy * sizeOf(o, c);
+
+export const sensingRadiusOf = (o: Readonly<Pick<Organism, 'sensingRadius'>>, c: Readonly<SimulationConfig>): number =>
+  c.sensingGeneEnabled ? (o.sensingRadius ?? c.sensingRadius) : c.sensingRadius;
+
+export const digestiveEfficiencyOf = (o: Readonly<Pick<Organism, 'digestiveEfficiency'>>, c: Readonly<SimulationConfig>): number =>
+  c.digestiveGeneEnabled ? (o.digestiveEfficiency ?? 1) : 1;
+
+export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold' | 'size'>>, c: Readonly<SimulationConfig>): number =>
+  (o.reproThreshold ?? c.reproductionThreshold) * sizeOf(o, c);
 
 export const investmentOf = (o: Readonly<Pick<Organism, 'investment'>>, c: Readonly<SimulationConfig>): number =>
   o.investment ?? c.reproductionEnergyFraction;

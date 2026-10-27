@@ -9,7 +9,7 @@ import { tagSimilarity } from './tags';
 import { isParentOf } from './family';
 import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
-import { fatRoom, thresholdOf } from './lifehistory';
+import { fatRoom, maxEnergyOf, sensingRadiusOf, thresholdOf } from './lifehistory';
 
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
@@ -21,7 +21,7 @@ export function senseEnvironment(
   config: Readonly<SimulationConfig>
 ): SensedInputs {
   const { x, y, energy } = organism;
-  const radius = config.sensingRadius;
+  const radius = Math.round(sensingRadiusOf(organism, config));
   const width = snapshot.gridWidth;
 
   // Current cell food (grids are indexed y * width + x)
@@ -198,14 +198,15 @@ export function senseEnvironment(
   // Check action preconditions
   const { carriedFood } = organism;
   // Eating needs food here or in hand, and room for a full meal, so a
-  // nearly full organism never spends a whole food unit on a few points.
+  // Nearly full organism never spends a whole food unit on a few points.
+  const maxEnergy = maxEnergyOf(organism, config);
   const canEat =
     (currentCellFood > 0 || carriedFood > 0) &&
-    (energy <= config.maxEnergy - plantYield(organism, config) || fatRoom(organism, config) >= 1);
+    (energy <= maxEnergy - plantYield(organism, config) || fatRoom(organism, config) >= 1);
   // The same for carrion, for a diet that gets at least one energy point from it.
   const meatYield = carrionYield(organism, config);
   const canEatCarrion =
-    currentCellCarrion > 0 && meatYield >= 1 && (energy <= config.maxEnergy - meatYield || fatRoom(organism, config) >= 1);
+    currentCellCarrion > 0 && meatYield >= 1 && (energy <= maxEnergy - meatYield || fatRoom(organism, config) >= 1);
   const canPickUp = currentCellFood > 0 && carriedFood < organism.carryCapacity;
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
@@ -239,7 +240,7 @@ export function senseEnvironment(
 
   return {
     currentEnergy: energy,
-    energyRatio: Math.min(1, Math.max(0, energy / config.maxEnergy)),
+    energyRatio: Math.min(1, Math.max(0, energy / maxEnergy)),
     currentCellFood,
     carriedFood,
     nearestFood,

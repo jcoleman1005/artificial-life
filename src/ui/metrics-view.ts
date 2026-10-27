@@ -8,23 +8,26 @@ function lifeCards(metrics: WorldMetrics): string {
   const card = (label: string, value: string) =>
     `<div class="metric-card"><span class="m-label">${label}</span><span class="m-val">${value}</span></div>`;
   const out: string[] = [];
-  if (life.reproThreshold !== null || life.investment !== null)
+  if (life.reproThreshold != null || life.investment != null)
     out.push(
       card(
         'Breeding',
-        `${life.reproThreshold !== null ? `at ${life.reproThreshold.toFixed(0)} energy` : ''}${
-          life.investment !== null ? ` <small>(${Math.round(life.investment * 100)}% to each child)</small>` : ''
+        `${life.reproThreshold != null ? `at ${life.reproThreshold.toFixed(0)} energy` : ''}${
+          life.investment != null ? ` <small>(${Math.round(life.investment * 100)}% to each child)</small>` : ''
         }`
       )
     );
-  if (life.fatCapacity !== null) out.push(card('Fat', `${life.fatCapacity.toFixed(0)} cap <small>(${(life.fat ?? 0).toFixed(1)} held)</small>`));
-  if (life.torporDepth !== null)
+  if (life.fatCapacity != null) out.push(card('Fat', `${life.fatCapacity.toFixed(0)} cap <small>(${(life.fat ?? 0).toFixed(1)} held)</small>`));
+  if (life.torporDepth != null)
     out.push(card('Torpor', `${Math.round(life.torporDepth * 100)}% deep <small>(${life.resting ?? 0} resting now)</small>`));
   const eggVal = life.eggAllocation ?? life.eggRate;
-  if (eggVal !== null && eggVal !== undefined)
-    out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(eggVal * 100)}% mean shell; ${life.eggsHatchedTotal} hatched, ${life.eggsDecayedTotal} failed)</small>`));
-  if (life.metabolicRate !== null) out.push(card('Metabolism', `${life.metabolicRate.toFixed(2)}×`));
-  if (life.clutchSize !== null) out.push(card('Clutch', `${life.clutchSize.toFixed(2)} <small>(children per mating)</small>`));
+  if (eggVal != null)
+    out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(eggVal * 100)}% mean shell; ${life.eggsHatchedTotal ?? 0} hatched, ${life.eggsDecayedTotal ?? 0} failed)</small>`));
+  if (life.metabolicRate != null) out.push(card('Metabolism', `${life.metabolicRate.toFixed(2)}×`));
+  if (life.clutchSize != null) out.push(card('Clutch', `${life.clutchSize.toFixed(2)} <small>(children per mating)</small>`));
+  if (life.size != null) out.push(card('Size', `${life.size.toFixed(2)}×`));
+  if (life.sensingRadius != null) out.push(card('Vision', `${life.sensingRadius.toFixed(1)} cells`));
+  if (life.digestiveEfficiency != null) out.push(card('Digestion', `${Math.round(life.digestiveEfficiency * 100)}%`));
   return out.join('');
 }
 
