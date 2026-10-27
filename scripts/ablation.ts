@@ -14,7 +14,7 @@
 //                          between actions). Choice-invariant acquired units (constant, or fed only by
 //                          bias/energy/carried/crowding/registers) add the same offset to every action and
 //                          stay, so the ablated half keeps their upkeep. Cohort: effectiveAcquiredUnits > 0.
-//   'units'                removes every expressed gene on units >= 6; the circuit then scores exactly as
+//   'units'                removes every brain gene that maps to a unit >= 6 (pruned units included); the circuit then scores exactly as
 //                          the dense brain. Cohort: acquiredConnections > 0.
 //   'all'                  'units' plus the silent brain genes the growable-off decode ignores (no effect
 //                          on scores, only on dnaUpkeepPerGene). Cohort: acquiredConnections > 0.
@@ -184,7 +184,7 @@ const fullyStripped = (c: Readonly<Circuit>, level: StripLevel) => (level === 'e
 
 const LEVEL_TEXT: Record<StripLevel, string> = {
   effective: 'genes of choice-variant acquired units only; choice-invariant acquired units kept',
-  units: 'every expressed gene on units >= 6; scores as the dense brain',
+  units: 'every brain gene mapping to a unit >= 6 (pruned units included); scores as the dense brain',
   all: "every gene on units >= 6 plus silent brain genes the growable-off decode ignores; scores as 'units'",
 };
 
