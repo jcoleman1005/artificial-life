@@ -143,9 +143,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   metabolismMax: 1.5,
   birthCooldown: 12,
   // Clutch size (matings only). Founders 1. Max 6: the carrier's 4 free neighbours plus a little
-  // dispersal room, and at founder values 6 children get under minViableChildEnergy each.
+  // dispersal room.
   clutchGeneEnabled: true,
-  clutchStep: 1,
+  clutchStep: 0.2,
   clutchMin: 1,
   clutchMax: 6,
   // 10: two birth taxes; ~40 ticks of base upkeep; 40% of a meal (foodEnergyYield 25); a third of a

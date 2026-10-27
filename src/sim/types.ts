@@ -305,7 +305,9 @@ export interface Organism {
   readonly fatCapacity?: number;
   /** Torpor depth 0..1: how much upkeep falls on a resting tick, and how much acting after a rest costs. */
   readonly torporDepth?: number;
-  /** Chance a birth is laid as an egg 0..1. */
+  /** Egg shell allocation 0..1 (oviparity vs juvenile birth, and protective shell energy). */
+  readonly eggAllocation?: number;
+  /** Legacy alias for eggAllocation in older saves. */
   readonly eggRate?: number;
   /** Metabolic rate multiplier on base upkeep; sets the pause between births. */
   readonly metabolicRate?: number;
@@ -449,11 +451,13 @@ export interface CarrionPatch {
   expiresAt: number;
 }
 
-/** An egg: a child waiting inert, in a cell, until food is near. */
+/** An egg: a child waiting inert, in a cell, until conditions are favorable. */
 export interface Egg {
   readonly x: number;
   readonly y: number;
   readonly laidTick: number;
+  /** Protective energetic shell buffer remaining. */
+  shell: number;
   /** The child it will hatch into (its energy is what the egg holds). */
   readonly child: Organism;
 }
@@ -707,7 +711,8 @@ export interface LifeMetrics {
   investment: number | null;
   fatCapacity: number | null;
   torporDepth: number | null;
-  eggRate: number | null;
+  eggAllocation: number | null;
+  eggRate?: number | null;
   metabolicRate: number | null;
   clutchSize: number | null;
   /** Mean fat held, and organisms that rested last tick. */

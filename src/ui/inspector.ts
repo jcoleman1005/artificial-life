@@ -16,12 +16,15 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (o.fatCapacity !== undefined) out.push(pill('Fat', `${(o.fat ?? 0).toFixed(0)} / ${o.fatCapacity.toFixed(0)}`));
   if (o.torporDepth !== undefined)
     out.push(pill('Torpor', `depth ${Math.round(o.torporDepth * 100)}%${o.rested ? ' · rested last tick' : ''}`));
-  if (o.eggRate !== undefined) out.push(pill('Lays eggs', `${Math.round(o.eggRate * 100)}% of births`));
+  const eggVal = o.eggAllocation ?? o.eggRate;
+  if (eggVal !== undefined) {
+    out.push(pill('Reproduction', eggVal > 0 ? `Lays eggs (${Math.round(eggVal * 100)}% shell)` : 'Direct birth'));
+  }
   if (o.metabolicRate !== undefined)
     out.push(pill('Metabolism', `${o.metabolicRate.toFixed(2)}× · ${birthCooldownOf(o, c)} ticks between births`));
   if (o.clutchSize !== undefined) {
     const n = clutchSizeOf(o, c);
-    out.push(pill('Clutch', `${n} ${n === 1 ? 'child' : 'children'} per mating`));
+    out.push(pill('Clutch', `${n.toFixed(2)} children per mating`));
   }
   return out.join('');
 }
