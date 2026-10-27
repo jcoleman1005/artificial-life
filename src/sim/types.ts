@@ -275,6 +275,30 @@ export interface Organism {
    * Absent otherwise.
    */
   readonly herbivory?: number;
+  /**
+   * Life-history genes, each present only while its switch is on (see
+   * lifehistory.ts). Absent means the world's fixed value applies.
+   * Energy needed to reproduce.
+   */
+  readonly reproThreshold?: number;
+  /** Fraction of the parent's energy a child is born with. */
+  readonly investment?: number;
+  /** Fat reserve capacity: energy stored above maxEnergy, costing upkeep per unit of capacity. */
+  readonly fatCapacity?: number;
+  /** Torpor depth 0..1: how much upkeep falls while torpid, and how deaf to food it is. */
+  readonly torporDepth?: number;
+  /** Chance a birth is laid as an egg 0..1. */
+  readonly eggRate?: number;
+  /** Metabolic rate multiplier on base upkeep; sets the pause between births. */
+  readonly metabolicRate?: number;
+  /** Fat held now (state; only with fatEnabled). */
+  fat?: number;
+  /** Ticks of torpor left, 0 or absent when awake (state; only with torporEnabled). */
+  torpor?: number;
+  /** Consecutive ticks spent resting (state; only with torporEnabled). */
+  restStreak?: number;
+  /** First tick it may reproduce again (state; only with metabolismGeneEnabled). */
+  nextBirthTick?: number;
   /** Organisms this one has killed. */
   kills: number;
   /** Inherited neural controller, used when config.controller is 'brain'. */
@@ -407,6 +431,15 @@ export interface CarrionPatch {
   expiresAt: number;
 }
 
+/** An egg: a child waiting inert, in a cell, until food is near. */
+export interface Egg {
+  readonly x: number;
+  readonly y: number;
+  readonly laidTick: number;
+  /** The child it will hatch into (its energy is what the egg holds). */
+  readonly child: Organism;
+}
+
 /** A fertile disc where food patches grow. Each may run its own season clock. */
 export interface FoodRegion {
   readonly x: number;
@@ -515,6 +548,42 @@ export interface SimulationConfig {
   overgrazingRestTicks: number; // Ticks without a bite before a cell starts to recover
   overgrazingMatchedRandom: boolean; // Control: the same damage lands on random fertile cells, not where bites happen
   dietUpkeep: number; // Split diets: energy per tick per unit of herbivory + carnivory
+  thresholdGeneEnabled: boolean; // Reproduction threshold evolves (off: everyone uses reproductionThreshold)
+  thresholdStep: number; // How far a threshold shifts when it mutates (with traitMutationRate)
+  thresholdMin: number; // Lowest threshold that can evolve
+  thresholdMax: number; // Highest threshold that can evolve
+  investmentGeneEnabled: boolean; // Investment per child evolves (off: everyone uses reproductionEnergyFraction)
+  investmentStep: number; // How far the fraction shifts when it mutates
+  investmentMin: number;
+  investmentMax: number;
+  fatEnabled: boolean; // Organisms can evolve a fat reserve above maxEnergy
+  fatFounder: number; // Founders' fat capacity
+  fatStep: number; // How far the capacity shifts when it mutates
+  maxFat: number; // Largest capacity
+  fatUpkeep: number; // Energy per tick per unit of capacity, empty or full
+  fatStoreEfficiency: number; // Share of surplus food energy that becomes fat (the rest is lost)
+  fatReleaseLevel: number; // Fat is drawn on when energy is below this fraction of maxEnergy
+  fatReleaseRate: number; // Most fat drawn on per tick
+  torporEnabled: boolean; // Organisms can evolve a deep rest below ordinary REST
+  torporFounder: number; // Founders' torpor depth
+  torporStep: number;
+  torporEntryTicks: number; // Consecutive rests before torpor sets in
+  torporSaving: number; // Upkeep falls by this fraction at depth 1
+  torporWakeCost: number; // Energy to wake at depth 1 (scales with depth)
+  torporTimer: number; // Ticks a torpor lasts if nothing wakes it
+  eggsEnabled: boolean; // Organisms can evolve to lay eggs that wait for food
+  eggFounder: number; // Founders' chance of laying an egg
+  eggStep: number;
+  eggExtraCost: number; // Extra energy the parent pays to lay an egg
+  eggDecayChance: number; // Chance per tick an egg fails
+  eggHatchRadius: number; // An egg hatches when food is within this many cells
+  eggHatchEfficiency: number; // Share of the egg's energy the hatchling starts with
+  metabolismGeneEnabled: boolean; // Base metabolic rate evolves, tied to the pause between births
+  metabolismFounder: number;
+  metabolismStep: number;
+  metabolismMin: number;
+  metabolismMax: number;
+  birthCooldown: number; // Ticks between births at rate 1 (shorter when faster, longer when slower)
   dnaVariationEnabled: boolean; // With DNA (Stage 2): mutation counts are Poisson-sampled, genes can be inserted, deleted and duplicated, and every gene costs dnaUpkeepPerGene
   dnaInsertionRate: number; // Per gene per birth: a new random gene appears at a random position
   dnaDeletionRate: number; // Per gene per birth: a gene is removed
@@ -587,6 +656,26 @@ export interface WorldMetrics {
   plants: PlantMetrics | null;
   /** Cell health of the fertile ground, or null when overgrazing is off. */
   overgrazing: OvergrazingMetrics | null;
+  /** Life-history genes, or null when none is on. */
+  life: LifeMetrics | null;
+}
+
+/** Population means of the life-history genes that are switched on, and egg/torpor/fat counts. */
+export interface LifeMetrics {
+  reproThreshold: number | null;
+  investment: number | null;
+  fatCapacity: number | null;
+  torporDepth: number | null;
+  eggRate: number | null;
+  metabolicRate: number | null;
+  /** Mean fat held, and organisms in torpor now. */
+  fat: number | null;
+  torpid: number | null;
+  /** Eggs waiting now, and laid / hatched / failed so far. */
+  eggs: number | null;
+  eggsLaidTotal: number;
+  eggsHatchedTotal: number;
+  eggsDecayedTotal: number;
 }
 
 export interface WorldSnapshot {

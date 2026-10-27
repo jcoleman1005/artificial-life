@@ -32,6 +32,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Diet (`carnivory`): inherited; trades plant yield for carrion share.
 - Predation (`predationEnabled`, brain only): ATTACK adjacent organism; bites resolve after moves; kill leaves carrion, no energy.
 - Evolvable bodies so far: abilities, dispersal, carry capacity, memory span, diet.
+- Life-history genes (six switches, each the lock for its control arm; `src/sim/lifehistory.ts`): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate; all off reproduces the old world bit-identically.
 - Tribes are never assigned: inherited hue tag; graded kinship similarity (`kinSimilarity`, `strangerSimilarity`).
 - Giving food is need-aware (neighbour below half energy), delivered after all actions; `sharingEnabled` switch.
 - Childhood (`childhoodTicks`): children sense a food-carrying parent; `followFoodParent`.
@@ -49,10 +50,12 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Simulation is independent of rendering; runs in a `SimulationHost` (Worker or server) behind `src/sim/protocol.ts`.
 - Observers (`WorldEventDetector`, `ActivityMaps`) never change the world; the feed shows world events only.
 - Overlays, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
-- DNA (`dnaEnabled`, off until signed off; `docs/specs/dna.md`): genome-decoded body and brain; Stage 1 bit-identical to legacy.
+- DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` off.
 - DNA Stage 2 (`dnaVariationEnabled`, off until its gate is finished): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.
 - Snapshots: `exportState()` / `fromState()` restore bit-identically; `SavedWorld` format; browser auto-save, branch points, files.
 - Experiments can start from a saved world (`--from saved.json`).
+- Gene registry (`src/sim/genes.ts`): table-driven plant-trait genes (ranges, founders, mutation, clamping, budgets, locking); organism genomes live in `dna.ts`.
+- `World.stateHash()`: hash of the snapshot minus trend history; equal hashes continue identically.
 - Always-on server (`server/`): one shared `SimulationHost`, SSE out, POST in, saves to `data/world.json`; not safe public unless `--watch-only`.
 
 ## Working notes

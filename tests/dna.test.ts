@@ -90,6 +90,7 @@ function withoutDna(state: WorldState): string {
     ...state,
     config: { ...state.config, dnaEnabled: null },
     organisms: state.organisms.map(({ genome: _genome, ...o }) => o),
+    eggs: (state.eggs ?? []).map(({ child: { genome: _genome, ...child }, ...egg }) => ({ ...egg, child })),
   });
 }
 

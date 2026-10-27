@@ -48,6 +48,7 @@ describe('Carry capacity trait', () => {
       carryUpkeep: 0.05,
       abilityUpkeep: 0,
       memoryEnabled: false, // only carry upkeep on top of metabolism
+      fatEnabled: false,
       moveCost: 0,
     });
     const org = Array.from(world.organisms.values())[0];

@@ -4,15 +4,18 @@ import type {
   CarrionPatch,
   DecisionOutcome,
   DecisionRecord,
+  Egg,
   FoodPatch,
   FoodRegion,
   LegalAction,
   Organism,
+  LifeMetrics,
   SimulationConfig,
   WorldMetrics,
   WorldSnapshot,
 } from './types';
 import { createConfig } from './config';
+import { hashString } from './state-hash';
 import { senseEnvironment } from './sensors';
 import {
   createRandomPolicy,
@@ -42,6 +45,19 @@ import {
   herbivoryOf,
 } from './traits';
 import { isDiagonalMove, isLeapAction, isMoveAction } from './directions';
+import {
+  birthCooldownOf,
+  fatRoom,
+  founderLife,
+  inheritLife,
+  investmentOf,
+  isTorpid,
+  lifeForConfig,
+  lifeMatchesConfig,
+  torporUpkeepFactor,
+  torporWakeRadius,
+  LIFE_GENES,
+} from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
 import { decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
@@ -83,6 +99,8 @@ export interface WorldState {
   readonly foodPatches: readonly FoodPatch[];
   /** Absent in saves from before carrion. */
   readonly carrion?: readonly CarrionPatch[];
+  /** Eggs waiting to hatch (absent in saves from before eggs). */
+  readonly eggs?: readonly SavedEgg[];
   readonly organisms: readonly SavedOrganism[];
   readonly history: { readonly samples: readonly HistorySample[]; readonly interval: number };
   /** Plant totals (absent in saves from before plants). */
@@ -93,6 +111,9 @@ export interface WorldState {
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
 export type SavedOrganism = Omit<Organism, 'genome'> & { readonly genome?: readonly number[] };
+
+/** An egg in a WorldState (its child saved like any organism). */
+export type SavedEgg = Omit<Egg, 'child'> & { readonly child: SavedOrganism };
 
 const WORLD_COUNTERS = [
   'birthsTotal',
@@ -114,6 +135,9 @@ const WORLD_COUNTERS = [
   'killsOfKinTotal',
   'carrionEatenTotal',
   'carrionUnitsRotted',
+  'eggsLaidTotal',
+  'eggsHatchedTotal',
+  'eggsDecayedTotal',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
@@ -128,6 +152,8 @@ export class World {
   public readonly foodPatches = new Map<string, FoodPatch>(); // "x,y" -> FoodPatch
   /** What dead organisms left behind, "x,y" -> CarrionPatch (separate from plant food; a cell can hold both). */
   public readonly carrion = new Map<string, CarrionPatch>();
+  /** Eggs waiting for food, keyed by the id the child will have, in the order they were laid. */
+  public readonly eggs = new Map<string, Egg>();
   /** Fertile regions where food grows (empty: food can grow anywhere). */
   public readonly foodRegions: FoodRegion[] = [];
   public readonly organisms = new Map<string, Organism>(); // id -> Organism
@@ -156,6 +182,10 @@ export class World {
   public killsOfKinTotal = 0;
   public carrionEatenTotal = 0;
   public carrionUnitsRotted = 0;
+  /** Eggs laid, hatched and failed so far. */
+  public eggsLaidTotal = 0;
+  public eggsHatchedTotal = 0;
+  public eggsDecayedTotal = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
   /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
@@ -201,6 +231,9 @@ export class World {
     this.killsOfKinTotal = 0;
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
+    this.eggsLaidTotal = 0;
+    this.eggsHatchedTotal = 0;
+    this.eggsDecayedTotal = 0;
     this.lastKill = null;
     this.plantCounters = newPlantCounters();
     this.soilField = null;
@@ -210,6 +243,7 @@ export class World {
     this.obstacles.clear();
     this.foodPatches.clear();
     this.carrion.clear();
+    this.eggs.clear();
     this.foodRegions.length = 0;
     this.organisms.clear();
     this.selectedOrganismId = null;
@@ -378,6 +412,7 @@ export class World {
     const drawn: Phenotype = {
       tag, carryCapacity, brain, abilities, dispersal, memorySpan, memoryWeights, carnivory,
       ...(split ? { herbivory: 1 } : {}),
+      ...founderLife(this.config),
     };
     // With DNA, the founder is what its encoded genome decodes to.
     const genome = this.config.dnaEnabled ? encodeOrganismDNA(drawn) : undefined;
@@ -420,10 +455,12 @@ export class World {
     if (config.dnaEnabled) {
       // A parent from before split diets were on gets a herbivory gene that keeps its plant yield.
       const needsHerbivory = splitDiets(config) && parent.herbivory === undefined;
+      // Likewise a parent from before a life-history switch changed gets those genes at their starting value (or loses them).
+      const lifeStale = !lifeMatchesConfig(parent, config);
       const parentGenome =
-        parent.genome && !needsHerbivory
+        parent.genome && !needsHerbivory && !lifeStale
           ? parent.genome
-          : encodeOrganismDNA({ ...phenotypeOf(parent), ...(needsHerbivory ? { herbivory: herbivoryOf(parent, config) } : {}) });
+          : encodeOrganismDNA(this.freshPhenotype(parent, needsHerbivory));
       const genome = config.dnaVariationEnabled ? mutateGenomeVariation(parentGenome, config, prng) : mutateGenome(parentGenome, config, prng);
       return { ...decodeOrganismDNA(genome, config), genome };
     }
@@ -436,7 +473,36 @@ export class World {
       memorySpan: inheritMemorySpan(parent.memorySpan, config, prng),
       memoryWeights: inheritMemoryWeights(parent.memoryWeights, config, prng),
       carnivory: inheritCarnivory(parent.carnivory, config, prng),
+      ...inheritLife(parent, config, prng),
     };
+  }
+
+  /** A parent's phenotype with its life-history genes matched to the switches (see inheritBody). */
+  private freshPhenotype(parent: Readonly<Organism>, needsHerbivory: boolean): Phenotype {
+    const p: Phenotype & Record<string, unknown> = { ...phenotypeOf(parent) };
+    for (const g of LIFE_GENES) delete p[g.field];
+    return { ...p, ...(needsHerbivory ? { herbivory: herbivoryOf(parent, this.config) } : {}), ...lifeForConfig(parent, this.config) };
+  }
+
+  /** A saved organism back as a live one. */
+  private static restoreOrganism({ genome, ...o }: SavedOrganism): Organism {
+    return {
+      ...clone(o),
+      ...(genome ? { genome: upgradeGenome(genome, o.brain.skip.length) } : {}),
+      brain: upgradeBrain(clone(o.brain)),
+      carnivory: o.carnivory ?? 0,
+      kills: o.kills ?? 0,
+      dispersal: o.dispersal ?? 1,
+      memorySpan: o.memorySpan ?? 0,
+      memoryWeights: o.memoryWeights ? [...o.memoryWeights] : new Array<number>(MEMORY_WEIGHT_COUNT).fill(0),
+      memory: o.memory ? clone(o.memory) : newMemory(o.x, o.y),
+    };
+  }
+
+  /** An organism as plain data (its genome as numbers, only its latest decision). */
+  private static saveOrganism(o: Readonly<Organism>): SavedOrganism {
+    const { genome, ...rest } = o;
+    return { ...clone({ ...rest, recentHistory: o.recentHistory.slice(0, 1) }), ...(genome ? { genome: Array.from(genome) } : {}) };
   }
 
   /**
@@ -455,14 +521,24 @@ export class World {
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
-      organisms: Array.from(this.organisms.values(), (o) => {
-        const { genome, ...rest } = o;
-        return { ...clone({ ...rest, recentHistory: o.recentHistory.slice(0, 1) }), ...(genome ? { genome: Array.from(genome) } : {}) };
-      }),
+      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, child: World.saveOrganism(e.child) })),
+      organisms: Array.from(this.organisms.values(), (o) => World.saveOrganism(o)),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
       ...(this.cellHealth ? { cellHealth: this.cellHealth.exportState() } : {}),
     };
+  }
+
+  /**
+   * A hash of everything that decides the world's future: settings, random
+   * number generator, counters, terrain, food and plants, and organisms.
+   * Two worlds with the same hash continue identically. The trend history is
+   * left out (it only records the past). Costs about as much as a snapshot,
+   * so call it now and then, not every tick.
+   */
+  public stateHash(): string {
+    const { history: _history, ...state } = this.exportState();
+    return hashString(JSON.stringify(state));
   }
 
   /** A world that continues exactly from a saved state. */
@@ -493,18 +569,11 @@ export class World {
     world.carrion.clear();
     for (const c of state.carrion ?? []) world.carrion.set(`${c.x},${c.y}`, { ...c });
     world.organisms.clear();
-    for (const { genome, ...o } of state.organisms) {
-      world.organisms.set(o.id, {
-        ...clone(o),
-        ...(genome ? { genome: upgradeGenome(genome, o.brain.skip.length) } : {}),
-        brain: upgradeBrain(clone(o.brain)),
-        carnivory: o.carnivory ?? 0,
-        kills: o.kills ?? 0,
-        dispersal: o.dispersal ?? 1,
-        memorySpan: o.memorySpan ?? 0,
-        memoryWeights: o.memoryWeights ? [...o.memoryWeights] : new Array<number>(MEMORY_WEIGHT_COUNT).fill(0),
-        memory: o.memory ? clone(o.memory) : newMemory(o.x, o.y),
-      });
+    for (const o of state.organisms) world.organisms.set(o.id, World.restoreOrganism(o));
+    world.eggs.clear();
+    for (const e of state.eggs ?? []) {
+      const child = World.restoreOrganism(e.child);
+      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, child });
     }
     world.history.importState(state.history);
     world.selectedOrganismId = null;
@@ -609,6 +678,10 @@ export class World {
       /** A move that trades places with this child or parent instead. */
       swapWithId?: string;
       reproTargetKey?: string;
+      /** In torpor this tick: no decision is made, and upkeep is reduced. */
+      torpid?: boolean;
+      /** Torpor ends this tick (food near, or the timer ran out): it acts normally and pays the wake cost. */
+      waking?: boolean;
       approved: boolean;
       outcome: DecisionOutcome;
     }
@@ -617,9 +690,27 @@ export class World {
 
     for (const org of sortedLiving) {
       const sensed = senseEnvironment(org, snapshot, this.config);
-      const legalActions = getLegalActions(org, snapshot, this.config, sensed);
-      const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
-      const { chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng);
+      // Torpor: a torpid organism makes no decision until food is near (closer
+      // the deeper it sleeps) or its timer runs out.
+      let torpid = false;
+      let waking = false;
+      if (this.config.torporEnabled && isTorpid(org)) {
+        const radius = torporWakeRadius(org, this.config);
+        const foodNear =
+          sensed.currentCellFood > 0 || (sensed.nearestFood !== null && sensed.nearestFood.distance <= radius);
+        waking = foodNear || (org.torpor ?? 0) <= 1;
+        torpid = !waking;
+      }
+      let chosenAction: LegalAction;
+      let scores: ActionScore[];
+      if (torpid) {
+        chosenAction = { type: 'REST', target: { x: org.x, y: org.y } };
+        scores = [];
+      } else {
+        const legalActions = getLegalActions(org, snapshot, this.config, sensed);
+        const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
+        ({ chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng));
+      }
 
       let moveTargetKey: string | undefined;
       let swapWithId: string | undefined;
@@ -647,6 +738,8 @@ export class World {
         moveTargetKey,
         swapWithId,
         reproTargetKey,
+        ...(torpid ? { torpid } : {}),
+        ...(waking ? { waking } : {}),
         approved: true,
         outcome: 'success',
       });
@@ -814,9 +907,18 @@ export class World {
       const startCell = { x: organism.x, y: organism.y };
       let outcome = item.outcome;
       // Base metabolism, plus the upkeep of carry capacity
-      const metabolism = metabolismCost(organism, this.config);
+      let metabolism = metabolismCost(organism, this.config);
+      if (item.torpid) metabolism *= torporUpkeepFactor(organism, this.config);
       let energyDelta = -metabolism;
       organism.energy -= metabolism;
+      if (item.waking) {
+        // Coming out of torpor costs energy, more the deeper it was.
+        const wakeCost = this.config.torporWakeCost * (organism.torporDepth ?? 0);
+        organism.energy -= wakeCost;
+        energyDelta -= wakeCost;
+        organism.torpor = 0;
+        organism.restStreak = 0;
+      }
 
       switch (chosenAction.type) {
         case 'EAT': {
@@ -824,12 +926,14 @@ export class World {
           const patch = this.foodPatches.get(key);
           // Eat from the patch underfoot if there is one, otherwise from carried food.
           const fromPatch = patch !== undefined && patch.stock > 0;
-          if ((fromPatch || organism.carriedFood > 0) && organism.energy < this.config.maxEnergy) {
-            const energyGain = Math.min(
-              this.config.maxEnergy - organism.energy,
-              plantYield(organism, this.config)
-            );
+          if (
+            (fromPatch || organism.carriedFood > 0) &&
+            (organism.energy < this.config.maxEnergy || fatRoom(organism, this.config) >= 1)
+          ) {
+            const meal = plantYield(organism, this.config);
+            const energyGain = Math.min(this.config.maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
+            this.storeSurplus(organism, meal - energyGain);
             if (fromPatch) {
               patch.stock -= 1;
               grazePlant(patch, this.tick, this.plantCounters);
@@ -850,8 +954,10 @@ export class World {
           const patch = this.carrion.get(`${organism.x},${organism.y}`);
           if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
             const taken = Math.min(patch.stock, this.config.carrionBite);
-            const energyGain = Math.min(this.config.maxEnergy - organism.energy, taken * organism.carnivory);
+            const meal = taken * organism.carnivory;
+            const energyGain = Math.min(this.config.maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
+            this.storeSurplus(organism, meal - energyGain);
             patch.stock -= taken;
             if (patch.stock <= 1e-9) this.carrion.delete(`${patch.x},${patch.y}`);
             organism.foodEatenCount++;
@@ -927,17 +1033,18 @@ export class World {
         case 'REPRODUCE_EAST':
         case 'REPRODUCE_WEST': {
           if (approved && chosenAction.target) {
-            const childEnergy = Math.floor(
-              organism.energy * this.config.reproductionEnergyFraction
-            );
+            const childEnergy = Math.floor(organism.energy * investmentOf(organism, this.config));
             const totalReproCost = childEnergy + this.config.reproductionMetabolismTax;
+            // An egg costs extra to lay. The roll is drawn whenever the parent can lay eggs at all.
+            const lays = this.config.eggsEnabled && (organism.eggRate ?? 0) > 0 && this.prng.next() < (organism.eggRate ?? 0);
+            const eggCost = lays ? this.config.eggExtraCost : 0;
 
-            if (organism.energy > totalReproCost && childEnergy > 0) {
+            if (organism.energy > totalReproCost + eggCost && childEnergy > 0) {
               // Where the child lands: next to the parent, or (with
               // dispersal) any free cell up to the parent's dispersal
               // distance it can afford, picked at random.
-              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost, birthBlocked);
-              const birthCost = totalReproCost + birth.extraCost;
+              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost - eggCost, birthBlocked);
+              const birthCost = totalReproCost + birth.extraCost + eggCost;
               organism.energy -= birthCost;
               organism.offspringCount++;
               energyDelta -= birthCost;
@@ -978,8 +1085,15 @@ export class World {
                 recentHistory: [],
               };
 
-              newBorns.push(child);
-              this.birthsTotal++;
+              if (this.config.metabolismGeneEnabled) organism.nextBirthTick = this.tick + birthCooldownOf(organism, this.config);
+              if (lays) {
+                // Counted as a birth when it hatches.
+                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, child });
+                this.eggsLaidTotal++;
+              } else {
+                newBorns.push(child);
+                this.birthsTotal++;
+              }
               outcome = 'success';
             } else {
               outcome = 'energy_too_low';
@@ -1036,6 +1150,32 @@ export class World {
         }
       }
 
+      if (this.config.torporEnabled) {
+        if (item.torpid) {
+          organism.torpor = (organism.torpor ?? 0) - 1;
+        } else if (chosenAction.type === 'REST' && (organism.torporDepth ?? 0) > 0) {
+          // Resting long enough sets torpor in.
+          organism.restStreak = (organism.restStreak ?? 0) + 1;
+          if (organism.restStreak >= this.config.torporEntryTicks) {
+            organism.torpor = this.config.torporTimer;
+            organism.restStreak = 0;
+          }
+        } else {
+          organism.restStreak = 0;
+        }
+      }
+
+      // Fat is drawn on when energy runs low.
+      if (this.config.fatEnabled && (organism.fat ?? 0) > 0) {
+        const floor = this.config.maxEnergy * this.config.fatReleaseLevel;
+        if (organism.energy < floor) {
+          const drawn = Math.min(organism.fat ?? 0, this.config.fatReleaseRate, floor - organism.energy);
+          organism.fat = (organism.fat ?? 0) - drawn;
+          organism.energy += drawn;
+          energyDelta += drawn;
+        }
+      }
+
       // Memory takes in what was sensed at the start of this tick.
       if (this.config.memoryEnabled && organism.memorySpan > 0) {
         updateMemory(organism.memory, organism.memoryWeights, sensed, organism.carryCapacity, startCell, this.tick);
@@ -1084,8 +1224,10 @@ export class World {
     for (const gift of pendingGifts) {
       const recipient = this.organisms.get(gift.recipientId);
       if (!recipient) continue;
-      const gain = Math.min(this.config.maxEnergy - recipient.energy, plantYield(recipient, this.config));
+      const meal = plantYield(recipient, this.config);
+      const gain = Math.min(this.config.maxEnergy - recipient.energy, meal);
       recipient.energy += gain;
+      this.storeSurplus(recipient, meal - gain);
       recipient.foodReceived += 1;
       recipient.foodEatenCount++;
     }
@@ -1143,6 +1285,59 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+  }
+
+  /** Food energy beyond what an organism can hold becomes fat, at a loss, up to its capacity. */
+  private storeSurplus(organism: Organism, surplus: number): void {
+    const room = fatRoom(organism, this.config);
+    if (room <= 0 || surplus <= 0) return;
+    organism.fat = (organism.fat ?? 0) + Math.min(room, surplus * this.config.fatStoreEfficiency);
+  }
+
+  /**
+   * Eggs decay with a small chance each tick (drawn for every egg), and hatch
+   * when food is within eggHatchRadius and the cell is free. A hatchling
+   * starts with eggHatchEfficiency of the egg's energy.
+   */
+  private stepEggs(): void {
+    if (this.eggs.size === 0) return;
+    const { eggDecayChance, eggHatchRadius, eggHatchEfficiency } = this.config;
+    let occupied: Set<string> | null = null;
+    for (const [id, egg] of Array.from(this.eggs)) {
+      if (this.prng.next() < eggDecayChance) {
+        this.eggs.delete(id);
+        this.eggsDecayedTotal++;
+        continue;
+      }
+      if (!this.foodWithin(egg.x, egg.y, eggHatchRadius)) continue;
+      if (occupied === null) {
+        occupied = new Set();
+        for (const o of this.organisms.values()) occupied.add(`${o.x},${o.y}`);
+      }
+      const key = `${egg.x},${egg.y}`;
+      if (occupied.has(key)) continue;
+      occupied.add(key);
+      this.eggs.delete(id);
+      this.eggsHatchedTotal++;
+      this.birthsTotal++;
+      const { child } = egg;
+      this.organisms.set(child.id, {
+        ...child,
+        energy: Math.max(1, Math.floor(child.energy * eggHatchEfficiency)),
+        lineage: { ...child.lineage, birthTick: this.tick },
+        memory: newMemory(egg.x, egg.y),
+      });
+    }
+  }
+
+  /** Whether any food patch with stock lies within `radius` cells (square) of a cell. */
+  private foodWithin(x: number, y: number, radius: number): boolean {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if ((this.foodPatches.get(`${x + dx},${y + dy}`)?.stock ?? 0) > 0) return true;
+      }
+    }
+    return false;
   }
 
   /** Adds carrion energy to a cell (piling onto any already there, which then rots later). */
@@ -1353,6 +1548,9 @@ export class World {
         arrived++;
       }
     }
+
+    // 4. Eggs hatch where food has come back (draws nothing when there are none).
+    this.stepEggs();
   }
 
   /**
@@ -1408,6 +1606,28 @@ export class World {
       season: this.worldSeason(),
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
       overgrazing: this.cellHealth ? this.cellHealth.metrics(this.soil(), this.foodRegions.length, this.fertile()) : null,
+      life: this.lifeMetrics(organisms),
+    };
+  }
+
+  private lifeMetrics(organisms: readonly Organism[]): LifeMetrics | null {
+    const c = this.config;
+    if (!LIFE_GENES.some((g) => g.enabled(c))) return null;
+    const mean = (on: boolean, value: (o: Organism) => number): number | null =>
+      on ? (organisms.length > 0 ? Number((organisms.reduce((a, o) => a + value(o), 0) / organisms.length).toFixed(3)) : 0) : null;
+    return {
+      reproThreshold: mean(c.thresholdGeneEnabled, (o) => o.reproThreshold ?? c.reproductionThreshold),
+      investment: mean(c.investmentGeneEnabled, (o) => o.investment ?? c.reproductionEnergyFraction),
+      fatCapacity: mean(c.fatEnabled, (o) => o.fatCapacity ?? 0),
+      torporDepth: mean(c.torporEnabled, (o) => o.torporDepth ?? 0),
+      eggRate: mean(c.eggsEnabled, (o) => o.eggRate ?? 0),
+      metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
+      fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
+      torpid: c.torporEnabled ? organisms.filter(isTorpid).length : null,
+      eggs: c.eggsEnabled ? this.eggs.size : null,
+      eggsLaidTotal: this.eggsLaidTotal,
+      eggsHatchedTotal: this.eggsHatchedTotal,
+      eggsDecayedTotal: this.eggsDecayedTotal,
     };
   }
 
