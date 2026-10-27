@@ -231,6 +231,22 @@ export function brainFeatures(
   canEatNow: boolean,
   prng: PRNG
 ): number[] {
+  const out = new Float64Array(BRAIN_INPUT_COUNT);
+  fillBrainFeatures(out, 0, action, organism, sensed, config, canEatNow, prng);
+  return Array.from(out);
+}
+
+/** brainFeatures written into out at offset, so the hot path allocates one buffer per organism instead of one array per action. */
+function fillBrainFeatures(
+  out: Float64Array,
+  offset: number,
+  action: LegalAction,
+  organism: Readonly<Organism>,
+  sensed: Readonly<SensedInputs>,
+  config: Readonly<SimulationConfig>,
+  canEatNow: boolean,
+  prng: PRNG
+): void {
   const type = action.type;
   // Leaps count as movement: they share the directional inputs.
   const isMove = isMoveAction(type) || isLeapAction(type);
@@ -253,60 +269,59 @@ export function brainFeatures(
   const headroom = Math.max(1, config.maxEnergy - threshold);
 
   // Order must match BRAIN_INPUTS (checked by a test).
-  return [
-    1,
-    isMove ? 1 : 0, // isMove
-    type === 'EAT' ? 1 : 0, // isEat
-    type === 'PICK_UP' ? 1 : 0, // isPickUp
-    isReproduce ? 1 : 0, // isReproduce
-    isGive ? 1 : 0, // isGive
-    type === 'REST' ? 1 : 0, // isRest
-    sensed.energyRatio, // energy
-    sensed.carriedFood / Math.max(1, organism.carryCapacity), // carried
-    Math.min(1, sensed.surroundingOrganismCount / 8), // crowding
-    type === 'EAT' ? hunger : 0, // eatHunger
-    type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity) : 0, // pickUpRoom
-    isReproduce ? Math.max(0, organism.energy - threshold) / headroom : 0, // reproFullness
-    isGive && !action.recipientIsChild ? need : 0, // giveNeed
-    isGive && !action.recipientIsChild ? need * (action.recipientSimilarity ?? 0) : 0, // giveNeedAlike
-    isGive && action.recipientIsChild ? need : 0, // giveNeedChild
-    isMove ? aligned(dx, dy, sensed.nearestFood, 0.25) : 0, // moveFood
-    isMove && hungry ? aligned(dx, dy, sensed.nearestFood, 0) : 0, // moveFoodHungry
-    isMove ? aligned(dx, dy, sensed.nearestObstacle, 0.5) : 0, // moveObstacle
-    isMove ? aligned(dx, dy, sensed.nearestOrganism, 0.3) : 0, // moveCrowd
-    moveKin, // moveKin
-    isMove ? aligned(dx, dy, sensed.parentWithFood, 0) : 0, // moveParentFood
-    isMove && (action.swapRelation === 'child' || action.swapRelation === 'parent') ? 1 : 0, // moveFamilySwap
-    isMove ? prng.nextFloat(-1, 1) : 0, // moveNoise
-    canEatNow && type !== 'EAT' && !action.recipientIsChild ? 1 : 0, // pushedByEating
-    isSignal ? 1 : 0, // isSignal
-    isSignal && sensed.currentCellFood > 0 ? 1 : 0, // signalOnFood
-    isSignal ? hunger : 0, // signalHunger
-    isMove ? aligned(dx, dy, sensed.nearestSignal, 0.15) : 0, // moveSignal
-    isMove ? aligned(dx, dy, sensed.nearestSignal, 0.15) * (sensed.nearestSignal?.value ?? 0) : 0, // moveSignalAlike
-    action.targetOccupied ? 1 : 0, // moveOccupied
-    isLeapAction(type) ? 1 : 0, // isLeap
-    isDiagonalMove(type) ? 1 : 0, // isDiagonal
-    isMove && sensed.rememberedFood ? aligned(dx, dy, sensed.rememberedFood, 0.1) * sensed.rememberedFood.freshness : 0, // moveRememberedFood
-    isMove && sensed.rememberedSignal ? aligned(dx, dy, sensed.rememberedSignal, 0.1) * sensed.rememberedSignal.freshness : 0, // moveRememberedSignal
-    isMove ? aligned(dx, dy, sensed.home, 0.1) : 0, // moveHome
-    sensed.registers[0] ?? 0, // register0
-    sensed.registers[1] ?? 0, // register1
-    sensed.registers[2] ?? 0, // register2
-    type === 'EAT_CARRION' ? 1 : 0, // isEatCarrion
-    type === 'EAT_CARRION' ? hunger * (carrionYield(organism, config) / config.foodEnergyYield) : 0, // eatCarrionHunger
-    isMove ? aligned(dx, dy, sensed.nearestCarrion, 0.25) * organism.carnivory : 0, // moveCarrion
-    isAttack ? 1 : 0, // isAttack
-    isAttack ? (action.preyKillChance ?? 0) : 0, // attackKillChance
-    isAttack ? (action.preySimilarity ?? 0) : 0, // attackAlike
-    isAttack && action.preyIsFamily ? 1 : 0, // attackFamily
-    isAttack ? hunger * organism.carnivory : 0, // attackHunger
-    isMate ? 1 : 0, // isMate
-    isMate ? Math.max(0, organism.energy - threshold) / headroom : 0, // mateFullness
-    isMate ? (action.mateSimilarity ?? 0) : 0, // mateAlike
-    isMate && action.mateIsFamily ? 1 : 0, // mateFamily
-    isMate && action.mateReady ? 1 : 0, // mateReady
-  ];
+  let o = offset;
+  out[o++] = 1;
+  out[o++] = isMove ? 1 : 0; // isMove
+  out[o++] = type === 'EAT' ? 1 : 0; // isEat
+  out[o++] = type === 'PICK_UP' ? 1 : 0; // isPickUp
+  out[o++] = isReproduce ? 1 : 0; // isReproduce
+  out[o++] = isGive ? 1 : 0; // isGive
+  out[o++] = type === 'REST' ? 1 : 0; // isRest
+  out[o++] = sensed.energyRatio; // energy
+  out[o++] = sensed.carriedFood / Math.max(1, organism.carryCapacity); // carried
+  out[o++] = Math.min(1, sensed.surroundingOrganismCount / 8); // crowding
+  out[o++] = type === 'EAT' ? hunger : 0; // eatHunger
+  out[o++] = type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity) : 0; // pickUpRoom
+  out[o++] = isReproduce ? Math.max(0, organism.energy - threshold) / headroom : 0; // reproFullness
+  out[o++] = isGive && !action.recipientIsChild ? need : 0; // giveNeed
+  out[o++] = isGive && !action.recipientIsChild ? need * (action.recipientSimilarity ?? 0) : 0; // giveNeedAlike
+  out[o++] = isGive && action.recipientIsChild ? need : 0; // giveNeedChild
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestFood, 0.25) : 0; // moveFood
+  out[o++] = isMove && hungry ? aligned(dx, dy, sensed.nearestFood, 0) : 0; // moveFoodHungry
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestObstacle, 0.5) : 0; // moveObstacle
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestOrganism, 0.3) : 0; // moveCrowd
+  out[o++] = moveKin; // moveKin
+  out[o++] = isMove ? aligned(dx, dy, sensed.parentWithFood, 0) : 0; // moveParentFood
+  out[o++] = isMove && (action.swapRelation === 'child' || action.swapRelation === 'parent') ? 1 : 0; // moveFamilySwap
+  out[o++] = isMove ? prng.nextFloat(-1, 1) : 0; // moveNoise
+  out[o++] = canEatNow && type !== 'EAT' && !action.recipientIsChild ? 1 : 0; // pushedByEating
+  out[o++] = isSignal ? 1 : 0; // isSignal
+  out[o++] = isSignal && sensed.currentCellFood > 0 ? 1 : 0; // signalOnFood
+  out[o++] = isSignal ? hunger : 0; // signalHunger
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestSignal, 0.15) : 0; // moveSignal
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestSignal, 0.15) * (sensed.nearestSignal?.value ?? 0) : 0; // moveSignalAlike
+  out[o++] = action.targetOccupied ? 1 : 0; // moveOccupied
+  out[o++] = isLeapAction(type) ? 1 : 0; // isLeap
+  out[o++] = isDiagonalMove(type) ? 1 : 0; // isDiagonal
+  out[o++] = isMove && sensed.rememberedFood ? aligned(dx, dy, sensed.rememberedFood, 0.1) * sensed.rememberedFood.freshness : 0; // moveRememberedFood
+  out[o++] = isMove && sensed.rememberedSignal ? aligned(dx, dy, sensed.rememberedSignal, 0.1) * sensed.rememberedSignal.freshness : 0; // moveRememberedSignal
+  out[o++] = isMove ? aligned(dx, dy, sensed.home, 0.1) : 0; // moveHome
+  out[o++] = sensed.registers[0] ?? 0; // register0
+  out[o++] = sensed.registers[1] ?? 0; // register1
+  out[o++] = sensed.registers[2] ?? 0; // register2
+  out[o++] = type === 'EAT_CARRION' ? 1 : 0; // isEatCarrion
+  out[o++] = type === 'EAT_CARRION' ? hunger * (carrionYield(organism, config) / config.foodEnergyYield) : 0; // eatCarrionHunger
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestCarrion, 0.25) * organism.carnivory : 0; // moveCarrion
+  out[o++] = isAttack ? 1 : 0; // isAttack
+  out[o++] = isAttack ? (action.preyKillChance ?? 0) : 0; // attackKillChance
+  out[o++] = isAttack ? (action.preySimilarity ?? 0) : 0; // attackAlike
+  out[o++] = isAttack && action.preyIsFamily ? 1 : 0; // attackFamily
+  out[o++] = isAttack ? hunger * organism.carnivory : 0; // attackHunger
+  out[o++] = isMate ? 1 : 0; // isMate
+  out[o++] = isMate ? Math.max(0, organism.energy - threshold) / headroom : 0; // mateFullness
+  out[o++] = isMate ? (action.mateSimilarity ?? 0) : 0; // mateAlike
+  out[o++] = isMate && action.mateIsFamily ? 1 : 0; // mateFamily
+  out[o++] = isMate && action.mateReady ? 1 : 0; // mateReady
 }
 
 /** Score for one feature vector, with the per-input direct contributions. */
@@ -327,6 +342,23 @@ export function brainScore(brain: Brain, x: readonly number[]): { score: number;
   }
   const score = directSum + hidden;
   return { score, direct, hidden };
+}
+
+let denseHidden = 0;
+
+/** brainScore over one feature row of a buffer, allocating nothing; the hidden total is left in denseHidden. Sums in brainScore's order. */
+function scoreDense(brain: Brain, x: Float64Array, off: number): number {
+  let directSum = 0;
+  for (let i = 0; i < BRAIN_INPUT_COUNT; i++) directSum += x[off + i] * brain.skip[i];
+  let hidden = brain.outBias;
+  for (let h = 0; h < BRAIN_HIDDEN; h++) {
+    let sum = brain.hiddenBias[h];
+    const row = h * BRAIN_INPUT_COUNT;
+    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) sum += brain.hidden[row + i] * x[off + i];
+    hidden += brain.out[h] * Math.tanh(sum);
+  }
+  denseHidden = hidden;
+  return directSum + hidden;
 }
 
 // ---------------------------------------------------------------------------
@@ -386,12 +418,12 @@ let lastHidden = 0;
  * lastHidden, for evaluateBrain. Sums in the dense brain's order, so the
  * score equals brainScore's for the same weights.
  */
-export function scoreCircuit(c: Readonly<Circuit>, x: ArrayLike<number>): number {
+export function scoreCircuit(c: Readonly<Circuit>, x: ArrayLike<number>, off = 0): number {
   const skipIdx = c.skipIdx;
   const skipW = c.skipW;
   let d = 0;
   for (let k = 0; k < skipIdx.length; k++) {
-    const v = x[skipIdx[k]] * skipW[k];
+    const v = x[off + skipIdx[k]] * skipW[k];
     DIRECT[k] = v;
     d += v;
   }
@@ -408,7 +440,7 @@ export function scoreCircuit(c: Readonly<Circuit>, x: ArrayLike<number>): number
       continue;
     }
     let sum = c.unitBias[u];
-    for (let j = s; j < e; j++) sum += srcW[j] * x[srcIdx[j]];
+    for (let j = s; j < e; j++) sum += srcW[j] * x[off + srcIdx[j]];
     hid += c.unitOut[u] * Math.tanh(sum);
   }
   lastHidden = hid;
@@ -438,28 +470,46 @@ export function evaluateBrain(
   const canEatNow = legalActions.some((a) => a.type === 'EAT');
   // Stage 3: a growable circuit when the organism has one (born with the switch on); the dense brain otherwise.
   const circuit = growableBrain(config) ? organism.circuit : undefined;
-  const scores: ActionScore[] = legalActions.map((action) => {
-    const x = brainFeatures(action, organism, sensed, config, canEatNow, prng);
+  const brain = organism.brain;
+  // One buffer holds every action's features; the inspector's `components` are derived from it only when read.
+  const buf = new Float64Array(legalActions.length * BRAIN_INPUT_COUNT);
+  const scores: ActionScore[] = new Array<ActionScore>(legalActions.length);
+  for (let n = 0; n < legalActions.length; n++) {
+    const action = legalActions[n];
+    const off = n * BRAIN_INPUT_COUNT;
+    fillBrainFeatures(buf, off, action, organism, sensed, config, canEatNow, prng);
+    let score: number;
+    let hidden: number;
     if (circuit) {
-      const score = scoreCircuit(circuit, x);
-      // Allocation here is the inspector's record, as on the dense path; the network itself allocates nothing.
-      const components: Record<string, number> = {};
-      for (let k = 0; k < circuit.skipIdx.length; k++) {
-        const v = DIRECT[k];
-        if (Math.abs(v) >= 0.001) components[BRAIN_INPUTS[circuit.skipIdx[k]]] = v;
-      }
-      components['hiddenLayer'] = lastHidden;
-      return { action, totalScore: Number(score.toFixed(3)), components };
+      score = scoreCircuit(circuit, buf, off);
+      hidden = lastHidden;
+    } else {
+      score = scoreDense(brain, buf, off);
+      hidden = denseHidden;
     }
-    const { score, direct, hidden } = brainScore(organism.brain, x);
-    // Unrounded here (rounding is costly in this hot path); the inspector rounds for display.
-    const components: Record<string, number> = {};
-    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) {
-      if (Math.abs(direct[i]) >= 0.001) components[BRAIN_INPUTS[i]] = direct[i];
-    }
-    components['hiddenLayer'] = hidden;
-    return { action, totalScore: Number(score.toFixed(3)), components };
-  });
+    // Unrounded components (rounding is costly in this hot path); the inspector rounds for display.
+    scores[n] = {
+      action,
+      totalScore: Number(score.toFixed(3)),
+      get components(): Record<string, number> {
+        const components: Record<string, number> = {};
+        if (circuit) {
+          const { skipIdx, skipW } = circuit;
+          for (let k = 0; k < skipIdx.length; k++) {
+            const v = buf[off + skipIdx[k]] * skipW[k];
+            if (Math.abs(v) >= 0.001) components[BRAIN_INPUTS[skipIdx[k]]] = v;
+          }
+        } else {
+          for (let i = 0; i < BRAIN_INPUT_COUNT; i++) {
+            const v = buf[off + i] * brain.skip[i];
+            if (Math.abs(v) >= 0.001) components[BRAIN_INPUTS[i]] = v;
+          }
+        }
+        components['hiddenLayer'] = hidden;
+        return components;
+      },
+    };
+  }
 
   let best = -Infinity;
   let candidates: ActionScore[] = [];
