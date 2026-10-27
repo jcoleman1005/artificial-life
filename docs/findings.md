@@ -2,11 +2,41 @@
 
 Experiment results and engine notes, moved out of `docs/STATUS.md`. Raw outputs are in `docs/experiments/` (read the `.txt`, not the `.json`).
 
+## Overgrazing (2026-10-26; `docs/experiments/overgrazing.txt`, commit 6ac4da9)
+
+8 seeds × 10,000 ticks, immigration off, DNA at its default. Arms: **A** switch off; **B** on (damage 0.02/bite, recovery 0.005/tick after 50 rested ticks); **C** matched random (the same damage per bite lands on random fertile cells, not where bites happen).
+
+| | A off | B on | C matched |
+|---|---|---|---|
+| avgPop | 258 | 128 | 301 |
+| leanLow | 172 | 81 | 210 |
+| finalPop | 234 | 34 | 298 |
+| runs extinct by 10k | 5/8 | 6/8 | 3/8 |
+| births | 20145 | 7744 | 20487 |
+| plants (avg) / edible biomass (avg) | 1145 / 1142 | 1419 / 1174 | 1246 / 1056 |
+| grazed per tick | 9.0 | 3.3 | 9.0 |
+| blockedMoveFrac | 0.21 | 0.14 | 0.36 |
+| occupancyGini | 0.30 | 0.24 | 0.52 |
+
+**Gate: B fails** (median per-seed avgPop ratio 0.61, need 0.8; leanLow 0.22, need 0.7; new extinction in seed 5). **C also fails** on one new extinction (seed 4) though its population and lean lows hold (1.17, 1.03). So `overgrazingEnabled` ships **off**. Read: grazing-driven damage cut the population to about half and its lean lows to a fifth, while the same total damage scattered at random did not (C is slightly above A). That points at where the grazers are, not the loss of food, as the cause of the crash. Caution: only 8 seeds, and the runs diverge chaotically (the early sweep's population ratios ranged 0.3–2.5 from small parameter changes), so B vs C is suggestive, not proven. The matched arm's total damage per tick is tied to the bites of that tick, so C also shrinks with the population.
+
+- End-of-run `meanHealth` and `fractionDegraded` are useless here: in the runs that went extinct the ground recovers (B's 1.00 mean). Read health curves over time, not the end value. The experiment prints `A_off`'s health as 0.00 because it does not report it.
+- Other diagnostics (first runs of `blockedMoveFrac`, `timeInPatch`, `departureFoodLevel`, `occupancyGini`, `scoutFraction`, taken over the last 20% of each run) are in the `.txt`; B's longer `timeInPatch` (33 vs 9) comes with a much smaller population, so it is not yet a clean behaviour signal.
+- Perf (500-organism target; 400 founders with immigration, 1500 ticks, this container): 85–90 µs/organism-tick on vs 93–96 off, with different populations (282 vs 381). No measurable cost (the extra work is one 3,600-cell pass per tick); under 5% either way.
+
+Parameter sweep (`npm run sweep:overgrazing`, brain, plants on, seeds 1–3, 2,000 ticks). Target: a crowded patch degrades within about 300 ticks. The tick at which the first cell fell below health 0.5 depends almost only on damage per bite (organisms eat about one unit a tick where they stand): damage 0.05 → 80–90 ticks; 0.02 → 180–220 in every seed; 0.015 → 220–430; 0.01 → 330–490. Recovery (0.005, 0.01) and rest (20, 50) barely moved it, and whole-region means stayed above 0.8 in nearly every run (peak share of degraded cells 0.0–2.1%), so degradation is a hot-spot effect. Chosen: **damage 0.02** (first degraded cell within ~200 ticks in every seed), **rest 50 and recovery 0.005** (a bare cell needs about 200 rested ticks to recover, the same scale as a season's lean stretch; rest 50 had the most seeds reach 2% degraded cells). The population ratios in the sweep (0.24–2.5 against off) are noise from chaotic divergence and were not used to choose. A softer setting (0.01) might pass the gate but degrades a crowded patch in 330–490 ticks, outside the target; not tried at 8 seeds.
+
+Deviations: config keys are flat (`overgrazingEnabled`, ...), per `WORLD_RULES.md`, not `world.overgrazing = {...}`. Health is held per cell, not per patch, so it survives a plant dying and re-seeding. Windfall food does not damage cells. Plant upkeep is not scaled by health (only growth). No new sensor inputs or actions.
+
 ## Findings so far (8 seeds × 10,000 ticks unless noted)
 
 | Question | Result |
 |---|---|
+| DNA 1b.1 continuous abilities (8 seeds × 3,000 ticks, 2026-10-26) | Efficiencies drift to mid-range (diagonal 0.30, squeeze 0.54, leap 0.29; few locked at 1) and abilities spread to ~75–80% of organisms. Populations a little lower; extinctions unchanged (4/8). `docs/experiments/dna-1b1-continuous-abilities.txt`. |
+| DNA 1b.2 split diets (8 seeds × 3,000 ticks, 2026-10-26) | Plant eaters stay full plant eaters (herbivory 0.96) and do better: extinct seeds 2/8 vs 4/8, population +80, lean low +51. Kills double, but no meat-eating lineage appears in 3,000 ticks (carnivory 0.10). `docs/experiments/dna-1b2-split-diets.txt`. |
+| Default world survival (DNA off, 8 seeds × 10,000 ticks, 2026-10-26) | **5 of 8 seeds go extinct**, 4 of them in an early lean season (seed 1 by tick ~800). Not caused by DNA (same with it off); probably since spontaneous generation went off by default. Worth fixing before relying on stage gates. |
 | DNA Stage 1 gate (`dnaEnabled` off vs on, 2026-10-26) | **Identical.** Every metric (population, lean lows, births, kills, traits, abilities, brain drift, plants) matches exactly in all 8 seeds (Δ 0, 0/8 higher), as designed: the genome path draws from the PRNG in the legacy order. `docs/experiments/dna-stage1-gate.txt`. |
+| Life-history genes, ship-on gate (2026-10-26; each gene on vs all six off, others off; `docs/experiments/lifehistory-*.txt`) | Gate = median avgPop ≥ 0.8, leanLow ≥ 0.7, no new extinctions. **Pass alone:** investment (avgPop 1.34×, leanLow 1.49×), torpor (1.26×, 1.11×), eggs (29.5×, 1.20×; the off arm collapses in several seeds, eggs lift mean population 258 → 574). **Fail alone on one-seed extinctions** (means are up): reproduction threshold (1.18×, 0.85×; seed 4), fat (1.31×, 1.44×; seed 4), base metabolism (1.18×, leanLow 0.00 median; seeds 4, 5). **All six together pass:** avgPop 635 vs 258, leanLow 490 vs 172, finalPop 706 vs 234, no new extinctions. Eggs are the likely rescue: a collapse that kills the other genes' lineages is survived as eggs. Shipped with all six on, because the combined world is what runs and it passes; the three solo failures are not gated apart, so run `--compare thresholdGeneEnabled=false,true` etc. with eggs on before concluding a gene is safe alone. Cost: `npm run perf` brain 65 µs per organism (earlier STATUS figure ~73; run overlapped another job, so rough, no regression seen). Not yet measured: whether the genes evolve (drift of threshold, investment, fat, torpor depth, egg rate, metabolism) over long runs. |
 | Do tribes form from sharing? | **No.** Look-alike clusters come from family structure (children born adjacent with the parent's tag); clustering is the same with sharing off. |
 | Energy sharing (×1.5) | Organisms exploited it by passing energy back and forth (32–39% returned within 5 ticks). Replaced by pure transfer, then by food sharing. |
 | Pure-transfer or need-aware energy sharing | No effect on population or in-group bias. |

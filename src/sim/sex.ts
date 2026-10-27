@@ -1,6 +1,7 @@
 import { crossBrains, type Brain } from './brain';
+import { LIFE_GENES, lifeForConfig, type LifeValues } from './lifehistory';
 import type { PRNG } from './prng';
-import type { Abilities, Organism, PolicyWeights } from './types';
+import type { Abilities, Organism, PolicyWeights, SimulationConfig } from './types';
 
 /**
  * Everything a child's body and brain inherit, before mutation, as phenotype
@@ -17,9 +18,11 @@ export interface Heritable {
   readonly memoryWeights: readonly number[];
   readonly brain: Brain;
   readonly carnivory: number;
+  /** Life-history genes that are switched on (lifehistory.ts), at the organism's value or the founder value if it lacks one. */
+  readonly life: LifeValues;
 }
 
-export function heritableOf(o: Readonly<Organism>): Heritable {
+export function heritableOf(o: Readonly<Organism>, config: Readonly<SimulationConfig>): Heritable {
   return {
     tag: o.tag,
     carryCapacity: o.carryCapacity,
@@ -29,6 +32,7 @@ export function heritableOf(o: Readonly<Organism>): Heritable {
     memoryWeights: o.memoryWeights,
     brain: o.brain,
     carnivory: o.carnivory,
+    life: lifeForConfig(o, config),
   };
 }
 
@@ -37,7 +41,8 @@ export function heritableOf(o: Readonly<Organism>): Heritable {
  * the other, picked at random (a hidden unit of the brain counts as one gene,
  * so its connections stay together). Mutation is applied afterwards, as for
  * clones. The picks are drawn in genome order (tag, carry capacity, brain,
- * abilities, dispersal, memory span, register weights, diet), the order in
+ * abilities, dispersal, memory span, register weights, diet, life-history
+ * genes), the order in
  * which crossGenomes draws for two Stage 1 genomes, so a world with DNA on
  * (Stage 2 off) still runs bit-identically to one with it off.
  */
@@ -55,7 +60,12 @@ export function recombine(a: Heritable, b: Heritable, prng: PRNG): Heritable {
   const memorySpan = pick(a.memorySpan, b.memorySpan);
   const memoryWeights = a.memoryWeights.map((w, i) => pick(w, b.memoryWeights[i] ?? w));
   const carnivory = pick(a.carnivory, b.carnivory);
-  return { tag, carryCapacity, abilities, dispersal, memorySpan, memoryWeights, brain, carnivory };
+  const life: LifeValues = {};
+  for (const g of LIFE_GENES) {
+    const va = a.life[g.field];
+    if (va !== undefined) life[g.field] = pick(va, b.life[g.field] ?? va);
+  }
+  return { tag, carryCapacity, abilities, dispersal, memorySpan, memoryWeights, brain, carnivory, life };
 }
 
 /** The policy dials of a child of two parents: each dial whole from one parent or the other, at random. */

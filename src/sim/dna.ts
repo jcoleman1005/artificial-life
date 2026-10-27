@@ -2,6 +2,7 @@ import type { PRNG } from './prng';
 import { BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, mutateWeight, type Brain } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
+import { lifeOf, LIFE_GENES, LIFE_TRAIT_BASE, LIFE_TRAIT_COUNT, clampLife, geneForTrait, inheritLifeValue, type LifeValues } from './lifehistory';
 import {
   continuousAbilities,
   inheritAbilityEfficiency,
@@ -45,7 +46,7 @@ export const GeneClass = {
 } as const;
 export type GeneClass = (typeof GeneClass)[keyof typeof GeneClass];
 
-/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights. */
+/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–45 are the life-history genes (lifehistory.ts). */
 export const TraitId = {
   tag: 0,
   carryCapacity: 1,
@@ -61,7 +62,7 @@ export const TraitId = {
 } as const;
 
 /** The phenotype a genome decodes to: every inherited trait except the policy dials. */
-export interface Phenotype {
+export interface Phenotype extends LifeValues {
   readonly tag: number;
   readonly carryCapacity: number;
   readonly dispersal: number;
@@ -132,6 +133,10 @@ export function encodeOrganismDNA(p: Readonly<Phenotype>): Uint32Array {
   p.memoryWeights.forEach((w, i) => add(GeneClass.trait, TraitId.memoryWeight0 + i, w));
   add(GeneClass.trait, TraitId.carnivory, p.carnivory);
   if (p.herbivory !== undefined) add(GeneClass.trait, TraitId.herbivory, p.herbivory);
+  for (const g of LIFE_GENES) {
+    const v = p[g.field];
+    if (v !== undefined) add(GeneClass.trait, g.traitId, v);
+  }
 
   const dna = new Uint32Array(genes.length * GENE_WORDS);
   genes.forEach(([key, dose], g) => writeGene(dna, g * GENE_WORDS, key, dose));
@@ -185,7 +190,7 @@ export function circularMeanHue(angles: readonly number[]): number {
  * non-finite doses count as 0, so decoding never throws or yields NaN.
  */
 export function decodeOrganismDNA(dna: ArrayLike<number>, config: Readonly<SimulationConfig>): Phenotype {
-  const traits = new Slots(TraitId.memoryWeight0 + MEMORY_WEIGHT_COUNT);
+  const traits = new Slots(LIFE_TRAIT_BASE + LIFE_TRAIT_COUNT);
   const tags: number[] = [];
   const skip = new Slots(BRAIN_INPUT_COUNT);
   const hidden = new Slots(BRAIN_HIDDEN * BRAIN_INPUT_COUNT);
@@ -240,6 +245,10 @@ export function decodeOrganismDNA(dna: ArrayLike<number>, config: Readonly<Simul
     memoryWeights: traits.values.slice(TraitId.memoryWeight0, TraitId.memoryWeight0 + MEMORY_WEIGHT_COUNT),
     carnivory: clamp(trait(TraitId.carnivory, ABSENT_DEFAULTS.carnivory), 0, 1),
     ...(splitDiets(config) ? { herbivory: clamp(trait(TraitId.herbivory, ABSENT_DEFAULTS.herbivory), 0, 1) } : {}),
+    // A life-history gene that is switched on but missing from the genome decodes to its starting value.
+    ...Object.fromEntries(
+      LIFE_GENES.filter((g) => g.enabled(config)).map((g) => [g.field, clampLife(g, trait(g.traitId, g.founder(config)), config)])
+    ),
     abilities: { diagonal: ability(TraitId.diagonal), squeeze: ability(TraitId.squeeze), leap: ability(TraitId.leap) },
     brain: {
       skip: skip.values,
@@ -271,7 +280,9 @@ export function mutateGenome(parent: ArrayLike<number>, config: Readonly<Simulat
 function mutateDose(key: number, dose: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
   if (geneClassOf(key) !== GeneClass.trait) return mutateWeight(dose, config, prng);
   const id = geneIndexOf(key);
-  if (id >= TraitId.memoryWeight0) return mutateWeight(dose, config, prng);
+  const life = geneForTrait(id);
+  if (life) return inheritLifeValue(dose, life, config, prng);
+  if (id >= TraitId.memoryWeight0 && id < TraitId.memoryWeight0 + MEMORY_WEIGHT_COUNT) return mutateWeight(dose, config, prng);
   switch (id) {
     case TraitId.tag:
       return inheritTag(dose, config, prng);
@@ -380,6 +391,7 @@ export function phenotypeOf(o: Readonly<Organism>): Phenotype {
   return {
     tag, carryCapacity, dispersal, memorySpan, memoryWeights, carnivory, abilities, brain,
     ...(herbivory === undefined ? {} : { herbivory }),
+    ...lifeOf(o),
   };
 }
 

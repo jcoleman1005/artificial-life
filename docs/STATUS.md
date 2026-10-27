@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-26 (mating merged onto DNA)._
+_Last updated: 2026-10-27._
 
 ## Branches
 
@@ -29,13 +29,23 @@ _Last updated: 2026-10-26 (mating merged onto DNA)._
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
 
+## Life-history genes (built and merged 2026-10-26)
+
+Six inherited traits, each with its own switch (the lock for a control arm): reproduction threshold, investment per child, fat reserve, torpor depth, eggs, base metabolic rate. Details in `docs/decisions.md` ("Life-history genes"); code `src/sim/lifehistory.ts`; tests `tests/lifehistory.test.ts`. All on by default. Gate results in `docs/findings.md`: all six together pass; threshold, fat and metabolism each fail alone on a one-seed extinction. Next: watch long runs for whether the genes drift (add history charts for them), and re-gate those three alone with eggs on.
+
 ## In progress: DNA (2026-10-26)
 
-Stage 1 of genome-encoded organisms is built (`dnaEnabled`, off by default; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain are decoded from a genome, and a DNA world is bit-identical to a legacy one (tests, and the 8-seed × 10k gate: every metric identical in every seed, `docs/experiments/dna-stage1-gate.txt`). Next: the user signs off Stage 1 (then switch it on by default), decide whether the policy dials go into the genome, then the Stage 1b toggles (continuous abilities, split diets), each with its own gate.
+Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled`; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain (not the dials) are decoded from a genome, bit-identical to a legacy world. Stage 1b is built as two toggles, off by default, with gates in `docs/experiments/dna-1b*.txt` (continuous abilities: met; split diets: plant eaters met, meat eaters not yet seen in 3,000 ticks). Both await the user's review of their gates; meanwhile Stage 2 was built on top (below).
 
 **Mating with genomes (2026-10-26):** a child of mating gets its genome by crossing its parents' genomes by key (each key's copies, or a whole hidden brain unit, from one parent), then the clone's mutation path, capped at `dnaMaxGenes` (`docs/specs/dna.md`, Sexual reproduction). Not yet measured: the branch's mating experiment ran before DNA.
 
-**Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. Seeds 1 and 8 go extinct early.
+**Stage 2 (variation operators) built 2026-10-26, merged with the switch off** (`dnaVariationEnabled`, off by default; also a "Genome changes" toggle and Genome card in the app): Poisson-sampled point mutations, insertion, deletion, duplication, `dnaUpkeepPerGene`. Gate so far: census of 7,500 mutations ≈ 90% neutral, ~0 lethal (the 120-tick test is weak at detecting lethality; `docs/experiments/dna-stage2-census.txt`); tick cost +1.8% per organism-tick. Not yet done: the two experiment arms (point-only vs full operators; with vs without upkeep; genome-length boundedness and duplicate divergence), then decide the default and record a new fingerprint. Run: `npm run experiment -- --compare dnaInsertionRate+dnaDeletionRate+dnaDuplicationRate=0,0.001 --set dnaVariationEnabled=true --seeds 2-7 --ticks 5000` and `--compare dnaUpkeepPerGene=0,0.00005`. (Seeds 1 and 8 are left out because they go extinct early; see below.)
+
+Urgent: 5 of 8 default worlds go extinct (4 in an early lean season, seed 1 by tick ~800), with or without DNA (`docs/findings.md`). Gates now report `extinct` and average traits over survivors.
+
+## World changes (WORLD_RULES.md)
+
+- **Overgrazing** built 2026-10-26 (`overgrazingEnabled`, **off**: it failed the ship-on gate, B avgPop 0.61 / leanLow 0.22 of off; see `docs/findings.md`). Switch off reproduces the default fingerprint exactly (switch-on values under Known issues, fingerprint); overlay `Cell health`; `npm run sweep:overgrazing`; `npm run experiment -- --arm name=k:v,k:v` for multi-key arms; standard diagnostics are in the experiment output. Its gate ran before the life-history genes (now on by default; e.g. fat lets organisms keep biting at full energy), so rerun it before deciding. Next: decide whether to try a softer setting or leave it off.
 
 ## Latest findings (details and all other results in `docs/findings.md`)
 
@@ -78,7 +88,12 @@ There is no target outcome: new features go in on by default and the world is le
 9. Evolving pathogen (density-dependent mortality, visible waves).
 
 **Phase 3: big coevolution (long runs; needs the server)**
-10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). Next: plant events in the feed, then Phase 2 (defence with an organism sense for plant colour, seed bank, seeds carried by organisms).
+10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). **Plan agreed 2026-10-26** (from the user's second plants spec; reshape the existing plants rather than rewrite them, keep whole food units, keep plants on by default):
+    1. ~~`stateHash` and a small gene registry.~~ Done 2026-10-26 (`src/sim/genes.ts` for plant traits, separate from the organism DNA in `src/sim/dna.ts`; fingerprint unchanged).
+    2. Stage 1 additions: shared gene budget, grazing that can kill with a `regrowth` gene, maximum age, locked-genes mode, per-region gene means and a plant diversity index; recalibrate against classic food.
+    3. Stage 2: plant `defense`, organism `detox` (inherited, with upkeep), a last-bite-yield sense, then the coevolution probe (one tick's plants in another tick's world).
+    4. Stage 3: plant `hue` and an organism `plantHue` sense (a possible route to colour groups splitting).
+    Also still open: plant events in the feed; seed bank and seeds carried by organisms.
 11. Growth and size, then bite.
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
@@ -101,5 +116,7 @@ There is no target outcome: new features go in on by default and the world is le
   `large dials c51ecae8de0bdec2 · large brain 9ec109d2b13d06ad`
   With `--set sexEnabled=false`: `large dials c51ecae8de0bdec2 · large brain 434963fe33ba72a1`. This is not the pre-mating value below: the five appended brain inputs add PRNG draws (30 more hidden weights per founder brain, 35 more per-gene mutation rolls per birth), so every world's random stream shifts. Main with five zero-valued inputs appended gives exactly this sexEnabled=false output, so the inputs, not mating, account for the difference. The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds. Before mating (main at d466b28; dials 831, brain 390):
   `large dials 733b447e0db60145 · large brain 2e83d96eddf011cb`
-- `npm run verify` on a 4-core container: all tests pass but vitest may report one unhandled "Timeout calling onTaskUpdate" (the long plants and mobility runs block their workers ~40–60 s under load). Since 2026-10-26 the long plants run yields to the event loop every 100 ticks, which cleared it here; do the same for any other long synchronous test that trips it.
+  With the six life-history genes on (default; the hash also covers their state): `large dials 7b57d1d02fc2951e · large brain 542f52ae3400dbe6` (pop 570 / 503). With all six switched off the hashes above are reproduced exactly.
+  Overgrazing ships off, so these are unchanged by it. With `overgrazingEnabled=true` and the other defaults (life-history genes on; the hash also covers cell health): `large dials 265280e9ef82d016 · large brain 912f5781fb244660` (pop 400 / 289, births 3196 / 1357; rechecked 2026-10-27 at the merge of main into the overgrazing branch).
+- `npm run verify` on a 4-core container: the long plants run used to block its vitest worker long enough to fail verify ("Timeout calling onTaskUpdate"). Fixed 2026-10-27: it yields to the event loop every 100 ticks, and the short plants-off test has a 60 s timeout; same assertions. If the mobility runs start doing the same, give them the same treatment.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

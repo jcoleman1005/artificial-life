@@ -3,7 +3,24 @@ import { PLANT_TRAITS, PLANT_TRAIT_KEYS, plantHue } from '../sim/plants';
 import { setHTMLPreservingDetails } from './dom';
 import { givenName, organismName } from './names';
 import { carrionYield, plantYield } from '../sim/traits';
+import { birthCooldownOf } from '../sim/lifehistory';
 import { describeDoing } from './organism-card';
+
+/** Pills for the life-history genes that are switched on in this world (and torpor / fat state). */
+export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationConfig>): string {
+  const pill = (title: string, value: string) =>
+    `<div class="summary-pill"><span class="pill-title">${title}</span><span class="pill-value">${value}</span></div>`;
+  const out: string[] = [];
+  if (o.reproThreshold !== undefined) out.push(pill('Reproduces at', `${o.reproThreshold.toFixed(0)} energy`));
+  if (o.investment !== undefined) out.push(pill('Gives each child', `${Math.round(o.investment * 100)}% of its energy`));
+  if (o.fatCapacity !== undefined) out.push(pill('Fat', `${(o.fat ?? 0).toFixed(0)} / ${o.fatCapacity.toFixed(0)}`));
+  if (o.torporDepth !== undefined)
+    out.push(pill('Torpor', `depth ${Math.round(o.torporDepth * 100)}%${(o.torpor ?? 0) > 0 ? ` · torpid (${o.torpor} left)` : ''}`));
+  if (o.eggRate !== undefined) out.push(pill('Lays eggs', `${Math.round(o.eggRate * 100)}% of births`));
+  if (o.metabolicRate !== undefined)
+    out.push(pill('Metabolism', `${o.metabolicRate.toFixed(2)}× · ${birthCooldownOf(o, c)} ticks between births`));
+  return out.join('');
+}
 
 /** A diet in words, from carnivory (0 plants … 1 meat). */
 export function dietLabel(carnivory: number): string {
@@ -273,6 +290,7 @@ export class InspectorView {
             <span class="pill-title">Energy per plant / carrion meal</span>
             <span class="pill-value">${plantYield(organism, config).toFixed(0)} / ${carrionYield(organism, config).toFixed(0)}</span>
           </div>
+          ${lifeHistoryPills(organism, config)}
           <div class="summary-pill">
             <span class="pill-title">Kills</span>
             <span class="pill-value">${organism.kills ?? 0}</span>

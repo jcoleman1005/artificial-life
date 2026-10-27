@@ -96,11 +96,54 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   plantMutationStdDev: 0.08,
   seedRainInterval: 50,
   seedRainCount: 3,
+  overgrazingEnabled: false, // staying on a patch has a future cost; off because it failed the ship-on gate (docs/findings.md)
+  overgrazingDamagePerBite: 0.02,
+  overgrazingRecoveryRate: 0.005,
+  overgrazingRestTicks: 50,
+  overgrazingMatchedRandom: false,
   dnaEnabled: true, // Stage 1 is bit-identical to DNA off (docs/specs/dna.md)
   dnaContinuousAbilities: false, // Stage 1b.1 (needs dnaEnabled)
   abilityMutationStdDev: 0.1,
   dnaSplitDiets: false, // Stage 1b.2 (needs dnaEnabled)
   dietUpkeep: 0.05, // a founder plant eater (herbivory 1) pays a fifth of base metabolism
+  // Life-history genes. Each starts every founder at the world's old fixed value (or a small
+  // one) and costs something; the switch is the lock for a control arm.
+  thresholdGeneEnabled: true,
+  thresholdStep: 3,
+  thresholdMin: 30,
+  thresholdMax: 95,
+  investmentGeneEnabled: true,
+  investmentStep: 0.03,
+  investmentMin: 0.15,
+  investmentMax: 0.8,
+  fatEnabled: true,
+  fatFounder: 4,
+  fatStep: 4,
+  maxFat: 60,
+  fatUpkeep: 0.004, // a 40-unit reserve costs 0.16 per tick (two thirds of base metabolism)
+  fatStoreEfficiency: 0.75,
+  fatReleaseLevel: 0.4,
+  fatReleaseRate: 3,
+  torporEnabled: true,
+  torporFounder: 0.1,
+  torporStep: 0.1,
+  torporEntryTicks: 3,
+  torporSaving: 0.9, // a fully torpid organism pays a tenth of its upkeep
+  torporWakeCost: 4,
+  torporTimer: 60,
+  eggsEnabled: true,
+  eggFounder: 0.1,
+  eggStep: 0.1,
+  eggExtraCost: 3,
+  eggDecayChance: 0.002,
+  eggHatchRadius: 2,
+  eggHatchEfficiency: 0.85,
+  metabolismGeneEnabled: true,
+  metabolismFounder: 1,
+  metabolismStep: 0.1,
+  metabolismMin: 0.5,
+  metabolismMax: 1.5,
+  birthCooldown: 12,
   dnaVariationEnabled: false, // Stage 2 (needs dnaEnabled; docs/specs/dna.md)
   dnaInsertionRate: 0.001,
   dnaDeletionRate: 0.001,

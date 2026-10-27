@@ -190,7 +190,9 @@ export type WorldCountedMetric =
   | 'averageCarnivory'
   | 'meatEaters'
   | 'genomeLength'
-  | 'plants';
+  | 'plants'
+  | 'overgrazing'
+  | 'life';
 
 export function computeWorldMetrics(
   tick: number,

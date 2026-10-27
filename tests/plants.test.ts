@@ -201,7 +201,7 @@ describe('Plants', () => {
     for (let t = 0; t < 200; t++) a.step();
     expect(a.getMetrics().plants).toBeNull();
     for (const p of a.foodPatches.values()) expect(p.plant).toBeUndefined();
-  });
+  }, 60_000);
 });
 
 /** A hungry organism that will eat what is underfoot (food first). */

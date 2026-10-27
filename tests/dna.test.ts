@@ -90,6 +90,7 @@ function withoutDna(state: WorldState): string {
     ...state,
     config: { ...state.config, dnaEnabled: null },
     organisms: state.organisms.map(({ genome: _genome, ...o }) => o),
+    eggs: (state.eggs ?? []).map(({ child: { genome: _genome, ...child }, ...egg }) => ({ ...egg, child })),
   });
 }
 
@@ -356,9 +357,11 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
     const config = { ...legacy.config, dnaSplitDiets: true };
     const old = [...legacy.organisms.values()][0];
     expect(plantYield(old, config)).toBeCloseTo(config.foodEnergyYield * (1 - config.dietTradeoff * old.carnivory), 12);
+    // Eggs laid before the switch were made under the old config and hatch as they were, so they are left out.
+    const laidBefore = new Set(legacy.eggs.keys());
     const world = World.fromState({ ...legacy.exportState(), config });
     for (let t = 0; t < 60; t++) world.step();
-    const born = [...world.organisms.values()].filter((o) => o.lineage.birthTick > 60);
+    const born = [...world.organisms.values()].filter((o) => o.lineage.birthTick > 60 && !laidBefore.has(o.id));
     expect(born.length).toBeGreaterThan(0);
     for (const o of born) expect(o.herbivory).toBeGreaterThan(0.5);
   }, 30_000);

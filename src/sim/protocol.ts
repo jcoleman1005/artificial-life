@@ -51,6 +51,8 @@ export interface WorldView {
   readonly organisms: ReadonlyMap<string, OrganismView>;
   readonly foodPatches: ReadonlyMap<string, FoodPatch>;
   readonly carrion: ReadonlyMap<string, CarrionPatch>;
+  /** Eggs waiting for food (where they lie). */
+  readonly eggs: ReadonlyMap<string, { readonly x: number; readonly y: number }>;
   readonly foodRegions: readonly FoodRegion[];
   readonly obstacles: ReadonlySet<string>;
   getSelectedOrganism(): OrganismView | undefined;
@@ -141,6 +143,8 @@ export type FromWorker =
       readonly organisms: readonly OrganismView[];
       readonly foodPatches: readonly FoodPatch[];
       readonly carrion: readonly CarrionPatch[];
+      /** Eggs waiting for food (absent from older servers). */
+      readonly eggs?: readonly { readonly x: number; readonly y: number }[];
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
       /** Whether the world is playing, and at what speed (another viewer may have changed them). */

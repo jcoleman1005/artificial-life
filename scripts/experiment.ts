@@ -7,6 +7,7 @@
 // Options:
 //   --compare key=a,b,...   one config key and the values to compare (required);
 //                           k1+k2=a,b sets several keys to the same value together
+//   --arm name=k:v,k:v      (repeatable, instead of --compare) a named variant setting several keys
 //   --set key=value         extra config applied to every run (repeatable)
 //   --seeds 1-8 | 1,4,9     seeds to run (default 1-8)
 //   --ticks N               ticks per run (default 10000)
@@ -32,6 +33,7 @@ import { unitDirectionOf } from '../src/sim/directions';
 import { seasonAt } from '../src/sim/seasons';
 import { PLANT_TRAIT_KEYS, computePlantMetrics } from '../src/sim/plants';
 import type { Organism, SimulationConfig } from '../src/sim/types';
+import { Diagnostics } from './diagnostics';
 import { continuousAbilities, herbivoryOf, splitDiets } from '../src/sim/traits';
 import { GENE_TYPES, genomeStats } from '../src/sim/dna';
 
@@ -130,6 +132,7 @@ function runJob(job: Job): RunResult {
   const genomeSeries: { mean: number; sd: number }[] = [];
   let stepMs = 0;
   let organismSteps = 0;
+  const diagnostics = new Diagnostics();
 
   for (let t = 1; t <= job.ticks; t++) {
     onWindfall.clear();
@@ -141,6 +144,7 @@ function runJob(job: Job): RunResult {
     const stepStart = performance.now();
     world.step();
     stepMs += performance.now() - stepStart;
+    diagnostics.observe(world, t > tailStart);
     const n = world.organisms.size;
     organismSteps += n;
     popSum += n;
@@ -297,6 +301,8 @@ function runJob(job: Job): RunResult {
     ...(world.config.plantsEnabled ? plantResults(world, plantSum / job.ticks, edibleSum / job.ticks, job.ticks) : {}),
     usPerOrganismTick: (1000 * stepMs) / Math.max(1, organismSteps),
     ...(world.config.dnaVariationEnabled && organisms.length > 0 ? genomeResults(organisms, world.config, genomeSeries) : {}),
+    ...diagnostics.results(),
+    ...overgrazingResults(world),
     brainDrift: mean((o) => brainDrift(o.brain)),
     hiddenStrength: mean((o) => hiddenStrength(o.brain)),
     ...Object.fromEntries(
@@ -322,6 +328,17 @@ function genomeResults(organisms: readonly Organism[], config: SimulationConfig,
     'dup.multiCopySlots': s.multiCopySlots,
     'dup.identical%': 100 * s.identicalShare,
     'dup.spread(sd)': s.meanSpread,
+  };
+}
+
+/** Overgrazing (when on): cell health at the end of the run, per region and overall, and the share of degraded cells. */
+function overgrazingResults(world: World): Record<string, number> {
+  const o = world.getMetrics().overgrazing;
+  if (!o) return {};
+  return {
+    meanHealth: o.meanHealthAll,
+    fractionDegraded: o.fractionDegraded,
+    ...Object.fromEntries(o.meanHealth.map((h, i) => [`meanHealth.r${i}`, h])),
   };
 }
 
@@ -411,9 +428,16 @@ async function main() {
     const i = args.indexOf(name);
     return i >= 0 ? args[i + 1] : fallback;
   };
-  const compare = get('--compare');
+  // --arm name=k:v,k:v (repeatable) names variants that set several keys at once, in place of --compare.
+  const arms: { name: string; overrides: Overrides }[] = [];
+  args.forEach((a, i) => {
+    if (a !== '--arm') return;
+    const [name, spec] = args[i + 1].split('=');
+    arms.push({ name, overrides: Object.fromEntries(spec.split(',').map((kv) => { const [k, v] = kv.split(':'); return [k, parseValue(v)]; })) });
+  });
+  const compare = arms.length > 0 ? 'arm=' + arms.map((a) => a.name).join(',') : get('--compare');
   if (!compare || !compare.includes('=')) {
-    console.error('Usage: npm run experiment -- --compare key=a,b [--set key=value] [--seeds 1-8] [--ticks 10000] [--workers 3] [--json out.json] [--from saved.json]');
+    console.error('Usage: npm run experiment -- --compare key=a,b | --arm name=k:v,k:v --arm ... [--set key=value] [--seeds 1-8] [--ticks 10000] [--workers 3] [--json out.json] [--from saved.json]');
     process.exit(1);
   }
   const [compareKey, valueList] = compare.split('=');
@@ -440,7 +464,7 @@ async function main() {
       variant,
       ticks,
       from,
-      overrides: { ...fixed, ...Object.fromEntries(compareKey.split('+').map((k) => [k, parseValue(variant)])) },
+      overrides: { ...fixed, ...(arms.length > 0 ? arms.find((a) => a.name === variant)!.overrides : Object.fromEntries(compareKey.split('+').map((k) => [k, parseValue(variant)]))) },
     }))
   );
   console.log(`${jobs.length} runs (${seeds.length} seeds × ${variants.length} variants of ${compareKey}), ${ticks} ticks each, ${workers} workers${Object.keys(fixed).length ? `, with ${JSON.stringify(fixed)}` : ''}`);

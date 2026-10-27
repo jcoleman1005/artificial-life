@@ -1,6 +1,31 @@
 import type { WorldMetrics } from '../sim/types';
 import { setHTMLPreservingDetails } from './dom';
 
+/** Cards for the life-history genes that are switched on: population means, eggs, torpor. */
+function lifeCards(metrics: WorldMetrics): string {
+  const life = metrics.life;
+  if (!life) return '';
+  const card = (label: string, value: string) =>
+    `<div class="metric-card"><span class="m-label">${label}</span><span class="m-val">${value}</span></div>`;
+  const out: string[] = [];
+  if (life.reproThreshold !== null || life.investment !== null)
+    out.push(
+      card(
+        'Breeding',
+        `${life.reproThreshold !== null ? `at ${life.reproThreshold.toFixed(0)} energy` : ''}${
+          life.investment !== null ? ` <small>(${Math.round(life.investment * 100)}% to each child)</small>` : ''
+        }`
+      )
+    );
+  if (life.fatCapacity !== null) out.push(card('Fat', `${life.fatCapacity.toFixed(0)} cap <small>(${(life.fat ?? 0).toFixed(1)} held)</small>`));
+  if (life.torporDepth !== null)
+    out.push(card('Torpor', `${Math.round(life.torporDepth * 100)}% deep <small>(${life.torpid ?? 0} torpid now)</small>`));
+  if (life.eggRate !== null)
+    out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(life.eggRate * 100)}% of births; ${life.eggsHatchedTotal} hatched, ${life.eggsDecayedTotal} failed)</small>`));
+  if (life.metabolicRate !== null) out.push(card('Metabolism', `${life.metabolicRate.toFixed(2)}×`));
+  return out.join('');
+}
+
 export class MetricsView {
   private readonly container: HTMLElement;
 
@@ -67,6 +92,7 @@ export class MetricsView {
           <span class="m-label">Diet</span>
           <span class="m-val">${Math.round((metrics.averageCarnivory ?? 0) * 100)}% meat <small>(${metrics.meatEaters ?? 0} mostly meat eaters)</small></span>
         </div>
+        ${lifeCards(metrics)}
         ${
           metrics.genomeLength
             ? `<div class="metric-card">

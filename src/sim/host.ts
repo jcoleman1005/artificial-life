@@ -266,6 +266,7 @@ export class SimulationHost {
       organisms: Array.from(world.organisms.values(), toOrganismView),
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
       carrion: Array.from(world.carrion.values(), (c) => ({ ...c })),
+      eggs: Array.from(world.eggs.values(), (e) => ({ x: e.x, y: e.y })),
       ticksPerSecond: this.tickTimes.length,
       running: this.running,
       targetTicksPerSecond: this.ticksPerSecond,
@@ -289,7 +290,7 @@ export class SimulationHost {
       metrics,
       selected: (viewer.selectedId && this.world.getOrganism(viewer.selectedId)) || null,
       ...(viewer.wantsHistory ? { history: this.world.history.getSamples() } : {}),
-      ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap) } } : {}),
+      ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap, this.world) } } : {}),
     };
     return { ...base, panels };
   }

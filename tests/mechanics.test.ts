@@ -48,6 +48,8 @@ describe('Artificial Life Core Mechanics', () => {
       tickMetabolismCost: 1.0,
       carryUpkeep: 0, // isolate base metabolism
       abilityUpkeep: 0,
+      fatEnabled: false, // no fat upkeep either
+      torporEnabled: false, // a boxed-in organism would rest into torpor and live longer
       moveCost: 2.0,
       maxEnergy: 50,
       initialEnergy: 10,

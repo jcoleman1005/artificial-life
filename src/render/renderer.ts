@@ -22,6 +22,7 @@ export type ColorMode = 'tag' | 'lineage' | 'diet';
  * - senses: the selected organism's sight and signal ranges, and signal ripples;
  * - trails: short fading paths behind organisms;
  * - crowding / deaths / feeding: fading heatmaps of where those happen.
+ * - health: how much grazing has worn each cell down (overgrazing), on a fixed 0-1 scale.
  */
 export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | HeatmapKind;
 
@@ -29,6 +30,7 @@ const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
   crowding: '251, 146, 60',
   deaths: '248, 113, 113',
   feeding: '134, 239, 172',
+  health: '217, 119, 6',
 };
 /** Trail points kept per organism (one per frame). */
 const TRAIL_LENGTH = 12;
@@ -498,9 +500,15 @@ export class CanvasRenderer {
       this.drawCarrion(c, detail);
     }
 
+    // Eggs: small pale ovals, waiting
+    for (const egg of this.world.eggs.values()) {
+      if (!inView(egg.x, egg.y)) continue;
+      this.drawEgg(egg.x, egg.y, detail);
+    }
+
     // Overlays drawn under the organisms
     if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
-      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView);
+      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView, this.overlay === 'health');
     }
     if (this.overlay === 'trails') this.drawTrails(selectedOrg);
     if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
@@ -544,11 +552,14 @@ export class CanvasRenderer {
   }
 
   /** Fading cells, scaled to the busiest cell. */
-  private drawHeatmap(cells: Float32Array, rgb: string, inView: (x: number, y: number) => boolean): void {
+  private drawHeatmap(cells: Float32Array, rgb: string, inView: (x: number, y: number) => boolean, absolute: boolean): void {
     const { ctx, cellSize } = this;
     const { gridWidth } = this.world.config;
-    let max = 0;
-    for (let i = 0; i < cells.length; i++) if (cells[i] > max) max = cells[i];
+    let max = 1; // health is absolute: 1 means bare ground
+    if (!absolute) {
+      max = 0;
+      for (let i = 0; i < cells.length; i++) if (cells[i] > max) max = cells[i];
+    }
     if (max < 0.05) return;
     for (let i = 0; i < cells.length; i++) {
       const v = cells[i] / max;
@@ -725,6 +736,19 @@ export class CanvasRenderer {
       }
     }
     ctx.lineCap = 'butt';
+  }
+
+  private drawEgg(x: number, y: number, detail: number): void {
+    const { ctx, cellSize } = this;
+    const cx = (x + 0.5) * cellSize;
+    const cy = (y + 0.5) * cellSize;
+    ctx.fillStyle = '#f5efe0';
+    ctx.strokeStyle = 'rgba(70, 50, 20, 0.7)';
+    ctx.lineWidth = Math.max(1, cellSize * 0.05);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, cellSize * 0.2, cellSize * 0.27, 0, 0, TAU);
+    ctx.fill();
+    if (detail >= 0.5) ctx.stroke();
   }
 
   private drawCarrion(c: CarrionPatch, detail: number): void {

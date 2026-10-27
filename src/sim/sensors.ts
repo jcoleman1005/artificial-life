@@ -9,6 +9,7 @@ import { tagSimilarity } from './tags';
 import { isParentOf } from './family';
 import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
+import { fatRoom, thresholdOf } from './lifehistory';
 
 /**
  * Computes an organism's sensory perceptions based strictly on the pre-tick world snapshot.
@@ -200,14 +201,15 @@ export function senseEnvironment(
   // nearly full organism never spends a whole food unit on a few points.
   const canEat =
     (currentCellFood > 0 || carriedFood > 0) &&
-    energy <= config.maxEnergy - plantYield(organism, config);
+    (energy <= config.maxEnergy - plantYield(organism, config) || fatRoom(organism, config) >= 1);
   // The same for carrion, for a diet that gets at least one energy point from it.
   const meatYield = carrionYield(organism, config);
-  const canEatCarrion = currentCellCarrion > 0 && meatYield >= 1 && energy <= config.maxEnergy - meatYield;
+  const canEatCarrion =
+    currentCellCarrion > 0 && meatYield >= 1 && (energy <= config.maxEnergy - meatYield || fatRoom(organism, config) >= 1);
   const canPickUp = currentCellFood > 0 && carriedFood < organism.carryCapacity;
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
-  let canReproduce = energy >= config.reproductionThreshold;
+  let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0);
   if (canReproduce) {
     let hasValidCell = false;
     const neighbors = [

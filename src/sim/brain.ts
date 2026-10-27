@@ -1,6 +1,7 @@
 import type { PRNG } from './prng';
 import { isDiagonalMove, isLeapAction, isMoveAction, unitDirectionOf } from './directions';
 import { carrionYield } from './traits';
+import { thresholdOf } from './lifehistory';
 import type {
   ActionScore,
   LegalAction,
@@ -235,7 +236,8 @@ export function brainFeatures(
     const { dx: px, dy: py } = sensed.kinPull;
     moveKin = (dx * px + dy * py) / Math.max(1, Math.sqrt(px * px + py * py));
   }
-  const headroom = Math.max(1, config.maxEnergy - config.reproductionThreshold);
+  const threshold = thresholdOf(organism, config);
+  const headroom = Math.max(1, config.maxEnergy - threshold);
 
   // Order must match BRAIN_INPUTS (checked by a test).
   return [
@@ -251,7 +253,7 @@ export function brainFeatures(
     Math.min(1, sensed.surroundingOrganismCount / 8), // crowding
     type === 'EAT' ? hunger : 0, // eatHunger
     type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity) : 0, // pickUpRoom
-    isReproduce ? Math.max(0, organism.energy - config.reproductionThreshold) / headroom : 0, // reproFullness
+    isReproduce ? Math.max(0, organism.energy - threshold) / headroom : 0, // reproFullness
     isGive && !action.recipientIsChild ? need : 0, // giveNeed
     isGive && !action.recipientIsChild ? need * (action.recipientSimilarity ?? 0) : 0, // giveNeedAlike
     isGive && action.recipientIsChild ? need : 0, // giveNeedChild
