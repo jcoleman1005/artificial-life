@@ -79,10 +79,15 @@ export const BRAIN_INPUTS = [
   'mateAlike',
   'mateFamily',
   'mateReady',
+  // Weather systems (append-only)
+  'weatherTemp',
+  'weatherRain',
+  'moveWindAlignment',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
 
+export const BASE_BRAIN_INPUT_COUNT = 52;
 export const BRAIN_INPUT_COUNT = BRAIN_INPUTS.length;
 export const BRAIN_HIDDEN = 6;
 export const WEIGHT_LIMIT = 40;
@@ -95,7 +100,17 @@ export const WEIGHT_LIMIT = 40;
  * fed only by these adds the same offset to every action's score, so it
  * cannot change which action wins (checked by a test).
  */
-export const ACTION_INVARIANT_INPUTS: readonly BrainInput[] = ['bias', 'energy', 'carried', 'crowding', 'register0', 'register1', 'register2'];
+export const ACTION_INVARIANT_INPUTS: readonly BrainInput[] = [
+  'bias',
+  'energy',
+  'carried',
+  'crowding',
+  'register0',
+  'register1',
+  'register2',
+  'weatherTemp',
+  'weatherRain',
+];
 
 /** 1 at the BRAIN_INPUTS index of each ACTION_INVARIANT_INPUTS entry. */
 export const ACTION_INVARIANT_MASK: Readonly<Uint8Array> = Uint8Array.from(BRAIN_INPUTS, (name) => (ACTION_INVARIANT_INPUTS.includes(name) ? 1 : 0));
@@ -148,11 +163,21 @@ const HEAD_START: Readonly<Partial<Record<BrainInput, number>>> = {
 
 export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEAD_START[name] ?? 0);
 
-export function createHeadStartBrain(prng: PRNG): Brain {
+export function createHeadStartBrain(prng: PRNG, config?: Readonly<SimulationConfig>): Brain {
   const small = () => Number(prng.nextGaussian(0, 0.1).toFixed(4));
+  const weatherOn = config?.weatherEnabled !== false;
+  const hidden: number[] = [];
+  for (let h = 0; h < BRAIN_HIDDEN; h++) {
+    for (let i = 0; i < BASE_BRAIN_INPUT_COUNT; i++) {
+      hidden.push(small());
+    }
+    for (let i = BASE_BRAIN_INPUT_COUNT; i < BRAIN_INPUT_COUNT; i++) {
+      hidden.push(weatherOn ? small() : 0);
+    }
+  }
   return {
     skip: [...HEAD_START_SKIP],
-    hidden: Array.from({ length: BRAIN_HIDDEN * BRAIN_INPUT_COUNT }, small),
+    hidden,
     hiddenBias: Array.from({ length: BRAIN_HIDDEN }, small),
     out: Array.from({ length: BRAIN_HIDDEN }, small),
     outBias: 0,
@@ -185,10 +210,20 @@ export function mutateWeight(w: number, config: Readonly<SimulationConfig>, prng
 
 /** A child's brain: each weight mutates with probability brainMutationRate. */
 export function mutateBrain(parent: Brain, config: Readonly<SimulationConfig>, prng: PRNG): Brain {
+  const weatherOn = config.weatherEnabled !== false;
   const mutate = (w: number): number => mutateWeight(w, config, prng);
+  const skip = parent.skip.map((w, i) => {
+    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return w;
+    return mutate(w);
+  });
+  const hidden = parent.hidden.map((w, k) => {
+    const i = k % BRAIN_INPUT_COUNT;
+    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return w;
+    return mutate(w);
+  });
   return {
-    skip: parent.skip.map(mutate),
-    hidden: parent.hidden.map(mutate),
+    skip,
+    hidden,
     hiddenBias: parent.hiddenBias.map(mutate),
     out: parent.out.map(mutate),
     outBias: mutate(parent.outBias),
@@ -322,6 +357,12 @@ function fillBrainFeatures(
   out[o++] = isMate ? (action.mateSimilarity ?? 0) : 0; // mateAlike
   out[o++] = isMate && action.mateIsFamily ? 1 : 0; // mateFamily
   out[o++] = isMate && action.mateReady ? 1 : 0; // mateReady
+  out[o++] = sensed.weatherTemp ?? 0; // weatherTemp
+  out[o++] = sensed.weatherRain ?? 0; // weatherRain
+  out[o++] =
+    isMove && sensed.weatherWind
+      ? (dx * sensed.weatherWind.wx + dy * sensed.weatherWind.wy) / Math.max(1, Math.hypot(dx, dy))
+      : 0; // moveWindAlignment
 }
 
 /** Score for one feature vector, with the per-input direct contributions. */

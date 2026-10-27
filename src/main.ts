@@ -1,6 +1,6 @@
 import './style.css';
 import type { FoodPatch, Organism } from './sim/types';
-import type { OrganismView } from './sim/protocol';
+import type { AncestorNode, EggView, OrganismView } from './sim/protocol';
 import { SimulationClient } from './ui/simulation-client';
 import { CanvasRenderer } from './render/renderer';
 import { MetricsView } from './ui/metrics-view';
@@ -39,6 +39,7 @@ const OVERLAYS: readonly (readonly [OverlayMode, string, string])[] = [
   ['family', 'Family', 'parent, children, lineage'],
   ['senses', 'Senses & signals', 'sight, signal reach, ripples'],
   ['trails', 'Trails', 'where they just went'],
+  ['weather', 'Weather', 'rain, wind, temperature fronts'],
   ['crowding', 'Crowding', 'blocked moves'],
   ['deaths', 'Deaths', 'where they die'],
   ['feeding', 'Feeding', 'where they eat'],
@@ -167,9 +168,13 @@ let lastSelectedId: string | null = null;
 // Last known state of the selected organism, kept to show it after it dies.
 let lastSelectedSnapshot: OrganismView | null = null;
 let lastSelectedDetail: Organism | null = null;
+let lastSelectedAncestry: readonly AncestorNode[] = [];
 // A selected plant (with plants on): shown in the inspector, kept after it dies.
 let selectedPlantId: string | null = null;
 let lastPlantPatch: FoodPatch | null = null;
+// A selected egg: shown in the inspector, kept after it hatches or decays.
+let selectedEggId: string | null = null;
+let lastSelectedEgg: EggView | null = null;
 
 function findPlant(id: string): FoodPatch | undefined {
   for (const patch of sim.foodPatches.values()) if (patch.plant?.id === id) return patch;
@@ -291,6 +296,8 @@ function selectedForDisplay(): { org: OrganismView; detail: Organism | null; ali
   if (selected) {
     lastSelectedSnapshot = selected;
     lastSelectedDetail = sim.getSelectedDetail() ?? lastSelectedDetail;
+    const ancestry = sim.getSelectedAncestry();
+    if (ancestry.length > 0) lastSelectedAncestry = ancestry;
     return { org: selected, detail: lastSelectedDetail, alive: true };
   }
   if (lastSelectedId && lastSelectedSnapshot) return { org: lastSelectedSnapshot, detail: lastSelectedDetail, alive: false };
@@ -298,6 +305,14 @@ function selectedForDisplay(): { org: OrganismView; detail: Organism | null; ali
 }
 
 function refreshPanels(): void {
+  // If the selected egg hatched, transition immediately to following the live organism
+  if (selectedEggId && sim.organisms.has(selectedEggId)) {
+    const org = sim.organisms.get(selectedEggId)!;
+    clearEgg();
+    select(org);
+    return;
+  }
+
   const groups = colourGroups(sim.organisms.values());
   const population = sim.organisms.size;
   peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config), groups);
@@ -307,9 +322,15 @@ function refreshPanels(): void {
   const status = statusText();
   settingsView.setStatus(status);
 
-  const shown = selectedForDisplay();
-  if (shown) card.render(shown.org, renderer.hueOf(shown.org), sim.config, nameOf, shown.alive);
-  else card.hide();
+  const shown = selectedEggId ? null : selectedForDisplay();
+  if (selectedEggId && lastSelectedEgg) {
+    const eggLive = sim.eggs.get(selectedEggId);
+    if (eggLive) lastSelectedEgg = eggLive;
+    card.renderEgg(lastSelectedEgg, sim.config, nameOf, eggLive !== undefined);
+  } else {
+    if (shown) card.render(shown.org, renderer.hueOf(shown.org), sim.config, nameOf, shown.alive);
+    else card.hide();
+  }
 
   // Only the visible tab is rebuilt.
   if (sheet.isContentVisible()) {
@@ -318,8 +339,10 @@ function refreshPanels(): void {
       if (statsStatus.textContent !== status) statsStatus.textContent = status;
       const metrics = sim.getMetrics();
       if (metrics) metricsView.render(metrics);
-      groupsContainer.innerHTML = groupsTableHTML(groups, population);
-      eventsContainer.innerHTML = eventListHTML(sim.worldEvents, sim.foodRegions, sim.config);
+      const groupsHtml = groupsTableHTML(groups, population);
+      if (groupsContainer.innerHTML !== groupsHtml) groupsContainer.innerHTML = groupsHtml;
+      const eventsHtml = eventListHTML(sim.worldEvents, sim.foodRegions, sim.config);
+      if (eventsContainer.innerHTML !== eventsHtml) eventsContainer.innerHTML = eventsHtml;
     } else if (tab === 'trends') {
       historyView.render(sim.getHistorySamples());
     } else {
@@ -330,8 +353,32 @@ function refreshPanels(): void {
         lastPanelRefresh = performance.now();
         return;
       }
+      if (selectedEggId && lastSelectedEgg) {
+        const eggLive = sim.eggs.get(selectedEggId);
+        if (eggLive) lastSelectedEgg = eggLive;
+        const detail = sim.getSelectedDetail() ?? lastSelectedDetail;
+        if (detail) lastSelectedDetail = detail;
+        const ancestry = sim.getSelectedAncestry();
+        if (ancestry.length > 0) lastSelectedAncestry = ancestry;
+        inspectorView.renderEgg(
+          lastSelectedEgg,
+          detail,
+          sim.config,
+          nameOf,
+          lastSelectedAncestry,
+          eggLive !== undefined,
+          sim.tick
+        );
+        lastPanelRefresh = performance.now();
+        return;
+      }
       const detail = shown?.detail;
-      inspectorView.render(detail ? (shown.alive ? detail : { ...detail, energy: 0 }) : undefined, sim.config, nameOf);
+      inspectorView.render(
+        detail ? (shown.alive ? detail : { ...detail, energy: 0 }) : undefined,
+        sim.config,
+        nameOf,
+        lastSelectedAncestry,
+      );
     }
   }
   lastPanelRefresh = performance.now();
@@ -424,7 +471,9 @@ function restart(seed: string | number, config?: Partial<typeof sim.config>): vo
   lastSelectedId = null;
   lastSelectedSnapshot = null;
   lastSelectedDetail = null;
+  lastSelectedAncestry = [];
   clearPlant();
+  clearEgg();
 }
 
 function clearPlant(): void {
@@ -433,12 +482,20 @@ function clearPlant(): void {
   renderer.setSelectedPlant(null);
 }
 
+function clearEgg(): void {
+  selectedEggId = null;
+  lastSelectedEgg = null;
+  renderer.setSelectedEgg(null);
+}
+
 function selectPlant(patch: FoodPatch): void {
+  clearEgg();
   if (lastSelectedId) {
     sim.select(null);
     lastSelectedId = null;
     lastSelectedSnapshot = null;
     lastSelectedDetail = null;
+    lastSelectedAncestry = [];
   }
   selectedPlantId = patch.plant?.id ?? null;
   lastPlantPatch = patch;
@@ -448,12 +505,35 @@ function selectPlant(patch: FoodPatch): void {
   needsRender = true;
 }
 
+function selectEgg(egg: EggView): void {
+  clearPlant();
+  if (lastSelectedId && lastSelectedId !== egg.id) {
+    sim.select(null);
+    lastSelectedId = null;
+    lastSelectedSnapshot = null;
+    lastSelectedDetail = null;
+    lastSelectedAncestry = [];
+  }
+  selectedEggId = egg.id;
+  lastSelectedEgg = egg;
+  lastSelectedId = egg.id;
+  sim.select(egg.id);
+  renderer.setSelectedEgg(egg.id);
+  if (renderer.getZoom() < 3) setZoom(3);
+  renderer.followCell(egg.x, egg.y);
+  sheet.show('organism');
+  refreshPanels();
+  needsRender = true;
+}
+
 function select(org: OrganismView): void {
   clearPlant();
+  clearEgg();
   sim.select(org.id);
   lastSelectedId = org.id;
   lastSelectedSnapshot = org;
   lastSelectedDetail = null;
+  lastSelectedAncestry = [];
   if (renderer.getZoom() < 3) setZoom(3);
   renderer.follow();
   refreshPanels();
@@ -462,10 +542,12 @@ function select(org: OrganismView): void {
 
 function deselect(): void {
   clearPlant();
+  clearEgg();
   sim.select(null);
   lastSelectedId = null;
   lastSelectedSnapshot = null;
   lastSelectedDetail = null;
+  lastSelectedAncestry = [];
   refreshPanels();
   needsRender = true;
 }
@@ -503,11 +585,26 @@ function handleTap(clientX: number, clientY: number): void {
     select(best);
     return;
   }
-  // No organism within reach: a plant in the tapped cell, if any.
+  // Check eggs within tap reach
+  let bestEgg: EggView | null = null;
+  let bestEggDist = TAP_REACH_PX;
+  for (const egg of sim.eggs.values()) {
+    const p = renderer.screenPositionOfCell(egg.x, egg.y);
+    const d = Math.hypot(p.x - (clientX - rect.left), p.y - (clientY - rect.top));
+    if (d < bestEggDist) {
+      bestEgg = egg;
+      bestEggDist = d;
+    }
+  }
+  if (bestEgg) {
+    selectEgg(bestEgg);
+    return;
+  }
+  // No organism or egg within reach: a plant in the tapped cell, if any.
   const cell = renderer.clientToGrid(clientX, clientY);
   const patch = cell ? sim.foodPatches.get(`${cell.x},${cell.y}`) : undefined;
   if (patch?.plant) selectPlant(patch);
-  else if (lastSelectedId || selectedPlantId) deselect();
+  else if (lastSelectedId || selectedPlantId || selectedEggId) deselect();
 }
 
 let dragFrom: { x: number; y: number } | null = null;
@@ -759,6 +856,9 @@ function loadSaved(saved: SavedWorld): void {
   lastSelectedId = null;
   lastSelectedSnapshot = null;
   lastSelectedDetail = null;
+  lastSelectedAncestry = [];
+  clearPlant();
+  clearEgg();
   sim.load(saved);
 }
 

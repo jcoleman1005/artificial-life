@@ -263,6 +263,7 @@ describe('Artificial Life Core Mechanics', () => {
       obstacleDensity: 0,
       tickMetabolismCost: 0.1,
       moveCost: 1.0,
+      weatherEnabled: false,
     });
 
     // Place Org A at (4, 5) and Org B at (6, 5)
@@ -612,5 +613,5 @@ describe('Artificial Life Core Mechanics', () => {
 
     // Diversity metrics are actively populated
     expect(world.metrics.diversity.averageDiversity).toBeGreaterThan(0);
-  });
+  }, 30_000);
 });

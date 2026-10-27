@@ -11,5 +11,5 @@ run() {
   fi
 }
 run check npx tsc -b
-run test npx vitest run --reporter=dot --testTimeout=60000
+run test npx vitest run --reporter=dot --testTimeout=60000 --maxWorkers=2
 run build npm run build

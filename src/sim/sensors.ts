@@ -193,23 +193,56 @@ export function senseEnvironment(
   // Signals carry farther than sight: the nearest organism that signalled
   // last tick within signalRadius (ties go to the earlier in the snapshot).
   let nearestSignal: SensedEntity | null = null;
+  const wind = snapshot.weather?.wind;
   for (const index of snapshot.signallers) {
     const other = snapshot.organisms[index];
     if (other.id === organism.id) continue;
     const dx = other.x - x;
     const dy = other.y - y;
     const distance = Math.abs(dx) + Math.abs(dy);
-    if (distance > config.signalRadius) continue;
-    if (!nearestSignal || distance < nearestSignal.distance) {
+    let effectiveDist = distance;
+    if (config.weatherEnabled && wind && config.weatherSignalDrift > 0 && distance > 0) {
+      // Signal travels from other to organism (-dx, -dy)
+      const align = (-dx * wind.wx + -dy * wind.wy) / distance;
+      effectiveDist = Math.max(0, distance - config.weatherSignalDrift * align);
+    }
+    if (effectiveDist > config.signalRadius) continue;
+    if (!nearestSignal || effectiveDist < nearestSignal.distance) {
       nearestSignal = {
         x: other.x,
         y: other.y,
-        distance,
+        distance: effectiveDist,
         dx,
         dy,
         value: Number(tagSimilarity(organism.tag, other.tag).toFixed(3)),
       };
     }
+  }
+
+  // Microclimate at organism's current position (x, y)
+  let weatherTemp = 0;
+  let weatherRain = 0;
+  let weatherWind: { readonly wx: number; readonly wy: number } | null = null;
+  if (config.weatherEnabled && snapshot.weather) {
+    weatherWind = snapshot.weather.wind;
+    let temp = 0;
+    let rain = 0;
+    for (const f of snapshot.weather.fronts) {
+      const fdx = x - f.x;
+      const fdy = y - f.y;
+      const d2 = fdx * fdx + fdy * fdy;
+      if (d2 <= f.radius * f.radius) {
+        const inf = f.intensity * (1 - Math.sqrt(d2) / f.radius);
+        if (f.type === 'cold_front') temp -= 0.8 * inf;
+        else if (f.type === 'heat_wave') temp += 0.8 * inf;
+        else if (f.type === 'rain_storm') {
+          temp -= 0.2 * inf;
+          if (inf > rain) rain = inf;
+        }
+      }
+    }
+    weatherTemp = Math.max(-1.0, Math.min(1.0, temp));
+    weatherRain = Math.max(0.0, Math.min(1.0, rain));
   }
 
   // Check action preconditions
@@ -268,5 +301,8 @@ export function senseEnvironment(
     rememberedSignal: remembered.signal,
     home: remembered.home,
     registers: remembered.registers,
+    weatherTemp,
+    weatherRain,
+    weatherWind,
   };
 }

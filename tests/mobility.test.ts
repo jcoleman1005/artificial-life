@@ -87,6 +87,7 @@ function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
     leapCostMultiplier: 2.5,
     foodRegionCount: 0,
     controller: 'dials', // these tests exercise the dial policy
+    weatherEnabled: false,
     ...overrides,
   });
 }

@@ -84,6 +84,7 @@ function signalWorld(overrides: Partial<SimulationConfig> = {}): World {
     sensingRadius: 3,
     signalRadius: 8,
     signalCost: 0.5,
+    weatherEnabled: false,
     ...overrides,
   });
 }

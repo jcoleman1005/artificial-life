@@ -196,7 +196,8 @@ export type WorldCountedMetric =
   | 'genomeLength'
   | 'plants'
   | 'overgrazing'
-  | 'life';
+  | 'life'
+  | 'weather';
 
 export function computeWorldMetrics(
   tick: number,

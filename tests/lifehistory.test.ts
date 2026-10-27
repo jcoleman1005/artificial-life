@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
+import { SimulationHost } from '../src/sim/host';
 import { createHeadStartBrain } from '../src/sim/brain';
 import { metabolismCost } from '../src/sim/traits';
 import type { Organism, PolicyWeights, SimulationConfig } from '../src/sim/types';
@@ -364,5 +365,58 @@ describe('eggs', () => {
     w2.foodPatches.set(`${egg.x},${egg.y + 1}`, { x: egg.x, y: egg.y + 1, stock: 2, capacity: 2 });
     w2.step();
     expect(w2.organisms.size).toBe(1);
+  });
+
+  it('allows selecting an egg and revealing its details, shell buffer and ancestry', () => {
+    const w = eggWorld();
+    const parent = layer(w);
+    w.step();
+    expect(w.eggs.size).toBe(1);
+
+    const egg = Array.from(w.eggs.values())[0];
+    const eggId = egg.child.id;
+
+    // Record the manually added test parent in lineage tracker
+    w.lineageTracker.recordBirth(parent, null, null, 0);
+
+    // Direct lookup on world
+    expect(w.getEgg(eggId)).toBe(egg);
+    expect(w.getEggAt(egg.x, egg.y)).toBe(egg);
+    expect(w.getEggAt(99, 99)).toBeUndefined();
+
+    // Ancestry is available for the egg
+    const ancestry = w.getAncestry(eggId);
+    expect(ancestry.length).toBeGreaterThanOrEqual(2);
+    expect(ancestry.map((n) => n.id)).toContain(parent.id);
+    expect(ancestry.map((n) => n.id)).toContain(eggId);
+
+    // Host frame data includes EggView
+    const hostEnv = {
+      now: () => 1000,
+      schedule: () => 0,
+      cancel: () => {},
+    };
+    const host = new SimulationHost(hostEnv);
+    (host as any).world = w;
+    let lastFrame: any = null;
+    const viewerId = host.connect((msg: any) => {
+      if (msg.kind === 'frame') lastFrame = msg;
+    });
+
+    // Select the egg
+    host.handle({ kind: 'select', id: eggId }, viewerId);
+    expect(lastFrame).toBeDefined();
+    expect(lastFrame.eggs).toBeDefined();
+    expect(lastFrame.eggs.length).toBe(1);
+    expect(lastFrame.eggs[0].id).toBe(eggId);
+    expect(lastFrame.eggs[0].shell).toBe(egg.shell);
+    expect(lastFrame.eggs[0].energy).toBe(egg.child.energy);
+
+    // Panels include the unborn child record and ancestry
+    expect(lastFrame.panels).toBeDefined();
+    expect(lastFrame.panels.selected).toBeDefined();
+    expect(lastFrame.panels.selected.id).toBe(eggId);
+    expect(lastFrame.panels.selectedAncestry).toBeDefined();
+    expect(lastFrame.panels.selectedAncestry.length).toBeGreaterThanOrEqual(1);
   });
 });

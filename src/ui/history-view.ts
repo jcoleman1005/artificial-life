@@ -150,7 +150,7 @@ function lifePanel(
   };
 }
 
-const REFERENCE = '#64748b';
+const REFERENCE = '#94a3b8';
 const LEAN_WASH = 'rgba(251, 191, 36, 0.09)';
 
 interface Panel {

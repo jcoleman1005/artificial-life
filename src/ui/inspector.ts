@@ -1,11 +1,14 @@
 import type { FoodPatch, Organism, PolicyWeights, SimulationConfig } from '../sim/types';
+import type { AncestorNode } from '../sim/lineage';
+import type { EggView } from '../sim/protocol';
 import { PLANT_TRAITS, PLANT_TRAIT_KEYS, plantHue } from '../sim/plants';
 import { setHTMLPreservingDetails } from './dom';
-import { givenName, organismName } from './names';
+import { familyName, givenName, organismName } from './names';
 import { carrionYield, plantYield } from '../sim/traits';
 import { LIFE_GENES, birthCooldownOf, clutchSizeOf } from '../sim/lifehistory';
 import { GENE_WORDS, GeneClass, TraitId, genomeStats, geneClassOf, geneCount, geneIndexOf, isExpressed } from '../sim/dna';
 import { describeDoing } from './organism-card';
+import { renderLineageMap } from './lineage-view';
 
 /** Pills for the life-history genes that are switched on in this world (and torpor / fat state). */
 export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationConfig>): string {
@@ -197,7 +200,8 @@ export class InspectorView {
   public render(
     organism: Organism | undefined,
     config: SimulationConfig,
-    nameOf: (id: string) => string | null = () => null
+    nameOf: (id: string) => string | null = () => null,
+    ancestry: readonly AncestorNode[] = []
   ): void {
     if (!organism) {
       this.container.innerHTML = `
@@ -434,6 +438,11 @@ export class InspectorView {
 
         ${genomeBarsHtml(organism, config)}
 
+        <details open class="inspector-section lineage-section" data-key="lineage-map">
+          <summary><strong>Genome Lineage Map</strong> <span class="muted">(ancestry & gene flow)</span></summary>
+          ${renderLineageMap(organism, ancestry, nameOf)}
+        </details>
+
         <details ${config.controller === 'brain' ? '' : 'open'} class="inspector-section" data-key="dials-${config.controller}">
           <summary><strong>Inherited Dial Weights</strong>${
             config.controller === 'brain' ? ' <span class="muted">(inactive: Brain controller)</span>' : ''
@@ -533,6 +542,116 @@ export class InspectorView {
             ${rows}
           </div>
         </details>
+      </div>
+    `
+    );
+  }
+
+  /** An egg: its incubation progress, shell integrity, and the child waiting to hatch. */
+  public renderEgg(
+    egg: EggView,
+    detail: Organism | null,
+    config: SimulationConfig,
+    nameOf: (id: string) => string | null = () => null,
+    ancestry: readonly AncestorNode[] = [],
+    alive = true,
+    tick = 0
+  ): void {
+    const given = givenName(egg.id);
+    const family = familyName(detail?.lineage?.id ?? egg.parentId ?? egg.id);
+    const parentName = egg.parentId ? (nameOf(egg.parentId) ?? givenName(egg.parentId)) : null;
+    const status = !alive ? 'Decayed' : 'Incubating';
+
+    // Weights if child is available
+    const weightBar = (val: number) => {
+      const pct = Math.max(0, Math.min(100, ((val + 2) / 4) * 100));
+      const color = val >= 0 ? '#4ade80' : '#f87171';
+      return `
+        <div class="weight-track">
+          <div class="weight-center"></div>
+          <div class="weight-fill" style="left: ${Math.min(50, pct)}%; width: ${Math.abs(pct - 50)}%; background-color: ${color};"></div>
+        </div>
+      `;
+    };
+
+    const weightRows = detail
+      ? WEIGHT_ROWS.map(
+          ([key, label]) => `
+            <div class="weight-row">
+              <span class="weight-name">${label}</span>
+              <span class="weight-num">${detail.policy[key].toFixed(2)}</span>
+              ${weightBar(detail.policy[key])}
+            </div>`
+        ).join('')
+      : '';
+
+    const lineageHtml = detail && ancestry.length > 0 ? renderLineageMap(detail, ancestry, nameOf) : '';
+
+    setHTMLPreservingDetails(
+      this.container,
+      `
+      <div class="inspector-card">
+        <header class="inspector-header">
+          <div>
+            <h2>
+              <span class="tag-swatch egg-swatch" style="background: hsl(${egg.tag}, 65%, 50%)" aria-hidden="true">🥚</span>
+              Egg · ${given} <small>${egg.id}</small>
+            </h2>
+            <div class="header-pre">
+              ${status} · at ${egg.x},${egg.y} · ${family} · Gen ${egg.generation}${parentName ? ` · laid by ${parentName}` : ''}
+            </div>
+          </div>
+          <button type="button" class="btn-close-inspector" aria-label="Deselect">✕</button>
+        </header>
+
+        <div class="stat-summary-row">
+          <div class="summary-pill"><span class="pill-title">Status</span><span class="pill-value">${status} 🥚</span></div>
+          <div class="summary-pill"><span class="pill-title">Incubation</span><span class="pill-value">${Math.max(0, tick - egg.laidTick)} ticks</span></div>
+          <div class="summary-pill"><span class="pill-title">Egg Energy</span><span class="pill-value">${Math.round(egg.energy)} / ${config.maxEnergy}</span></div>
+          <div class="summary-pill"><span class="pill-title">Shell Buffer</span><span class="pill-value">${egg.shell} buffer</span></div>
+          <div class="summary-pill"><span class="pill-title">Hatch Proximity</span><span class="pill-value">≤ ${config.eggHatchRadius} cells</span></div>
+          <div class="summary-pill"><span class="pill-title">Hatch Yield</span><span class="pill-value">~${Math.floor(egg.energy * config.eggHatchEfficiency)} E</span></div>
+          <div class="summary-pill"><span class="pill-title">Generation</span><span class="pill-value">Gen ${egg.generation}</span></div>
+          <div class="summary-pill"><span class="pill-title">Body Size</span><span class="pill-value">${(detail?.size ?? egg.size ?? 1).toFixed(2)}×</span></div>
+          <div class="summary-pill"><span class="pill-title">Diet</span><span class="pill-value">${detail ? dietLabel(detail.carnivory) : 'Herbivore'}</span></div>
+          <div class="summary-pill"><span class="pill-title">Abilities</span><span class="pill-value">${detail ? abilityList(detail) : 'None'}</span></div>
+        </div>
+
+        <details open class="inspector-section" data-key="egg-mechanics">
+          <summary><strong>Incubation & Hatch Conditions</strong></summary>
+          <div class="decision-meta">
+            <p style="margin: 0 0 6px; font-size: var(--text-xs); line-height: 1.4; color: var(--text-main);">
+              This egg is waiting inert in cell <strong>(${egg.x}, ${egg.y})</strong> until conditions favor hatching.
+            </p>
+            <ul style="margin: 0; padding-left: 18px; font-size: var(--text-2xs); color: var(--text-muted); line-height: 1.55;">
+              <li><strong>Food Proximity:</strong> Hatches when food is within <strong>${config.eggHatchRadius} cells</strong> and cell (${egg.x}, ${egg.y}) is unoccupied.</li>
+              <li><strong>Protective Shell Buffer:</strong> Currently <strong>${egg.shell}</strong> remaining. When a decay tick strikes (${(config.eggDecayChance * 100).toFixed(1)}%/tick), the shell absorbs damage before the egg can rot.</li>
+              <li><strong>Hatching Energy:</strong> The hatchling emerges with <strong>${Math.round(config.eggHatchEfficiency * 100)}%</strong> of the egg's energy payload (~${Math.floor(egg.energy * config.eggHatchEfficiency)} E).</li>
+            </ul>
+          </div>
+        </details>
+
+        ${
+          weightRows
+            ? `
+        <details class="inspector-section" data-key="egg-weights">
+          <summary><strong>Inherited Policy Weights</strong> <span class="muted">(controller tendencies upon emergence)</span></summary>
+          <div class="weights-list">
+            ${weightRows}
+          </div>
+        </details>`
+            : ''
+        }
+
+        ${
+          lineageHtml
+            ? `
+        <details open class="inspector-section lineage-section" data-key="egg-lineage">
+          <summary><strong>Genome Lineage Map</strong> <span class="muted">(ancestry & crossover attribution)</span></summary>
+          ${lineageHtml}
+        </details>`
+            : ''
+        }
       </div>
     `
     );

@@ -201,6 +201,11 @@ export interface PlantStepContext {
   readonly counters: PlantCounters;
   /** Overgrazing: cell health per cell, scaling growth (absent: no scaling). */
   readonly health?: Float32Array;
+  /** Active weather simulation (absent when weather is off). */
+  readonly weather?: {
+    getSoilMoisture(x: number, y: number): number;
+    getWind(x: number, y: number): { wx: number; wy: number };
+  };
 }
 
 /** Whether a seed can take root here: on the grid, fertile, no obstacle and no plant or other food. */
@@ -259,6 +264,8 @@ export function stepPlants(ctx: PlantStepContext): void {
     // whatever the light, so fast growth pays only in good conditions.
     const size = plant.biomass + plant.roots;
     const vigour = size / (size + 1);
+    const moisture = ctx.weather ? ctx.weather.getSoilMoisture(x, y) : 0.5;
+    const moistureFactor = ctx.weather ? 0.8 + 0.4 * moisture : 1;
     const growth =
       g.growthRate *
       vigour *
@@ -266,6 +273,7 @@ export function stepPlants(ctx: PlantStepContext): void {
       (lean ? lightLean : 1) *
       Math.max(0, 1 - config.shadeStrength * shade) *
       (1 - dormancy) *
+      moistureFactor *
       (ctx.health ? ctx.health[index] : 1);
     const upkeep =
       (config.plantUpkeep * size + config.growthCostFactor * g.growthRate * vigour) *
@@ -319,7 +327,14 @@ export function stepPlants(ctx: PlantStepContext): void {
         dx = prng.nextInt(-reach, reach);
         dy = prng.nextInt(-reach, reach);
       }
-      seeds.push({ x: x + dx, y: y + dy, parent: plant });
+      let sx = x + dx;
+      let sy = y + dy;
+      if (ctx.weather && config.weatherSeedDrift > 0) {
+        const wind = ctx.weather.getWind(x, y);
+        sx += Math.round(wind.wx * config.weatherSeedDrift);
+        sy += Math.round(wind.wy * config.weatherSeedDrift);
+      }
+      seeds.push({ x: sx, y: sy, parent: plant });
     }
     patch.stock = Math.floor(plant.biomass);
   }

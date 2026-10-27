@@ -10,6 +10,8 @@
 import type { HistorySample } from './history';
 import type { WorldEvent } from './events';
 import type { HeatmapKind } from './activity';
+import type { AncestorNode } from './lineage';
+export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
   CarrionPatch,
   DecisionOutcome,
@@ -18,6 +20,7 @@ import type {
   LegalAction,
   Organism,
   SimulationConfig,
+  WeatherFront,
   WorldMetrics,
 } from './types';
 import type { WorldState } from './world';
@@ -52,6 +55,20 @@ export interface OrganismView {
   readonly recentHistory: readonly ActionView[];
 }
 
+/** An egg waiting inert in a cell until environmental conditions favor hatching. */
+export interface EggView {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly laidTick: number;
+  readonly shell: number;
+  readonly energy: number;
+  readonly tag: number;
+  readonly size: number;
+  readonly parentId: string | null;
+  readonly generation: number;
+}
+
 /** What the renderer reads from a world. Both World and the page's mirror satisfy it. */
 export interface WorldView {
   readonly config: Readonly<SimulationConfig>;
@@ -60,9 +77,13 @@ export interface WorldView {
   readonly foodPatches: ReadonlyMap<string, FoodPatch>;
   readonly carrion: ReadonlyMap<string, CarrionPatch>;
   /** Eggs waiting for food (where they lie). */
-  readonly eggs: ReadonlyMap<string, { readonly x: number; readonly y: number }>;
+  readonly eggs: ReadonlyMap<string, EggView>;
   readonly foodRegions: readonly FoodRegion[];
   readonly obstacles: ReadonlySet<string>;
+  readonly weather?: {
+    readonly fronts: readonly WeatherFront[];
+    getWind(x: number, y: number): { wx: number; wy: number };
+  } | null;
   getSelectedOrganism(): OrganismView | undefined;
 }
 
@@ -159,7 +180,12 @@ export type FromWorker =
       readonly foodPatches: readonly FoodPatch[];
       readonly carrion: readonly CarrionPatch[];
       /** Eggs waiting for food (absent from older servers). */
-      readonly eggs?: readonly { readonly x: number; readonly y: number }[];
+      readonly eggs?: readonly EggView[];
+      /** Weather state for the overlay (absent when weather is off). */
+      readonly weather?: {
+        readonly fronts: readonly WeatherFront[];
+        readonly wind: { readonly wx: number; readonly wy: number };
+      };
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
       /** Whether the world is playing, and at what speed (another viewer may have changed them). */
@@ -183,6 +209,8 @@ export interface PanelData {
   readonly metrics: WorldMetrics;
   /** The selected organism's full record, or null if none is selected or it died. */
   readonly selected: Organism | null;
+  /** Direct ancestry tree for the selected organism, if selected. */
+  readonly selectedAncestry?: readonly AncestorNode[];
   /** History samples, only when the page asked for them. */
   readonly history?: readonly HistorySample[];
   /** The heatmap the page is showing (one value per cell, row by row), only when asked for. */

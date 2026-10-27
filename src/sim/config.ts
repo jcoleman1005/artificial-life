@@ -189,6 +189,17 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dnaGrowableBrain: false, // Stage 3 (needs dnaEnabled): hidden units past the 6 founders are expressed; wrapped unit fields land on them, other wrapped brain keys stay silent (docs/specs/dna.md)
   dnaMaxInternal: 16, // hidden units a genome can address with the growable brain (clamped to 6..256)
   dnaUpkeepPerConnection: 0.00005, // an expressed acquired connection costs as much as a gene
+  // Weather systems (docs/specs/weather.md)
+  weatherEnabled: true,
+  weatherMaxFronts: 2,
+  weatherSpawnInterval: 150,
+  weatherChillCoeff: 0.4,
+  weatherMudCoeff: 0.25,
+  weatherWindCoupling: 0.25,
+  weatherSeedDrift: 1.5,
+  weatherSignalDrift: 2.0,
+  weatherEvapRate: 0.005,
+  weatherAbsorptionRate: 0.05,
   seed: 42,
 };
 

@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27 (genome trend dashboard, Tier 1 basic physical genes, DNA Stage 3 growable brain, and carnivore efficiency)._
+_Last updated: 2026-10-27 (Dynamic multi-front weather systems; Genome Lineage Map; Egg inspection; UI/UX mobile refactor; Genome trend dashboard; Tier 1 basic physical genes; DNA Stage 3 growable brain; and carnivore efficiency)._
 
 ## Branches
 
@@ -27,7 +27,11 @@ _Last updated: 2026-10-27 (genome trend dashboard, Tier 1 basic physical genes, 
 
 ## What exists (summary)
 
-A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector, saved worlds and branch points. Full inventory: `docs/history.md`.
+A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
+
+## Genome Lineage Map (built 2026-10-27)
+
+Interactive pedigree DAG in the Inspector (`src/sim/lineage.ts`, `src/ui/lineage-view.ts`, tests `tests/lineage.test.ts`). Displays multi-generational descent trees tracing living organisms back to founding pioneers. Analyzes sexual mating crossovers (calculating parent vs mate contribution shares and specific inherited traits) and clonal mutation diffs (body size, diet, movement abilities, dispersal, and life-history genes). Prunes extinct lineages periodically to bound memory (< 200 KB) and runs strictly as an observer with zero effect on simulation physics, PRNG streams, or `stateHash()` determinism.
 
 ## Life-history genes (built and merged 2026-10-26)
 
@@ -43,6 +47,23 @@ Five foundational physical and energetic architecture genes (`size`, `sensingRad
 - `energyReserveCap`: fat storage decoupled from structural body size; loaded fat applies dynamic kinetic drag to movement costs ($\text{drag} = 1 + \text{dragCoeff} \times \frac{\text{fat}}{\text{fatCapacity} + E_{\max}}$).
 
 **Meat digestion gene (2026-10-27):** `carnivoreEfficiency` (trait 50, `carnivoreGeneEnabled`, on) scales energy from carrion bites and eggs; meat eaters can now eat eggs (counted in `eggsEatenTotal`). Founders 0.5 halve early carrion meals (switch off = old world). Not yet measured: run `--compare carnivoreGeneEnabled=false,true` and check egg predation against eggs-off.
+
+## Weather systems (built 2026-10-27)
+
+Dynamic multi-front atmospheric simulation with 3 integrated dimensions (`weatherEnabled`, on by default; spec `docs/specs/weather.md`, code `src/sim/weather.ts`, tests `tests/weather.test.ts`):
+- **Front dynamics**: spawns moving circular weather fronts (cold fronts and heat waves) characterized by position, velocity, radius, and intensity. Fronts smoothly move across the terrain, depositing rain that elevates local soil moisture while dry ambient air continuously evaporates moisture.
+- **Abiotic constraints (no scripted behaviors)**:
+  - Cold fronts drop local temperature below 0, increasing basal metabolic upkeep (`weatherChillCoeff * deltaTemp`).
+  - Rain moistens the ground, accelerating carrion rot and introducing mud friction that scales movement energy expenditure (`weatherMudCoeff * moisture`).
+  - Soil moisture scales plant growth vigour, with droughts slowing regrowth and wet spells fostering lush vegetation.
+  - Wind vectors impart kinetic coupling on organism locomotion: moving aligned with the wind reduces energy expenditure, while moving against it adds resistance (`weatherWindCoupling * (v_move · v_wind)`).
+  - Wind vector drift deflects plant seed dispersal downwind.
+  - Directional acoustic/chemical signals propagate downwind, extending perceptual sensing range for downwind listeners and shortening it upwind.
+- **Sensors & Brain**: local temperature, rain intensity, and move-wind directional alignment are sensed and appended to `BRAIN_INPUTS` (`weatherTemp`, `weatherRain`, `moveWindAlignment`).
+- **Rendering**: added `weather` overlay visualizing temperature gradients (blue chill to warm orange) and wind streamline indicators.
+- **Fingerprint & bit-identity**:
+  - Switch off (`--set weatherEnabled=false`): matches baseline fingerprint bit-identically (`large dials: f8b636a2088d6381 pop 588 births 3443 · large brain: a8e50b331bc9b2f2 pop 665 births 3816`).
+  - Switch on (`weatherEnabled: true`, default): `large dials: 3ff6bca3cc5fdc6f pop 637 births 4678 · large brain: 99714e1c2c0624ed pop 595 births 4256`.
 
 ## In progress: DNA (2026-10-26)
 

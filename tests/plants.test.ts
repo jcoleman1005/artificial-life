@@ -26,6 +26,7 @@ function plantWorld(overrides: Partial<SimulationConfig> = {}): World {
     immigrationInterval: 0,
     seedRainInterval: 0,
     plantsEnabled: true,
+    weatherEnabled: false,
     ...overrides,
   });
 }

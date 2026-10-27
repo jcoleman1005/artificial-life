@@ -1,6 +1,6 @@
 import type { SimulationConfig } from '../sim/types';
-import type { OrganismView } from '../sim/protocol';
-import { organismName } from './names';
+import type { EggView, OrganismView } from '../sim/protocol';
+import { givenName, organismName } from './names';
 import { metabolismHue, reproStrategyHue } from '../render/renderer';
 
 const DIRECTION: Record<string, string> = { NORTH: 'north', SOUTH: 'south', EAST: 'east', WEST: 'west' };
@@ -149,5 +149,34 @@ export class OrganismCard {
       org.investment === undefined && org.clutchSize === undefined ? null : reproStrategyHue(org, config),
       'Breeding strategy: cyan = larger clutches, purple = well-fed single children'
     );
+  }
+
+  public renderEgg(
+    egg: EggView,
+    config: SimulationConfig,
+    nameOf: (id: string) => string | null,
+    alive = true
+  ): void {
+    const given = givenName(egg.id);
+    const parent = egg.parentId ? (nameOf(egg.parentId) ?? givenName(egg.parentId)) : null;
+    const energy = alive ? egg.energy : 0;
+    const pct = Math.max(0, Math.min(100, (energy / config.maxEnergy) * 100));
+    const set = (node: HTMLElement, text: string) => {
+      if (node.textContent !== text) node.textContent = text;
+    };
+    this.el.hidden = false;
+    this.el.classList.toggle('dead', !alive);
+    this.orb.style.setProperty('--hue', String(Math.round(egg.tag)));
+    set(this.given, `Egg · ${given}`);
+    set(this.family, `Gen ${egg.generation}`);
+    set(
+      this.doing,
+      alive
+        ? `Incubating at ${egg.x},${egg.y} · shell ${egg.shell}${parent ? ` · child of ${parent}` : ''}`
+        : 'Egg decayed'
+    );
+    this.energy.setAttribute('aria-label', `Egg Energy ${Math.round(energy)} of ${config.maxEnergy}`);
+    this.fill.style.width = `${pct}%`;
+    this.fill.classList.toggle('low', energy < config.maxEnergy * 0.25);
   }
 }

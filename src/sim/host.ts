@@ -2,8 +2,8 @@ import { World } from './world';
 import type { SavedWorld } from './protocol';
 import { WorldEventDetector, type WorldEvent } from './events';
 import { ActivityMaps, type HeatmapKind } from './activity';
-import { toOrganismView, type FromWorker, type PanelData, type ToWorker } from './protocol';
-import type { Organism, SimulationConfig } from './types';
+import { toOrganismView, type EggView, type FromWorker, type PanelData, type ToWorker } from './protocol';
+import type { Egg, Organism, SimulationConfig } from './types';
 
 /** How often panel data (metrics, history, the selected organism) is sent while running. */
 export const PANEL_INTERVAL_MS = 200;
@@ -40,6 +40,21 @@ export interface PlaybackState {
  * and Node APIs so tests can drive it directly. It only steps the World, so
  * outcomes are exactly those of stepping a World by hand with the same seed.
  */
+function toEggView(e: Egg): EggView {
+  return {
+    id: e.child.id,
+    x: e.x,
+    y: e.y,
+    laidTick: e.laidTick,
+    shell: e.shell ?? 0,
+    energy: e.child.energy,
+    tag: e.child.tag,
+    size: e.child.size ?? 1.0,
+    parentId: e.child.lineage.id,
+    generation: e.child.lineage.generation,
+  };
+}
+
 export class SimulationHost {
   public world: World;
   private readonly env: HostEnvironment;
@@ -266,7 +281,15 @@ export class SimulationHost {
       organisms: Array.from(world.organisms.values(), toOrganismView),
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
       carrion: Array.from(world.carrion.values(), (c) => ({ ...c })),
-      eggs: Array.from(world.eggs.values(), (e) => ({ x: e.x, y: e.y })),
+      eggs: Array.from(world.eggs.values(), toEggView),
+      ...(world.weather && world.config.weatherEnabled
+        ? {
+            weather: {
+              fronts: world.weather.fronts.map((f) => ({ ...f })),
+              wind: { ...world.weather.wind },
+            },
+          }
+        : {}),
       ticksPerSecond: this.tickTimes.length,
       running: this.running,
       targetTicksPerSecond: this.ticksPerSecond,
@@ -286,9 +309,13 @@ export class SimulationHost {
     metrics: ReturnType<World['getMetrics']> | null
   ): FromWorker {
     if (!metrics) return base;
+    const selectedOrg = viewer.selectedId
+      ? (this.world.getOrganism(viewer.selectedId) ?? this.world.getEgg(viewer.selectedId)?.child ?? null)
+      : null;
     const panels: PanelData = {
       metrics,
-      selected: withoutCircuit((viewer.selectedId && this.world.getOrganism(viewer.selectedId)) || null),
+      selected: withoutCircuit(selectedOrg),
+      ...(viewer.selectedId ? { selectedAncestry: this.world.getAncestry(viewer.selectedId) } : {}),
       ...(viewer.wantsHistory ? { history: this.world.history.getSamples() } : {}),
       ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap, this.world) } } : {}),
     };

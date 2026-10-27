@@ -38,6 +38,7 @@ describe('Default world', () => {
       digestiveGeneEnabled: DEFAULT_CONFIG.digestiveGeneEnabled,
       carnivoreGeneEnabled: DEFAULT_CONFIG.carnivoreGeneEnabled,
       carnivoreFounder: DEFAULT_CONFIG.carnivoreFounder,
+      weatherEnabled: DEFAULT_CONFIG.weatherEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -74,6 +75,8 @@ describe('Default world', () => {
       // Meat digestion: on, founders at half so selection can go either way (Parameter log).
       carnivoreGeneEnabled: true,
       carnivoreFounder: 0.5,
+      // Weather systems are a new feature, on by default.
+      weatherEnabled: true,
     });
   });
 

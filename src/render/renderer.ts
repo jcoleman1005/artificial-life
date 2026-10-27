@@ -1,6 +1,6 @@
 import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/types';
 import { plantHue } from '../sim/plants';
-import type { OrganismView, WorldView } from '../sim/protocol';
+import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
@@ -50,7 +50,7 @@ export function reproStrategyHue(org: Pick<OrganismView, 'investment' | 'clutchS
  * - crowding / deaths / feeding: fading heatmaps of where those happen.
  * - health: how much grazing has worn each cell down (overgrazing), on a fixed 0-1 scale.
  */
-export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | HeatmapKind;
+export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | 'weather' | HeatmapKind;
 
 const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
   crowding: '251, 146, 60',
@@ -154,6 +154,8 @@ export class CanvasRenderer {
   private overlay: OverlayMode = 'none';
   /** The plant shown in the inspector, ringed in the world. */
   private selectedPlantId: string | null = null;
+  /** The egg shown in the inspector, ringed in the world. */
+  private selectedEggId: string | null = null;
   private heatmap: Float32Array | null = null;
   private trails = new Map<string, { x: number; y: number }[]>();
 
@@ -187,6 +189,10 @@ export class CanvasRenderer {
 
   public setSelectedPlant(id: string | null): void {
     this.selectedPlantId = id;
+  }
+
+  public setSelectedEgg(id: string | null): void {
+    this.selectedEggId = id;
   }
 
   public setOverlay(mode: OverlayMode): void {
@@ -263,6 +269,17 @@ export class CanvasRenderer {
   /** Follow the selected organism again (after a new selection). */
   public follow(): void {
     this.following = true;
+  }
+
+  /** Centers the camera on a specific grid cell (e.g. an egg). */
+  public followCell(gx: number, gy: number): void {
+    this.following = true;
+    const sx = (gx + 0.5) * this.cellSize;
+    const sy = (gy + 0.5) * this.cellSize;
+    const { cx, cy } = this.visibleCentre();
+    this.viewX = sx - cx;
+    this.viewY = sy - cy;
+    this.clampView();
   }
 
   private visibleSize(): { vw: number; vh: number } {
@@ -392,6 +409,13 @@ export class CanvasRenderer {
     return { x: x - this.viewX, y: y - this.viewY };
   }
 
+  /** Screen position (CSS px, relative to the canvas) of a grid cell center. */
+  public screenPositionOfCell(gx: number, gy: number): { x: number; y: number } {
+    const sx = (gx + 0.5) * this.cellSize;
+    const sy = (gy + 0.5) * this.cellSize;
+    return { x: sx - this.viewX, y: sy - this.viewY };
+  }
+
   public resize(): void {
     // CSS owns the on-screen size (the canvas fills its parent); here we
     // match the drawing buffer to it for crisp high-DPI output.
@@ -454,13 +478,25 @@ export class CanvasRenderer {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
-    // Zoomed: follow the selected organism, then shift the world into view.
-    if (this.zoom > 1 && this.following && selectedOrg) {
-      const [sx, sy] = this.displayCentre(selectedOrg);
-      const { cx, cy } = this.visibleCentre();
-      this.viewX = sx - cx;
-      this.viewY = sy - cy;
-      this.clampView();
+    // Zoomed: follow the selected organism or egg, then shift the world into view.
+    if (this.zoom > 1 && this.following) {
+      if (selectedOrg) {
+        const [sx, sy] = this.displayCentre(selectedOrg);
+        const { cx, cy } = this.visibleCentre();
+        this.viewX = sx - cx;
+        this.viewY = sy - cy;
+        this.clampView();
+      } else if (this.selectedEggId) {
+        const egg = this.world.eggs.get(this.selectedEggId);
+        if (egg) {
+          const sx = (egg.x + 0.5) * cellSize;
+          const sy = (egg.y + 0.5) * cellSize;
+          const { cx, cy } = this.visibleCentre();
+          this.viewX = sx - cx;
+          this.viewY = sy - cy;
+          this.clampView();
+        }
+      }
     }
     ctx.save();
     ctx.translate(-this.viewX, -this.viewY);
@@ -531,7 +567,7 @@ export class CanvasRenderer {
     // Eggs: small pale ovals, waiting
     for (const egg of this.world.eggs.values()) {
       if (!inView(egg.x, egg.y)) continue;
-      this.drawEgg(egg.x, egg.y, detail);
+      this.drawEgg(egg, detail);
     }
 
     // Overlays drawn under the organisms
@@ -540,6 +576,7 @@ export class CanvasRenderer {
     }
     if (this.overlay === 'trails') this.drawTrails(selectedOrg);
     if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
+    if (this.overlay === 'weather') this.drawWeather();
 
     // Sensing range of the selected organism: a soft dashed square
     if (selectedOrg) {
@@ -598,6 +635,71 @@ export class CanvasRenderer {
       // Square root lifts quiet cells so the pattern reads, not only the hot spot.
       ctx.fillStyle = `rgba(${rgb}, ${(0.12 + 0.6 * Math.sqrt(v)).toFixed(3)})`;
       ctx.fillRect(x * cellSize, y * cellSize, cellSize, cellSize);
+    }
+  }
+
+  /** Weather overlay: dynamic temperature / storm fronts and prevailing wind streamlines. */
+  private drawWeather(): void {
+    if (!this.world.weather) return;
+    const { ctx, cellSize } = this;
+    const weather = this.world.weather;
+
+    // 1. Draw weather front areas
+    for (const front of weather.fronts) {
+      const cx = front.x * cellSize;
+      const cy = front.y * cellSize;
+      const r = front.radius * cellSize;
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+
+      if (front.type === 'cold_front') {
+        grad.addColorStop(0, `rgba(59, 130, 246, ${0.3 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+      } else if (front.type === 'rain_storm') {
+        grad.addColorStop(0, `rgba(16, 185, 129, ${0.28 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+      } else if (front.type === 'heat_wave') {
+        grad.addColorStop(0, `rgba(245, 158, 11, ${0.28 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+      }
+
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 2. Draw wind flow streamlines (sparse grid of gentle arrows)
+    const step = 6;
+    const { gridWidth, gridHeight } = this.world.config;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1.2;
+
+    for (let gy = 3; gy < gridHeight; gy += step) {
+      for (let gx = 3; gx < gridWidth; gx += step) {
+        const wind = weather.getWind(gx, gy);
+        const speed = Math.hypot(wind.wx, wind.wy);
+        if (speed < 0.05) continue;
+
+        const x0 = gx * cellSize;
+        const y0 = gy * cellSize;
+        const length = Math.min(cellSize * 2.5, speed * cellSize * 4);
+        const x1 = x0 + (wind.wx / speed) * length;
+        const y1 = y0 + (wind.wy / speed) * length;
+
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+
+        const head = Math.min(4, length * 0.3);
+        const angle = Math.atan2(wind.wy, wind.wx);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+      }
     }
   }
 
@@ -766,10 +868,10 @@ export class CanvasRenderer {
     ctx.lineCap = 'butt';
   }
 
-  private drawEgg(x: number, y: number, detail: number): void {
+  private drawEgg(egg: EggView, detail: number): void {
     const { ctx, cellSize } = this;
-    const cx = (x + 0.5) * cellSize;
-    const cy = (y + 0.5) * cellSize;
+    const cx = (egg.x + 0.5) * cellSize;
+    const cy = (egg.y + 0.5) * cellSize;
     ctx.fillStyle = '#f5efe0';
     ctx.strokeStyle = 'rgba(70, 50, 20, 0.7)';
     ctx.lineWidth = Math.max(1, cellSize * 0.05);
@@ -777,6 +879,14 @@ export class CanvasRenderer {
     ctx.ellipse(cx, cy, cellSize * 0.2, cellSize * 0.27, 0, 0, TAU);
     ctx.fill();
     if (detail >= 0.5) ctx.stroke();
+
+    if (egg.id === this.selectedEggId) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, Math.max(5, cellSize * 0.5), 0, TAU);
+      ctx.stroke();
+    }
   }
 
   private drawCarrion(c: CarrionPatch, detail: number): void {
