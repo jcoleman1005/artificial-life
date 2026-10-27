@@ -1,7 +1,7 @@
 /**
  * Core types and data structures for the Artificial Life simulation.
  */
-import type { Brain } from './brain';
+import type { Brain, Circuit } from './brain';
 import type { MemoryState, Recalled } from './memory';
 
 export interface Point {
@@ -329,6 +329,13 @@ export interface Organism {
    * organisms from before it was switched on (encoded at their next birth).
    */
   readonly genome?: Uint32Array;
+  /**
+   * With dnaGrowableBrain: the sparse brain compiled from the genome (see
+   * compileCircuit in dna.ts), used for scoring instead of `brain`. Derived
+   * from the genome, never saved; absent in organisms born before the switch
+   * was on (they keep the dense brain).
+   */
+  readonly circuit?: Circuit;
   /** Food units carried, eaten later or given away (at most carryCapacity). */
   carriedFood: number;
   /** Cumulative food units given to and received from other organisms. */
@@ -619,6 +626,9 @@ export interface SimulationConfig {
   dnaDosageCompensation: boolean; // A duplicated segment and its original each keep half the dose (summed traits), so a duplication changes nothing until the copies drift
   dnaUpkeepPerGene: number; // Energy per tick per gene
   dnaMaxGenes: number; // Insertions and duplications stop at this genome length (a safety rail for tick cost)
+  dnaGrowableBrain: boolean; // With DNA (Stage 3): the brain is compiled from the genome as a sparse circuit with up to dnaMaxInternal hidden units; every brain gene is expressed
+  dnaMaxInternal: number; // Hidden units a genome can address with the growable brain (clamped to 6..256)
+  dnaUpkeepPerConnection: number; // Energy per tick per expressed acquired connection (in hidden units past the founders' 6)
   seed: number | string;
 }
 

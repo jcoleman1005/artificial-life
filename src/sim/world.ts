@@ -64,7 +64,7 @@ import {
   LIFE_GENES,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
-import { capGenome, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
+import { capGenome, compileCircuit, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, growableBrain, internalUnits, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
   founderMemorySpan,
@@ -115,7 +115,7 @@ export interface WorldState {
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
-export type SavedOrganism = Omit<Organism, 'genome'> & { readonly genome?: readonly number[] };
+export type SavedOrganism = Omit<Organism, 'genome' | 'circuit'> & { readonly genome?: readonly number[] };
 
 /** An egg in a WorldState (its child saved like any organism). */
 export type SavedEgg = Omit<Egg, 'child'> & { readonly child: SavedOrganism };
@@ -504,7 +504,9 @@ export class World {
   private inheritBody(parent: Readonly<Organism>, mate: Readonly<Organism> | null = null): Phenotype & { genome?: Uint32Array } {
     const { config, prng } = this;
     if (config.dnaEnabled) {
-      const start = mate ? crossGenomes(this.parentGenome(parent), this.parentGenome(mate), prng) : this.parentGenome(parent);
+      // Stage 3: crossover groups follow the hidden unit a gene maps to (canonical keys group as before).
+      const units = growableBrain(config) ? internalUnits(config) : 0;
+      const start = mate ? crossGenomes(this.parentGenome(parent), this.parentGenome(mate), prng, units) : this.parentGenome(parent);
       const mutated = config.dnaVariationEnabled ? mutateGenomeVariation(start, config, prng) : mutateGenome(start, config, prng);
       const genome = capGenome(mutated, config.dnaMaxGenes);
       return { ...decodeOrganismDNA(genome, config), genome };
@@ -534,11 +536,13 @@ export class World {
     return { ...p, ...(needsHerbivory ? { herbivory: herbivoryOf(parent, this.config) } : {}), ...lifeForConfig(parent, this.config) };
   }
 
-  /** A saved organism back as a live one. */
-  private static restoreOrganism({ genome, ...o }: SavedOrganism): Organism {
+  /** A saved organism back as a live one (with the growable brain, its circuit recompiled from the genome). */
+  private static restoreOrganism({ genome, ...o }: SavedOrganism, config: Readonly<SimulationConfig>): Organism {
+    const upgraded = genome ? upgradeGenome(genome, o.brain.skip.length) : undefined;
     return {
       ...clone(o),
-      ...(genome ? { genome: upgradeGenome(genome, o.brain.skip.length) } : {}),
+      ...(upgraded ? { genome: upgraded } : {}),
+      ...(upgraded && growableBrain(config) ? { circuit: compileCircuit(upgraded, config) } : {}),
       brain: upgradeBrain(clone(o.brain)),
       carnivory: o.carnivory ?? 0,
       kills: o.kills ?? 0,
@@ -551,7 +555,7 @@ export class World {
 
   /** An organism as plain data (its genome as numbers, only its latest decision). */
   private static saveOrganism(o: Readonly<Organism>): SavedOrganism {
-    const { genome, ...rest } = o;
+    const { genome, circuit: _circuit, ...rest } = o; // the circuit is derived from the genome, never saved
     return { ...clone({ ...rest, recentHistory: o.recentHistory.slice(0, 1) }), ...(genome ? { genome: Array.from(genome) } : {}) };
   }
 
@@ -619,10 +623,10 @@ export class World {
     world.carrion.clear();
     for (const c of state.carrion ?? []) world.carrion.set(`${c.x},${c.y}`, { ...c });
     world.organisms.clear();
-    for (const o of state.organisms) world.organisms.set(o.id, World.restoreOrganism(o));
+    for (const o of state.organisms) world.organisms.set(o.id, World.restoreOrganism(o, world.config));
     world.eggs.clear();
     for (const e of state.eggs ?? []) {
-      const child = World.restoreOrganism(e.child);
+      const child = World.restoreOrganism(e.child, world.config);
       world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, child });
     }
     world.history.importState(state.history);

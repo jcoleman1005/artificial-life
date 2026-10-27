@@ -126,7 +126,9 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
         (config.leapEnabled ? organism.abilities.leap : 0)) +
     (splitDiets(config) ? config.dietUpkeep * (herbivoryOf(organism, config) + organism.carnivory) : 0) +
     // Stage 2: every gene costs upkeep, so genome length is under selection.
-    (config.dnaVariationEnabled && organism.genome ? config.dnaUpkeepPerGene * (organism.genome.length / 3) : 0)
+    (config.dnaVariationEnabled && organism.genome ? config.dnaUpkeepPerGene * (organism.genome.length / 3) : 0) +
+    // Stage 3: each expressed connection of an acquired hidden unit (past the founders' 6) costs upkeep; founders pay 0.
+    (config.dnaEnabled && config.dnaGrowableBrain && organism.circuit ? config.dnaUpkeepPerConnection * organism.circuit.acquiredConnections : 0)
   );
 }
 

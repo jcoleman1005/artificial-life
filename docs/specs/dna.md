@@ -1,6 +1,6 @@
 # DNA: genome-encoded organisms
 
-Stage 1 (built and signed off 2026-10-26): a behaviour-neutral genome, on by default. Stage 1b (built 2026-10-26): two independent toggles, off by default, awaiting review of their gates. Stage 2 (built 2026-10-26): variation operators, off by default pending its gate.
+Stage 1 (built and signed off 2026-10-26): a behaviour-neutral genome, on by default. Stage 1b (built 2026-10-26): two independent toggles, off by default, awaiting review of their gates. Stage 2 (built 2026-10-26): variation operators, off by default pending its gate. Stage 3 (built 2026-10-27): growable brain, off by default pending review of its gate.
 
 ## Stage 1 as built (`dnaEnabled`, on by default)
 
@@ -64,6 +64,22 @@ Gates: 8 seeds × 3,000 ticks against the DNA default (`npm run experiment -- --
 ## Stage 2 as built (`dnaVariationEnabled`, off by default pending its gate)
 
 Code: `mutateGenomeVariation`, `mutateOnce`, `genomeStats` in `src/sim/dna.ts`; census `npm run census`. Point-mutation counts are Poisson over the genome (each gene keeps its legacy rate); a point mutation steps the dose or, with `dnaKeyFlipFraction`, flips a bit of the gene's index. Insertion adds a random gene at a random position, deletion removes one, duplication copies 1 to `dnaDuplicationMaxLength` genes elsewhere (`dnaDosageCompensation` halves doses to make it neutral; off). Every gene costs `dnaUpkeepPerGene` per tick; `dnaMaxGenes` caps length. Loading a save no longer re-adds deleted skip genes (`upgradeGenome` takes the saved input count). Gate status: see `docs/STATUS.md`.
+
+## Stage 3 as built (`dnaGrowableBrain`, off by default; needs `dnaEnabled`)
+
+Code: `compileCircuit`, `internalUnits`, `stripAcquiredTopology` in `src/sim/dna.ts`; `Circuit`, `scoreCircuit` in `src/sim/brain.ts`; tests `tests/dna-brain-growable.test.ts`; gate `docs/experiments/dna-stage3-gate.txt`. Genomes only change shape with Stage 2 on, so the switch does nothing useful without `dnaVariationEnabled`.
+
+- **Topology.** Skip connections (input → score) plus one hidden layer of up to M = `dnaMaxInternal` units (clamped to 6–256; default 16). No hidden-to-hidden edges, so the graph is acyclic by construction and no new gene class is needed.
+- **Modulo addressing.** Brain genes keep their Stage 1 keys; a skip gene's input is `index mod 52`, a hidden gene's unit is `(index >> 8) mod M` and input `(index & 0xff) mod 52`, bias and out genes `index mod M`, every output-bias gene adds to the one output bias. Every key therefore lands somewhere valid; canonical (Stage 1) keys map to themselves. Appending a brain input changes where wrapped (non-canonical) keys land; accepted.
+- **Compile at birth** (and on load) into flat typed arrays (CSR: per unit an offset into input-index and weight arrays; skip indices and weights; unit bias and out weight). Doses sum per slot in genome order like the dense decode.
+- **Pruning.** Zero skip weights are dropped; a unit with no (or zero) output weight is dropped with its inputs; a unit with no inputs is a constant `out · tanh(bias)`, folded into the output bias if no live unit precedes it, else kept as a constant entry. Summation order is the dense brain's, so the score equals `brainScore` of the same weights (up to the sign of a zero, which rounding and JSON erase).
+- **Evaluation.** `scoreCircuit` walks the arrays and allocates nothing. (The feature vector and the inspector's score breakdown around it still allocate per action, as on the dense path; changing that would break bit-identity with the dense brain.)
+- **Growth.** With the switch on, insertion's key pool covers hidden units 0..M−1 (955 slots instead of 415); key flips, duplication and crossover also move genes onto new units. A new unit is evaluated once it has an output gene and at least one input gene. Crossover groups a hidden unit's genes by the mapped unit.
+- **Upkeep.** Each live connection into a unit numbered ≥ 6 (in-edges plus the out edge) costs `dnaUpkeepPerConnection` (0.00005) per tick, on top of `dnaUpkeepPerGene` for every gene. Founders (6 units) pay nothing.
+- **Acquired topology** (for ablation): `stripAcquiredTopology(dna, config, 'all')` removes every brain gene the growable-off decode ignores (units ≥ 6 and wrapped keys); `'units'` removes only genes on units ≥ 6. The circuit compiled from the `'all'`-stripped genome scores exactly as the dense brain.
+- **Saves.** Nothing new: the circuit is never saved and is recompiled from the genome on load. The dense `brain` is still kept (and is what `brainDrift`/`hiddenStrength` describe).
+- **Neutrality.** Switch off: fingerprint unchanged. Switch on with Stage 2 off: founders have no acquired topology, so the world is bit-identical to the switch-off world (tested).
+- **Metrics.** `npm run experiment` reports `topo.acquiredUnits`, `topo.acquiredConnections`, `topo.connections` and `topo.withAcquired%` over living organisms; `npm run perf` has a `brain + growable` row.
 
 ## Sexual reproduction (decided 2026-10-26: cross genomes by key)
 

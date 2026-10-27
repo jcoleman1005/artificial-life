@@ -134,7 +134,11 @@ function score(template: Organism, body: Partial<Organism>, config: SimulationCo
   return { births: births / opts.arenas, alive: alive / opts.arenas, ever: reproducedSomewhere };
 }
 
-const samePhenotype = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b);
+// Typed arrays (a growable brain's circuit) compare element by element, so a mutation that changes the circuit is not silent.
+const samePhenotype = (a: object, b: object) => {
+  const plain = (_key: string, value: unknown) => (ArrayBuffer.isView(value) ? Array.from(value as unknown as ArrayLike<number>) : value);
+  return JSON.stringify(a, plain) === JSON.stringify(b, plain);
+};
 
 function runSeed(opts: Options): WorkerResult {
   const config = new World({ seed: opts.seed, ...opts.overrides, dnaEnabled: true, dnaVariationEnabled: true }).config;
