@@ -8,8 +8,7 @@ _Last updated: 2026-10-27 (Dynamic multi-front weather systems; Genome Lineage M
 ## Branches
 
 - `main`: everything to date, including the larger world, food regions, signals, the redesigned UI, mobility (diagonals, squeezing, leaping) and the brain as default. Start new work from here.
-- Old branches were merged and deleted on 2026-10-25. Each session works on its own branch off `main`; merge it once checked on the phone.
-- Each session works on its own branch off `main`; merge it once checked on the phone.
+- Old branches were merged and trimmed into `main` on 2026-10-27. Each session works on its own branch off `main`; merge it once checked on the phone.
 
 ## Running it
 
