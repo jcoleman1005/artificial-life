@@ -15,7 +15,7 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (o.investment !== undefined) out.push(pill('Gives each child', `${Math.round(o.investment * 100)}% of its energy`));
   if (o.fatCapacity !== undefined) out.push(pill('Fat', `${(o.fat ?? 0).toFixed(0)} / ${o.fatCapacity.toFixed(0)}`));
   if (o.torporDepth !== undefined)
-    out.push(pill('Torpor', `depth ${Math.round(o.torporDepth * 100)}%${(o.torpor ?? 0) > 0 ? ` · torpid (${o.torpor} left)` : ''}`));
+    out.push(pill('Torpor', `depth ${Math.round(o.torporDepth * 100)}%${o.rested ? ' · rested last tick' : ''}`));
   if (o.eggRate !== undefined) out.push(pill('Lays eggs', `${Math.round(o.eggRate * 100)}% of births`));
   if (o.metabolicRate !== undefined)
     out.push(pill('Metabolism', `${o.metabolicRate.toFixed(2)}× · ${birthCooldownOf(o, c)} ticks between births`));

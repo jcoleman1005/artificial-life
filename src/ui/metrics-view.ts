@@ -19,7 +19,7 @@ function lifeCards(metrics: WorldMetrics): string {
     );
   if (life.fatCapacity !== null) out.push(card('Fat', `${life.fatCapacity.toFixed(0)} cap <small>(${(life.fat ?? 0).toFixed(1)} held)</small>`));
   if (life.torporDepth !== null)
-    out.push(card('Torpor', `${Math.round(life.torporDepth * 100)}% deep <small>(${life.torpid ?? 0} torpid now)</small>`));
+    out.push(card('Torpor', `${Math.round(life.torporDepth * 100)}% deep <small>(${life.resting ?? 0} resting now)</small>`));
   if (life.eggRate !== null)
     out.push(card('Eggs', `${life.eggs ?? 0} waiting <small>(${Math.round(life.eggRate * 100)}% of births; ${life.eggsHatchedTotal} hatched, ${life.eggsDecayedTotal} failed)</small>`));
   if (life.metabolicRate !== null) out.push(card('Metabolism', `${life.metabolicRate.toFixed(2)}×`));

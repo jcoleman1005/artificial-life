@@ -56,11 +56,9 @@ import {
   founderLife,
   inheritLife,
   investmentOf,
-  isTorpid,
   lifeForConfig,
   lifeMatchesConfig,
   torporUpkeepFactor,
-  torporWakeRadius,
   LIFE_GENES,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
@@ -728,10 +726,6 @@ export class World {
       /** A move that trades places with this child or parent instead. */
       swapWithId?: string;
       reproTargetKey?: string;
-      /** In torpor this tick: no decision is made, and upkeep is reduced. */
-      torpid?: boolean;
-      /** Torpor ends this tick (food near, or the timer ran out): it acts normally and pays the wake cost. */
-      waking?: boolean;
       approved: boolean;
       outcome: DecisionOutcome;
     }
@@ -740,27 +734,9 @@ export class World {
 
     for (const org of sortedLiving) {
       const sensed = senseEnvironment(org, snapshot, this.config);
-      // Torpor: a torpid organism makes no decision until food is near (closer
-      // the deeper it sleeps) or its timer runs out.
-      let torpid = false;
-      let waking = false;
-      if (this.config.torporEnabled && isTorpid(org)) {
-        const radius = torporWakeRadius(org, this.config);
-        const foodNear =
-          sensed.currentCellFood > 0 || (sensed.nearestFood !== null && sensed.nearestFood.distance <= radius);
-        waking = foodNear || (org.torpor ?? 0) <= 1;
-        torpid = !waking;
-      }
-      let chosenAction: LegalAction;
-      let scores: ActionScore[];
-      if (torpid) {
-        chosenAction = { type: 'REST', target: { x: org.x, y: org.y } };
-        scores = [];
-      } else {
-        const legalActions = getLegalActions(org, snapshot, this.config, sensed);
-        const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
-        ({ chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng));
-      }
+      const legalActions = getLegalActions(org, snapshot, this.config, sensed);
+      const choose = this.config.controller === 'brain' ? evaluateBrain : evaluatePolicy;
+      const { chosenAction, scores } = choose(org, legalActions, sensed, this.config, this.prng);
 
       let moveTargetKey: string | undefined;
       let swapWithId: string | undefined;
@@ -788,8 +764,6 @@ export class World {
         moveTargetKey,
         swapWithId,
         reproTargetKey,
-        ...(torpid ? { torpid } : {}),
-        ...(waking ? { waking } : {}),
         approved: true,
         outcome: 'success',
       });
@@ -960,16 +934,15 @@ export class World {
       let outcome = item.outcome;
       // Base metabolism, plus the upkeep of carry capacity
       let metabolism = metabolismCost(organism, this.config);
-      if (item.torpid) metabolism *= torporUpkeepFactor(organism, this.config);
+      // Resting saves upkeep in proportion to torpor depth.
+      if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);
       let energyDelta = -metabolism;
       organism.energy -= metabolism;
-      if (item.waking) {
-        // Coming out of torpor costs energy, more the deeper it was.
+      if (this.config.torporEnabled && organism.rested && chosenAction.type !== 'REST') {
+        // Acting right after a rest costs energy to wake, more the deeper the rest.
         const wakeCost = this.config.torporWakeCost * (organism.torporDepth ?? 0);
         organism.energy -= wakeCost;
         energyDelta -= wakeCost;
-        organism.torpor = 0;
-        organism.restStreak = 0;
       }
 
       switch (chosenAction.type) {
@@ -1180,20 +1153,7 @@ export class World {
         }
       }
 
-      if (this.config.torporEnabled) {
-        if (item.torpid) {
-          organism.torpor = (organism.torpor ?? 0) - 1;
-        } else if (chosenAction.type === 'REST' && (organism.torporDepth ?? 0) > 0) {
-          // Resting long enough sets torpor in.
-          organism.restStreak = (organism.restStreak ?? 0) + 1;
-          if (organism.restStreak >= this.config.torporEntryTicks) {
-            organism.torpor = this.config.torporTimer;
-            organism.restStreak = 0;
-          }
-        } else {
-          organism.restStreak = 0;
-        }
-      }
+      if (this.config.torporEnabled) organism.rested = chosenAction.type === 'REST';
 
       // Fat is drawn on when energy runs low.
       if (this.config.fatEnabled && (organism.fat ?? 0) > 0) {
@@ -1818,7 +1778,7 @@ export class World {
       metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
       clutchSize: mean(c.clutchGeneEnabled, (o) => o.clutchSize ?? 1),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
-      torpid: c.torporEnabled ? organisms.filter(isTorpid).length : null,
+      resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,
       eggsLaidTotal: this.eggsLaidTotal,
       eggsHatchedTotal: this.eggsHatchedTotal,

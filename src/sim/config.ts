@@ -127,10 +127,8 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   torporEnabled: true,
   torporFounder: 0.1,
   torporStep: 0.1,
-  torporEntryTicks: 3,
-  torporSaving: 0.9, // a fully torpid organism pays a tenth of its upkeep
+  torporSaving: 0.9, // a full-depth rest pays a tenth of its upkeep
   torporWakeCost: 4,
-  torporTimer: 60,
   eggsEnabled: true,
   eggFounder: 0.1,
   eggStep: 0.1,

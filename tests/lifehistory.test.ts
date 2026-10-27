@@ -217,53 +217,58 @@ describe('fat reserve', () => {
 
 describe('torpor', () => {
   const torporWorld = (cfg: Partial<SimulationConfig> = {}) =>
-    emptyWorld({ torporEnabled: true, tickMetabolismCost: 1, torporSaving: 0.9, torporWakeCost: 4, torporEntryTicks: 3, torporTimer: 10, ...cfg });
+    emptyWorld({ torporEnabled: true, tickMetabolismCost: 1, torporSaving: 0.9, torporWakeCost: 4, ...cfg });
 
-  it('sets in after enough rest, and then upkeep falls with depth and the organism makes no choices', () => {
+  it('a resting tick pays upkeep × (1 − saving × depth), from the first rest, and the organism still scores its choices', () => {
     const w = torporWorld();
     const o = addOrganism(w, 'a', 5, 5, { energy: 80, torporDepth: 1, policy: { restDrive: 2 } });
-    for (let t = 0; t < 3; t++) w.step();
-    expect(o.torpor).toBe(10);
-    expect(o.energy).toBeCloseTo(77); // three ordinary ticks at 1
     w.step();
-    expect(o.torpor).toBe(9);
-    expect(o.energy).toBeCloseTo(77 - 0.1);
+    expect(o.energy).toBeCloseTo(80 - 0.1);
+    expect(o.rested).toBe(true);
     expect(o.recentHistory[0].chosenAction.type).toBe('REST');
-    expect(o.recentHistory[0].scores).toEqual([]);
+    expect(o.recentHistory[0].scores.length).toBeGreaterThan(0);
   });
 
-  it('shallower torpor saves less', () => {
+  it('shallower rest saves less', () => {
     const w = torporWorld();
-    const o = addOrganism(w, 'a', 5, 5, { energy: 80, torporDepth: 0.5, torpor: 5 });
+    const o = addOrganism(w, 'a', 5, 5, { energy: 80, torporDepth: 0.5, policy: { restDrive: 2 } });
     w.step();
     expect(o.energy).toBeCloseTo(80 - 0.55);
   });
 
-  it('wakes, paying a cost, when food is near; deeper sleepers only notice food closer', () => {
-    const wakes = (depth: number, foodAt: [number, number]) => {
-      const w = torporWorld();
-      w.foodPatches.set(`${foodAt[0]},${foodAt[1]}`, { x: foodAt[0], y: foodAt[1], stock: 3, capacity: 3 });
-      const o = addOrganism(w, 'a', 5, 5, { energy: 80, torporDepth: depth, torpor: 8 });
+  // The same organism eating from the same patch, with and without having rested last tick.
+  const eatEnergies = (rested: boolean, depth: number, ticks: number): number[] => {
+    const w = torporWorld();
+    w.foodPatches.set('5,5', { x: 5, y: 5, stock: 5, capacity: 5 });
+    const o = addOrganism(w, 'a', 5, 5, { energy: 50, torporDepth: depth, rested, policy: { eatDrive: 5 } });
+    const out: number[] = [];
+    for (let t = 0; t < ticks; t++) {
       w.step();
-      return { woke: (o.torpor ?? 0) === 0, energy: o.energy };
-    };
-    const shallow = wakes(0.34, [7, 5]); // radius floor(3 × 0.66) = 1... food 2 away, still asleep
-    expect(shallow.woke).toBe(false);
-    const light = wakes(0, [7, 5]); // radius 3: wakes
-    expect(light.woke).toBe(true);
-    const deepUnderfoot = wakes(1, [5, 5]);
-    expect(deepUnderfoot.woke).toBe(true);
-    expect(deepUnderfoot.energy).toBeLessThan(80 - 1 * 0.1 - 3.9); // paid 4 to wake
-    expect(wakes(1, [6, 5]).woke).toBe(false);
+      out.push(o.energy);
+    }
+    return out;
+  };
+
+  it('acting right after a rest pays torporWakeCost × depth once, then nothing', () => {
+    const rested = eatEnergies(true, 0.5, 2);
+    const fresh = eatEnergies(false, 0.5, 2);
+    expect(fresh[0] - rested[0]).toBeCloseTo(4 * 0.5);
+    expect(fresh[1] - rested[1]).toBeCloseTo(4 * 0.5); // the first-tick gap carries; no second fee
   });
 
-  it('wakes when its timer runs out', () => {
+  it('staying at rest never pays the wake cost, and depth 0 never does', () => {
     const w = torporWorld();
-    const o = addOrganism(w, 'a', 5, 5, { energy: 80, torporDepth: 1, torpor: 2 });
+    const deep = addOrganism(w, 'a', 5, 5, { energy: 80, torporDepth: 1, rested: true, policy: { restDrive: 2 } });
     w.step();
-    expect(o.torpor).toBe(1);
+    expect(deep.energy).toBeCloseTo(80 - 0.1);
+    expect(eatEnergies(true, 0, 1)[0]).toBeCloseTo(eatEnergies(false, 0, 1)[0]);
+  });
+
+  it('with the switch off the organism carries no rest state', () => {
+    const w = torporWorld({ torporEnabled: false });
+    const o = addOrganism(w, 'a', 5, 5, { energy: 80, policy: { restDrive: 2 } });
     w.step();
-    expect(o.torpor).toBe(0);
+    expect(o.rested).toBeUndefined();
   });
 });
 

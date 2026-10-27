@@ -303,7 +303,7 @@ export interface Organism {
   readonly investment?: number;
   /** Fat reserve capacity: energy stored above maxEnergy, costing upkeep per unit of capacity. */
   readonly fatCapacity?: number;
-  /** Torpor depth 0..1: how much upkeep falls while torpid, and how deaf to food it is. */
+  /** Torpor depth 0..1: how much upkeep falls on a resting tick, and how much acting after a rest costs. */
   readonly torporDepth?: number;
   /** Chance a birth is laid as an egg 0..1. */
   readonly eggRate?: number;
@@ -313,10 +313,8 @@ export interface Organism {
   readonly clutchSize?: number;
   /** Fat held now (state; only with fatEnabled). */
   fat?: number;
-  /** Ticks of torpor left, 0 or absent when awake (state; only with torporEnabled). */
-  torpor?: number;
-  /** Consecutive ticks spent resting (state; only with torporEnabled). */
-  restStreak?: number;
+  /** Chose REST last tick, so acting now pays the wake cost (state; only with torporEnabled). */
+  rested?: boolean;
   /** First tick it may reproduce again (state; only with metabolismGeneEnabled). */
   nextBirthTick?: number;
   /** Organisms this one has killed. */
@@ -588,10 +586,8 @@ export interface SimulationConfig {
   torporEnabled: boolean; // Organisms can evolve a deep rest below ordinary REST
   torporFounder: number; // Founders' torpor depth
   torporStep: number;
-  torporEntryTicks: number; // Consecutive rests before torpor sets in
-  torporSaving: number; // Upkeep falls by this fraction at depth 1
-  torporWakeCost: number; // Energy to wake at depth 1 (scales with depth)
-  torporTimer: number; // Ticks a torpor lasts if nothing wakes it
+  torporSaving: number; // Upkeep falls by this fraction on a resting tick at depth 1
+  torporWakeCost: number; // Energy paid to act after a rest at depth 1 (scales with depth)
   eggsEnabled: boolean; // Organisms can evolve to lay eggs that wait for food
   eggFounder: number; // Founders' chance of laying an egg
   eggStep: number;
@@ -705,7 +701,7 @@ export interface WorldMetrics {
   life: LifeMetrics | null;
 }
 
-/** Population means of the life-history genes that are switched on, and egg/torpor/fat counts. */
+/** Population means of the life-history genes that are switched on, and egg/rest/fat counts. */
 export interface LifeMetrics {
   reproThreshold: number | null;
   investment: number | null;
@@ -714,9 +710,9 @@ export interface LifeMetrics {
   eggRate: number | null;
   metabolicRate: number | null;
   clutchSize: number | null;
-  /** Mean fat held, and organisms in torpor now. */
+  /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
-  torpid: number | null;
+  resting: number | null;
   /** Eggs waiting now, and laid / hatched / failed so far. */
   eggs: number | null;
   eggsLaidTotal: number;

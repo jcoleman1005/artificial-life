@@ -10,7 +10,7 @@ import type { Organism, SimulationConfig } from './types';
  * - threshold:  a low threshold gives more, poorer children (a flat tax each).
  * - investment: a rich child leaves the parent poorer.
  * - fat:        upkeep per unit of capacity, and a share of stored food is lost.
- * - torpor:     deeper saves more upkeep but wakes more slowly and costs energy to wake.
+ * - torpor:     deeper rests save more upkeep but cost energy to act on the tick after a rest.
  * - eggs:       extra energy to lay, a decay chance, and a hatchling smaller than the egg.
  * - metabolism: a fast rate pays more upkeep and breeds sooner; a slow one pays less and waits longer.
  * - clutch:     children per mating (matings only); the pair's energy is split among them, and a
@@ -182,12 +182,6 @@ export function birthCooldownOf(o: Readonly<Pick<Organism, 'metabolicRate'>>, c:
 export const fatRoom = (o: Readonly<Pick<Organism, 'fatCapacity' | 'fat'>>, c: Readonly<SimulationConfig>): number =>
   c.fatEnabled ? Math.max(0, (o.fatCapacity ?? 0) - (o.fat ?? 0)) : 0;
 
-/** Upkeep multiplier while torpid: 1 awake, falling to 1 − torporSaving at full depth. */
+/** Upkeep multiplier on a tick spent resting: 1 awake, falling to 1 − torporSaving at full depth. */
 export const torporUpkeepFactor = (o: Readonly<Pick<Organism, 'torporDepth'>>, c: Readonly<SimulationConfig>): number =>
   1 - c.torporSaving * (o.torporDepth ?? 0);
-
-/** How far (Manhattan) food can be and still wake a torpid organism: deeper means deafer, 0 is only the cell underfoot. */
-export const torporWakeRadius = (o: Readonly<Pick<Organism, 'torporDepth'>>, c: Readonly<SimulationConfig>): number =>
-  Math.floor(c.sensingRadius * (1 - (o.torporDepth ?? 0)));
-
-export const isTorpid = (o: Readonly<Pick<Organism, 'torpor'>>): boolean => (o.torpor ?? 0) > 0;
