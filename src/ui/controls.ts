@@ -21,6 +21,10 @@ export interface SettingsCallbacks {
   onPlantsChange: (enabled: boolean) => void;
   onMemoryChange: (enabled: boolean) => void;
   onGenomeVariationChange: (enabled: boolean) => void;
+  onGrowableBrainChange: (enabled: boolean) => void;
+  onContinuousAbilitiesChange: (enabled: boolean) => void;
+  onSplitDietsChange: (enabled: boolean) => void;
+  onWeatherChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -39,10 +43,14 @@ export interface ExperimentToggles {
   signalsEnabled: boolean;
   dispersalEnabled: boolean;
   windfallsEnabled: boolean;
+  weatherEnabled: boolean;
   immigrationEnabled: boolean;
   plantsEnabled: boolean;
   memoryEnabled: boolean;
   dnaVariationEnabled: boolean;
+  dnaGrowableBrain: boolean;
+  dnaContinuousAbilities: boolean;
+  dnaSplitDiets: boolean;
   seasonsEnabled: boolean;
   controller: 'dials' | 'brain';
   worldSize: WorldSize;
