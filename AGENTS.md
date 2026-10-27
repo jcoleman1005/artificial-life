@@ -28,8 +28,9 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Energy only comes from eating food; organisms share food, never energy.
 - Reproduction by cloning (REPRODUCE); offspring inherit weights with mutation.
 - Mating (`sexEnabled`, on; brain only): MATE needs mutual consent the same tick; genes come whole from one parent or the other, then mutate as for clones.
-- Mating rule (2026-10-27): both at their own threshold; each pays own energy × own investment + tax; carrier's clutch splits the shares; below `minViableChildEnergy` the clutch fails (paid, lost, counted); no eggs.
-- Clutch gene (`clutchGeneEnabled`, on; trait 46): children per mating, founders 1, 1–6; matings only.
+- Mating rule (2026-10-27; refactored to continuous fecundity and sequential viable allocation): both at own threshold and cost; carrier's continuous clutch partitions viable children sequentially with sub-viable remainder dissipated as metabolic heat, eliminating the catastrophic cliff; no eggs.
+- Clutch gene (`clutchGeneEnabled`, on; trait 46): continuous fecundity partition slider ($f \in [1.0, 6.0]$), founders 1, steps smoothly by `clutchStep` 0.2; matings only.
+- Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
 - Carrion (`carrionEnabled`): bodies rot after `carrionLifetime`; eating one's newborn must return less than making it (tested).
 - Diet (`carnivory`): inherited; trades plant yield for carrion share.

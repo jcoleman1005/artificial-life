@@ -477,31 +477,53 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
     const seen = new Set<string>();
     for (let seed = 0; seed < 16; seed++) {
       const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5 });
-      pair(world, { energy: 80, clutchSize: 3 }, { energy: 80, clutchSize: 1.4 });
+      pair(world, { energy: 80, clutchSize: 3 }, { energy: 80, clutchSize: 1 });
       world.step();
       const kids = children(world);
       const carrier = kids[0].lineage.parentId;
       expect(kids.every((k) => k.lineage.parentId === carrier)).toBe(true);
-      expect(kids).toHaveLength(carrier === 'a' ? 3 : 1); // 1.4 rounds to 1
+      expect(kids).toHaveLength(carrier === 'a' ? 3 : 1);
       for (const k of kids) expect(k.energy).toBeCloseTo(80 / kids.length, 12);
       seen.add(carrier!);
     }
     expect(seen.size).toBe(2);
   });
 
-  it('fails a clutch below minViableChildEnergy: both pay, no children, and the energy is accounted for exactly', () => {
+  it('continuous clutch size partitions into floor(f) plus probabilistic marginal child', () => {
+    const counts = new Set<number>();
+    for (let seed = 0; seed < 24; seed++) {
+      const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5 });
+      pair(world, { energy: 80, clutchSize: 1.4 }, { energy: 80, clutchSize: 1.4 });
+      world.step();
+      counts.add(children(world).length);
+    }
+    expect(counts).toEqual(new Set([1, 2])); // 1.4 yields 1 or 2 children
+  });
+
+  it('allocates viable children sequentially and dissipates sub-viable remainder without catastrophic cliff', () => {
     const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10 });
     const [a, b] = pair(world, { energy: 50, investment: 0.2, clutchSize: 6 }, { energy: 50, investment: 0.2, clutchSize: 6 });
     world.step();
-    expect(children(world)).toHaveLength(0); // (10 + 10) / 6 < 10
+    expect(children(world)).toHaveLength(2); // pool 20 / minViable 10 = 2 viable children
     expect([a.energy, b.energy]).toEqual([35, 35]);
     expect(world.matingsTotal).toBe(1);
+    expect(world.clutchesFailedTotal).toBe(0);
+    expect(world.matingChildrenLostTotal).toBe(4);
+    expect(world.matingEnergyLostTotal).toBe(0);
+    expect(world.birthsTotal).toBe(2);
+    expect(a.recentHistory[0].outcome).toBe('success');
+  });
+
+  it('fails a clutch only when pool cannot afford a single viable child', () => {
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10 });
+    const [a, b] = pair(world, { energy: 40, investment: 0.1, clutchSize: 2 }, { energy: 40, investment: 0.1, clutchSize: 2 });
+    world.step();
+    expect(children(world)).toHaveLength(0); // pool 8 < 10
     expect(world.clutchesFailedTotal).toBe(1);
-    expect(world.matingChildrenLostTotal).toBe(6);
-    expect(world.matingEnergyLostTotal).toBe(20);
+    expect(world.matingChildrenLostTotal).toBe(2);
+    expect(world.matingEnergyLostTotal).toBe(8);
     expect(world.birthsTotal).toBe(0);
     expect(a.recentHistory[0].outcome).toBe('clutch_failed');
-    expect(a.recentHistory[0].energyDelta).toBe(-15);
   });
 
   it('conserves energy across a clutch, counting children that find no room as lost', () => {

@@ -569,7 +569,7 @@ export class World {
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
-      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, child: World.saveOrganism(e.child) })),
+      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child: World.saveOrganism(e.child) })),
       organisms: Array.from(this.organisms.values(), (o) => World.saveOrganism(o)),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
@@ -621,7 +621,7 @@ export class World {
     world.eggs.clear();
     for (const e of state.eggs ?? []) {
       const child = World.restoreOrganism(e.child);
-      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, child });
+      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child });
     }
     world.history.importState(state.history);
     world.selectedOrganismId = null;
@@ -1069,17 +1069,17 @@ export class World {
         case 'REPRODUCE_WEST': {
           if (approved && chosenAction.target) {
             const childEnergy = Math.floor(organism.energy * investmentOf(organism, this.config));
-            const totalReproCost = childEnergy + this.config.reproductionMetabolismTax;
-            // An egg costs extra to lay. The roll is drawn whenever the parent can lay eggs at all.
-            const lays = this.config.eggsEnabled && (organism.eggRate ?? 0) > 0 && this.prng.next() < (organism.eggRate ?? 0);
-            const eggCost = lays ? this.config.eggExtraCost : 0;
+            const eggAlloc = this.config.eggsEnabled ? (organism.eggAllocation ?? organism.eggRate ?? 0) : 0;
+            const lays = eggAlloc > 0;
+            const eggCost = lays ? Math.round(this.config.eggExtraCost * eggAlloc) : 0;
+            const totalReproCost = childEnergy + this.config.reproductionMetabolismTax + eggCost;
 
-            if (organism.energy > totalReproCost + eggCost && childEnergy > 0) {
+            if (organism.energy > totalReproCost && childEnergy > 0) {
               // Where the child lands: next to the parent, or (with
               // dispersal) any free cell up to the parent's dispersal
               // distance it can afford, picked at random.
-              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost - eggCost, birthBlocked);
-              const birthCost = totalReproCost + birth.extraCost + eggCost;
+              const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost, birthBlocked);
+              const birthCost = totalReproCost + birth.extraCost;
               organism.energy -= birthCost;
               organism.offspringCount++;
               energyDelta -= birthCost;
@@ -1091,7 +1091,7 @@ export class World {
               if (this.config.metabolismGeneEnabled) organism.nextBirthTick = this.tick + birthCooldownOf(organism, this.config);
               if (lays) {
                 // Counted as a birth when it hatches.
-                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, child });
+                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, shell: eggCost, child });
                 this.eggsLaidTotal++;
               } else {
                 newBorns.push(child);
@@ -1394,15 +1394,33 @@ export class World {
     if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
     this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
 
-    const clutch = clutchSizeOf(carrier, config);
-    const perChild = pool / clutch;
+    const f = clutchSizeOf(carrier, config);
+    const N = Math.floor(f);
+    const remainder = f - N;
+    const targetCount = N + (remainder > 0 && this.prng.next() < remainder ? 1 : 0);
+
+    const maxViable = Math.floor(pool / config.minViableChildEnergy);
+    const viableCount = Math.min(targetCount, maxViable);
+
     let born = 0;
-    if (perChild < config.minViableChildEnergy) {
+    if (viableCount === 0) {
       this.clutchesFailedTotal++;
+      this.matingChildrenLostTotal += targetCount;
+      this.matingEnergyLostTotal += pool;
     } else {
-      for (let k = 0; k < clutch; k++) {
+      const perChild = viableCount === targetCount ? pool / targetCount : config.minViableChildEnergy;
+      const poolAllocated = perChild * viableCount;
+      const heatSurplus = pool - poolAllocated;
+      this.matingEnergyLostTotal += heatSurplus;
+
+      for (let k = 0; k < viableCount; k++) {
         if (k > 0) cells = free(carrier);
-        if (cells.length === 0) break; // no room for the rest
+        if (cells.length === 0) {
+          const unplaced = viableCount - born;
+          this.matingChildrenLostTotal += unplaced;
+          this.matingEnergyLostTotal += perChild * unplaced;
+          break; // no room for the rest
+        }
         const target = this.prng.choice(cells);
         const birth = this.birthCell(carrier, target, carrier.energy, blocked);
         carrier.energy -= birth.extraCost;
@@ -1412,11 +1430,10 @@ export class World {
         newBorns.push(this.makeChild(carrier, other, birth, perChild));
         born++;
       }
+      this.matingChildrenLostTotal += (targetCount - viableCount);
     }
     this.birthsTotal += born;
     this.matingChildrenTotal += born;
-    this.matingChildrenLostTotal += clutch - born;
-    this.matingEnergyLostTotal += pool - perChild * born;
 
     for (const parent of [carrier, other]) {
       parent.offspringCount += born;
@@ -1441,9 +1458,9 @@ export class World {
   }
 
   /**
-   * Eggs decay with a small chance each tick (drawn for every egg), and hatch
-   * when food is within eggHatchRadius and the cell is free. A hatchling
-   * starts with eggHatchEfficiency of the egg's energy.
+   * Eggs decay when their protective shell is depleted, and hatch when plenty
+   * conditions and food patch stock are near. A hatchling starts with
+   * eggHatchEfficiency of the egg's energy.
    */
   private stepEggs(): void {
     if (this.eggs.size === 0) return;
@@ -1451,10 +1468,15 @@ export class World {
     let occupied: Set<string> | null = null;
     for (const [id, egg] of Array.from(this.eggs)) {
       if (this.prng.next() < eggDecayChance) {
-        this.eggs.delete(id);
-        this.eggsDecayedTotal++;
-        continue;
+        if (egg.shell > 0) {
+          egg.shell -= 1;
+        } else {
+          this.eggs.delete(id);
+          this.eggsDecayedTotal++;
+          continue;
+        }
       }
+      if (this.isCellLean(egg.x, egg.y)) continue;
       if (!this.foodWithin(egg.x, egg.y, eggHatchRadius)) continue;
       if (occupied === null) {
         occupied = new Set();
@@ -1474,6 +1496,18 @@ export class World {
         memory: newMemory(egg.x, egg.y),
       });
     }
+  }
+
+  /** Whether the cell at (x, y) is currently in a lean season. */
+  private isCellLean(x: number, y: number): boolean {
+    if (this.config.seasonLength <= 0) return false;
+    if (this.foodRegions.length === 0 || !this.config.staggeredSeasons) {
+      return seasonAt(this.tick, this.config)?.season === 'lean';
+    }
+    const idx = y * this.config.gridWidth + x;
+    const regIdx = this.soil().region[idx];
+    const r = regIdx >= 0 ? this.foodRegions[regIdx] : undefined;
+    return regionSeasonAt(this.tick, r, this.config)?.season === 'lean';
   }
 
   /** Whether any food patch with stock lies within `radius` cells (square) of a cell. */
@@ -1774,7 +1808,8 @@ export class World {
       investment: mean(c.investmentGeneEnabled, (o) => o.investment ?? c.reproductionEnergyFraction),
       fatCapacity: mean(c.fatEnabled, (o) => o.fatCapacity ?? 0),
       torporDepth: mean(c.torporEnabled, (o) => o.torporDepth ?? 0),
-      eggRate: mean(c.eggsEnabled, (o) => o.eggRate ?? 0),
+      eggAllocation: mean(c.eggsEnabled, (o) => o.eggAllocation ?? o.eggRate ?? 0),
+      eggRate: mean(c.eggsEnabled, (o) => o.eggAllocation ?? o.eggRate ?? 0),
       metabolicRate: mean(c.metabolismGeneEnabled, (o) => o.metabolicRate ?? 1),
       clutchSize: mean(c.clutchGeneEnabled, (o) => o.clutchSize ?? 1),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),

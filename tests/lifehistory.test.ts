@@ -66,7 +66,7 @@ function addOrganism(world: World, id: string, x: number, y: number, o: Partial<
   return organism;
 }
 
-const lifeFields = (o: Organism) => [o.reproThreshold, o.investment, o.fatCapacity, o.torporDepth, o.eggRate, o.metabolicRate, o.clutchSize];
+const lifeFields = (o: Organism) => [o.reproThreshold, o.investment, o.fatCapacity, o.torporDepth, o.eggAllocation ?? o.eggRate, o.metabolicRate, o.clutchSize];
 
 describe('life-history genes: switches and inheritance', () => {
   it('founders carry only the genes that are switched on, at their starting values', () => {
@@ -105,7 +105,7 @@ describe('life-history genes: switches and inheritance', () => {
       expect(o.fatCapacity!).toBeGreaterThanOrEqual(0);
       expect(o.fatCapacity!).toBeLessThanOrEqual(c.maxFat);
       expect(o.fat ?? 0).toBeLessThanOrEqual(o.fatCapacity! + 1e-9);
-      for (const v of [o.torporDepth!, o.eggRate!]) expect(v >= 0 && v <= 1).toBe(true);
+      for (const v of [o.torporDepth!, (o.eggAllocation ?? o.eggRate)!]) expect(v >= 0 && v <= 1).toBe(true);
       expect(o.metabolicRate!).toBeGreaterThanOrEqual(c.metabolismMin);
       expect(o.metabolicRate!).toBeLessThanOrEqual(c.metabolismMax);
       expect(o.clutchSize!).toBeGreaterThanOrEqual(c.clutchMin);
@@ -275,7 +275,7 @@ describe('torpor', () => {
 describe('eggs', () => {
   const eggWorld = (cfg: Partial<SimulationConfig> = {}) =>
     emptyWorld({ eggsEnabled: true, reproductionThreshold: 50, eggExtraCost: 3, reproductionMetabolismTax: 5, eggDecayChance: 0, eggHatchRadius: 2, eggHatchEfficiency: 0.8, ...cfg });
-  const layer = (w: World) => addOrganism(w, 'p', 5, 5, { energy: 100, eggRate: 1, policy: { reproduceDrive: 2 } });
+  const layer = (w: World) => addOrganism(w, 'p', 5, 5, { energy: 100, eggAllocation: 1, policy: { reproduceDrive: 2 } });
 
   it('a laid egg is not an organism; the parent pays the child, the tax and the laying cost', () => {
     const w = eggWorld();
@@ -315,8 +315,8 @@ describe('eggs', () => {
   it('can decay, and can hatch into an empty world: a lineage survives its parents', () => {
     const w = eggWorld({ eggDecayChance: 1 });
     layer(w);
-    w.step();
-    w.step();
+    w.step(); // lays egg with shell 3
+    for (let t = 0; t < 4; t++) w.step(); // shell degrades 3->2->1->0, then egg decays
     expect(w.eggs.size).toBe(0);
     expect(w.eggsDecayedTotal).toBe(1);
 

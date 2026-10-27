@@ -20,7 +20,7 @@ import type { Organism, SimulationConfig } from './types';
  * fixed value applies, so the world is bit-identical to one without the gene.
  */
 
-export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggRate' | 'metabolicRate' | 'clutchSize';
+export type LifeField = 'reproThreshold' | 'investment' | 'fatCapacity' | 'torporDepth' | 'eggAllocation' | 'metabolicRate' | 'clutchSize';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -72,7 +72,7 @@ export const LIFE_GENES: readonly LifeGene[] = [
     max: () => 1,
   },
   {
-    field: 'eggRate',
+    field: 'eggAllocation',
     traitId: 44,
     enabled: (c) => c.eggsEnabled,
     founder: (c) => c.eggFounder,
@@ -167,9 +167,9 @@ export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold'>>, c: Re
 export const investmentOf = (o: Readonly<Pick<Organism, 'investment'>>, c: Readonly<SimulationConfig>): number =>
   o.investment ?? c.reproductionEnergyFraction;
 
-/** Children per mating: the clutch gene rounded, at least 1; 1 without the gene. */
+/** Children per mating: continuous fecundity partition, at least clutchMin (1); 1 without the gene. */
 export const clutchSizeOf = (o: Readonly<Pick<Organism, 'clutchSize'>>, c: Readonly<SimulationConfig>): number =>
-  c.clutchGeneEnabled ? Math.max(1, Math.round(o.clutchSize ?? 1)) : 1;
+  c.clutchGeneEnabled ? Math.max(c.clutchMin, o.clutchSize ?? 1) : 1;
 
 export const metabolicRateOf = (o: Readonly<Pick<Organism, 'metabolicRate'>>, c: Readonly<SimulationConfig>): number =>
   c.metabolismGeneEnabled ? (o.metabolicRate ?? 1) : 1;
