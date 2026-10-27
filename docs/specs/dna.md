@@ -1,8 +1,8 @@
 # DNA: genome-encoded organisms
 
-Stage 1 (built 2026-10-26): a behaviour-neutral genome. Stage 1b toggles are proposals, built only after the Stage 1 gate is signed off, each with its own gate.
+Stage 1 (built and signed off 2026-10-26): a behaviour-neutral genome, on by default. Stage 1b (built 2026-10-26): two independent toggles, off by default, awaiting review of their gates. Stage 2 (built 2026-10-26): variation operators, off by default pending its gate.
 
-## Stage 1 as built (`dnaEnabled`, off by default until the gate is signed off)
+## Stage 1 as built (`dnaEnabled`, on by default)
 
 Code: `src/sim/dna.ts`; tests: `tests/dna.test.ts`.
 
@@ -19,7 +19,7 @@ Code: `src/sim/dna.ts`; tests: `tests/dna.test.ts`.
 | register weights (`memoryWeights`, 30) | traits 10–39 | 0 | Σ dose |
 | brain weights (skip 47, hidden 6 × 47, hidden bias 6, out 6, out bias 1) | brain gene classes 1–5 | 0 (no connection) | Σ dose |
 
-Traits 8–9 are reserved. Traits 40–45 are the life-history genes (reproduction threshold, investment, fat capacity, torpor depth, egg rate, metabolic rate; `docs/decisions.md`, `src/sim/lifehistory.ts`): present in a genome only while their switch is on, decoded to their starting value if a switch is on and the gene is missing, and clamped to their bounds. Not in the genome: the policy dials (still inherited directly; open question whether to add them), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
+Trait 8 is herbivory (split diets only); 9 is reserved. Traits 40–45 are the life-history genes (reproduction threshold, investment, fat capacity, torpor depth, egg rate, metabolic rate; `docs/decisions.md`, `src/sim/lifehistory.ts`): present in a genome only while their switch is on, decoded to their starting value if a switch is on and the gene is missing, and clamped to their bounds. Not in the genome: the policy dials (decided 2026-10-26: they stay outside, inherited directly, so DNA covers the brain controller and the body), and what an organism remembers (`food`, `signal`, `home`, register values): that is lifetime working memory, and a newborn starts with `newMemory(birthX, birthY)`.
 
 ### Format
 
@@ -40,23 +40,29 @@ A genome is a `Uint32Array` of genes, three words each: `[key, low, high]`. `key
 
 Because Stage 1 is bit-identical, the gate is met by construction; switching it on by default only adds the genome's cost.
 
-## Stage 2 as built (`dnaVariationEnabled`, off by default pending its gate)
+Note: in the default world many seeds go extinct in an early lean season whatever DNA does (5 of 8 by 10k ticks with DNA off; see `docs/findings.md`), so stage gates compare survivors and report `extinct`.
 
-Code: `mutateGenomeVariation`, `mutateOnce`, `genomeStats` in `src/sim/dna.ts`; census `npm run census`. Point-mutation counts are Poisson over the genome (each gene keeps its legacy rate); a point mutation steps the dose or, with `dnaKeyFlipFraction`, flips a bit of the gene's index. Insertion adds a random gene at a random position, deletion removes one, duplication copies 1 to `dnaDuplicationMaxLength` genes elsewhere (`dnaDosageCompensation` halves doses to make it neutral; off). Every gene costs `dnaUpkeepPerGene` per tick; `dnaMaxGenes` caps length. Loading a save no longer re-adds deleted skip genes (`upgradeGenome` takes the saved input count). Gate status: see `docs/STATUS.md`.
+## Stage 1b as built (each its own toggle and gate; both need `dnaEnabled`, both off by default)
 
-## Stage 1b proposals (each its own toggle and gate, after sign-off)
+Gates: 8 seeds × 3,000 ticks against the DNA default (`npm run experiment -- --compare <toggle>=false,true --ticks 3000 --workers 4`). Trait means are over runs still alive at the end.
 
 ### 1b.1 Continuous movement abilities (`dnaContinuousAbilities`)
 
-- Each ability becomes an efficiency e ∈ [0, 1]; unlocked when e > 0.
+- Each ability is an efficiency e ∈ [0, 1] (the ability gene's dose, clamped, not rounded); held when e > 0.
 - Upkeep `abilityUpkeep × e`.
-- Costs: diagonal `moveCost × (1.4 − 0.4e)`, squeeze `moveCost × (3.0 − 1.0e)`, leap `moveCost × (3.5 − 1.0e)`.
-- Gate: 8 seeds × 10k ticks; efficiencies drift under selection rather than collapsing to 0 or locking at 1, with no step-cliff transitions.
+- Costs (`moveEnergyCost` in `traits.ts`), written from the existing settings so the defaults give exactly the proposed numbers: diagonal `diagonalMoveCost − (diagonalMoveCost − 1)·e` (1.4 − 0.4e), squeeze `squeezeCostMultiplier + 1 − e` (3 − e) times the move's cost, leap `leapCostMultiplier + 1 − e` (3.5 − e), all × `moveCost`. At e = 1 squeeze and leap cost what they always did; a diagonal costs the same as an orthogonal step (1.0 instead of 1.4).
+- Mutation: with probability `traitMutationRate` the efficiency drifts by N(0, `abilityMutationStdDev` = 0.1), clamped to [0, 1] (replaces the 0/1 flip). Founders start as before (one ability at 1, or none).
+- Gate (`docs/experiments/dna-1b1-continuous-abilities.txt`): **met.** Efficiencies drift and settle mid-range rather than collapsing or locking: holders' mean efficiency diagonal 0.30, squeeze 0.54, leap 0.29; locked at 1: 4%, 25%, 0%. Abilities spread far wider than binary ones (held by 82% / 76% / 74% of organisms, vs 40% / 44% / 8% holding the binary ones), since a small efficiency is cheap to gain. Costs are linear in e, so there are no cliffs (tested). Side effects: lower populations (mean −25, lean low −62, each lower in 4/8 seeds) and the same number of extinct seeds (4/8).
 
 ### 1b.2 Split diets (`dnaSplitDiets`)
 
-- `carnivory` is replaced by two independent traits: `herbivoreEfficiency` e_h (founders 1.0; plant yield `foodEnergyYield × e_h`) and `carnivoreEfficiency` e_c (founders 0.0; carrion yield `carrionBite × e_c`, kill chance scales with e_c).
-- Diet upkeep `upkeepRate × (e_h + e_c)`, so generalists pay more and specialists and scavengers can emerge without a fixed trade-off formula.
-- Gate: founder plant eaters keep stable energy, and meat-eating lineages can emerge when carrion is abundant.
+- Two independent efficiencies: `herbivory` e_h (new trait gene 8; founders 1.0; plant yield `foodEnergyYield × e_h`) and `carnivory`, which now means e_c (founders 0.0; carrion yield `carrionBite × e_c` and bite strength as before). No `dietTradeoff`.
+- Diet upkeep `dietUpkeep × (e_h + e_c)` per tick (`dietUpkeep` 0.05: a founder pays a fifth of base metabolism).
+- Both mutate like carnivory (Gaussian `carnivoryMutationStdDev` with probability `traitMutationRate`, clamped to [0, 1]). A missing herbivory gene decodes to 0; organisms from before the toggle keep the plant yield their carnivory gave them (`1 − dietTradeoff × carnivory`) and pass it on as a gene.
+- Gate (`docs/experiments/dna-1b2-split-diets.txt`): **plant eaters met; meat eaters not yet seen.** Founder plant eaters keep stable energy (mean 45.9 vs 41.2; herbivory stays 0.96) and do better than under the trade-off: fewer extinct seeds (2/8 vs 4/8), mean population +80, lean low +51. Kills double (946 vs 458) but carrion eating falls; carnivory only reaches 0.10 on average, with almost no generalists or meat specialists in 3,000 ticks. Whether meat-eating lineages emerge when carrion is abundant needs longer runs (10k+, or the server).
+
+## Stage 2 as built (`dnaVariationEnabled`, off by default pending its gate)
+
+Code: `mutateGenomeVariation`, `mutateOnce`, `genomeStats` in `src/sim/dna.ts`; census `npm run census`. Point-mutation counts are Poisson over the genome (each gene keeps its legacy rate); a point mutation steps the dose or, with `dnaKeyFlipFraction`, flips a bit of the gene's index. Insertion adds a random gene at a random position, deletion removes one, duplication copies 1 to `dnaDuplicationMaxLength` genes elsewhere (`dnaDosageCompensation` halves doses to make it neutral; off). Every gene costs `dnaUpkeepPerGene` per tick; `dnaMaxGenes` caps length. Loading a save no longer re-adds deleted skip genes (`upgradeGenome` takes the saved input count). Gate status: see `docs/STATUS.md`.
 
 Note: the config keys are flat (`dnaEnabled` rather than `config.dna.enabled`) so `npm run experiment -- --compare` and `--set` can address them like every other setting.
