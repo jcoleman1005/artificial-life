@@ -52,6 +52,7 @@ function toEggView(e: Egg): EggView {
     size: e.child.size ?? 1.0,
     parentId: e.child.lineage.id,
     generation: e.child.lineage.generation,
+    ...(e.toxicity !== undefined ? { toxicity: e.toxicity } : {}),
   };
 }
 
@@ -282,6 +283,9 @@ export class SimulationHost {
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
       carrion: Array.from(world.carrion.values(), (c) => ({ ...c })),
       eggs: Array.from(world.eggs.values(), toEggView),
+      ...(world.deathPulses.length > 0
+        ? { deathPulses: world.deathPulses.map((dp) => ({ ...dp })) }
+        : {}),
       ...(world.weather && world.config.weatherEnabled
         ? {
             weather: {

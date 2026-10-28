@@ -32,7 +32,9 @@ export type LifeField =
   | 'sensingRadius'
   | 'digestiveEfficiency'
   | 'carnivoreEfficiency'
-  | 'detox';
+  | 'detox'
+  | 'toughness'
+  | 'toxicity';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -156,6 +158,24 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.detoxMin,
     max: (c) => c.detoxMax,
   },
+  {
+    field: 'toughness',
+    traitId: 52,
+    enabled: (c) => c.toughnessGeneEnabled,
+    founder: (c) => c.toughnessFounder,
+    step: (c) => c.toughnessStep,
+    min: (c) => c.toughnessMin,
+    max: (c) => c.toughnessMax,
+  },
+  {
+    field: 'toxicity',
+    traitId: 53,
+    enabled: (c) => c.toxicityGeneEnabled,
+    founder: (c) => c.toxicityFounder,
+    step: (c) => c.toxicityStep,
+    min: (c) => c.toxicityMin,
+    max: (c) => c.toxicityMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -237,6 +257,14 @@ export const carnivoreEfficiencyOf = (o: Readonly<Pick<Organism, 'carnivoreEffic
 /** Toxin neutralization capacity (detoxGeneEnabled); 0 without the gene. */
 export const detoxOf = (o: Readonly<Pick<Organism, 'detox'>>, c: Readonly<SimulationConfig>): number =>
   c.detoxGeneEnabled ? (o.detox ?? c.detoxFounder) : 0;
+
+/** Prey armor / bite blunting (toughnessGeneEnabled); 0 without the gene. */
+export const toughnessOf = (o: Readonly<Pick<Organism, 'toughness'>>, c: Readonly<SimulationConfig>): number =>
+  c.toughnessGeneEnabled ? (o.toughness ?? c.toughnessFounder) : 0;
+
+/** Prey chemical defense / tissue toxicity (toxicityGeneEnabled); 0 without the gene. */
+export const toxicityOf = (o: Readonly<Pick<Organism, 'toxicity'>>, c: Readonly<SimulationConfig>): number =>
+  c.toxicityGeneEnabled ? (o.toxicity ?? c.toxicityFounder) : 0;
 
 export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold' | 'size'>>, c: Readonly<SimulationConfig>): number =>
   (o.reproThreshold ?? c.reproductionThreshold) * sizeOf(o, c);

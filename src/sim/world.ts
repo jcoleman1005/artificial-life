@@ -4,6 +4,7 @@ import { DIRECTION_OFFSETS } from './types';
 import type {
   ActionScore,
   CarrionPatch,
+  DeathPulse,
   DecisionOutcome,
   DecisionRecord,
   Egg,
@@ -70,6 +71,8 @@ import {
   maxEnergyOf,
   metabolicRateOf,
   sizeOf,
+  toughnessOf,
+  toxicityOf,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
 import { capGenome, compileCircuit, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, growableBrain, internalUnits, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
@@ -126,6 +129,8 @@ export interface WorldState {
   readonly weather?: WeatherExportState;
   /** Soil nutrient state (absent in saves from before nutrient cycle, or with it off). */
   readonly soilNutrients?: readonly number[];
+  /** Active death pulses (absent in saves before predator-prey arms race, or when empty). */
+  readonly deathPulses?: readonly DeathPulse[];
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -235,6 +240,8 @@ export class World {
   public eggsEatenTotal = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
+  /** Active death pulses emitted on violent kills (involuntary distress shockwaves). */
+  public deathPulses: DeathPulse[] = [];
   /** The latest mating, for observers (not saved). */
   public lastMating: { readonly tick: number; readonly tags: readonly [number, number] } | null = null;
   /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
@@ -611,7 +618,14 @@ export class World {
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
-      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child: World.saveOrganism(e.child) })),
+      eggs: Array.from(this.eggs.values(), (e) => ({
+        x: e.x,
+        y: e.y,
+        laidTick: e.laidTick,
+        shell: e.shell ?? 0,
+        child: World.saveOrganism(e.child),
+        ...(e.toxicity !== undefined ? { toxicity: e.toxicity } : {}),
+      })),
       organisms: Array.from(this.organisms.values(), (o) => World.saveOrganism(o)),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
@@ -619,6 +633,7 @@ export class World {
       lineage: this.lineageTracker.exportState(),
       ...(this.weather && this.config.weatherEnabled ? { weather: this.weather.exportState() } : {}),
       ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
+      ...(this.deathPulses.length > 0 ? { deathPulses: this.deathPulses.map((dp) => ({ ...dp })) } : {}),
     };
   }
 
@@ -666,7 +681,14 @@ export class World {
     world.eggs.clear();
     for (const e of state.eggs ?? []) {
       const child = World.restoreOrganism(e.child, world.config);
-      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child });
+      world.eggs.set(child.id, {
+        x: e.x,
+        y: e.y,
+        laidTick: e.laidTick,
+        shell: e.shell ?? 0,
+        child,
+        ...(e.toxicity !== undefined ? { toxicity: e.toxicity } : {}),
+      });
     }
     world.weather = state.weather
       ? WeatherSimulation.fromState(state.weather, world.config.gridWidth, world.config.gridHeight)
@@ -682,6 +704,8 @@ export class World {
       }
       world.soil().updateAggregates(world.fertile());
     }
+    world.deathPulses.length = 0;
+    for (const dp of state.deathPulses ?? []) world.deathPulses.push({ ...dp });
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
     return world;
@@ -747,6 +771,11 @@ export class World {
       organismAt.set(`${org.x},${org.y}`, copy);
     }
 
+    const activeDeathPulses =
+      this.config.predationDefenseEnabled !== false && this.deathPulses.length > 0
+        ? this.deathPulses.filter((dp) => dp.tick === this.tick - 1)
+        : undefined;
+
     return {
       tick: this.tick,
       gridWidth: this.config.gridWidth,
@@ -761,6 +790,7 @@ export class World {
       eggGrid,
       organismGrid,
       signallers,
+      ...(activeDeathPulses && activeDeathPulses.length > 0 ? { deathPulses: activeDeathPulses } : {}),
       weather: this.weather && this.config.weatherEnabled ? this.weather.getSnapshot() : null,
     };
   }
@@ -770,14 +800,22 @@ export class World {
    * by each contender's metabolic rate when the metabolism gene is enabled.
    */
   private pickContenderByMetabolicRate<T extends { organism: Organism }>(contenders: T[]): T {
-    if (!this.config.metabolismGeneEnabled || contenders.length === 1) {
+    if (contenders.length === 1) return contenders[0];
+    const hasMetabolism = this.config.metabolismGeneEnabled;
+    const hasArmor = this.config.toughnessGeneEnabled && (this.config.armorDragCoeff ?? 0) > 0;
+    if (!hasMetabolism && !hasArmor) {
       return this.prng.choice(contenders);
     }
+    const priority = (o: Organism) => {
+      const meta = hasMetabolism ? metabolicRateOf(o, this.config) : 1;
+      const drag = hasArmor ? 1 + this.config.armorDragCoeff * toughnessOf(o, this.config) : 1;
+      return meta / drag;
+    };
     let total = 0;
-    for (const c of contenders) total += metabolicRateOf(c.organism, this.config);
+    for (const c of contenders) total += priority(c.organism);
     let roll = this.prng.nextFloat(0, total);
     for (const c of contenders) {
-      roll -= metabolicRateOf(c.organism, this.config);
+      roll -= priority(c.organism);
       if (roll <= 0) return c;
     }
     return contenders[contenders.length - 1];
@@ -1097,8 +1135,22 @@ export class World {
           if (egg && organism.carnivory > 0 && this.config.carrionEnabled) {
             // A whole egg goes down at once; its meal is the child's energy through the same gut, and the shell is lost.
             // Capped at the egg's own energy, so even the best gut cannot make laying-and-eating a profit.
+            const tox = egg.toxicity ?? 0;
+            let yieldMultiplier = 1.0;
+            if (this.config.toxicityGeneEnabled && tox > 0) {
+              const unneutralized = Math.max(0, tox - detoxOf(organism, this.config));
+              yieldMultiplier = Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized);
+              if (unneutralized > 0.3) {
+                const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                organism.energy = Math.max(0, organism.energy - malaise);
+              }
+            }
+            if (this.config.plantDefenseEnabled || this.config.toxicityGeneEnabled) {
+              organism.lastBiteYield = Number(yieldMultiplier.toFixed(3));
+            }
             const meal =
               egg.child.energy *
+              yieldMultiplier *
               Math.min(1, organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config));
             const energyGain = Math.min(maxEnergyOf(organism, this.config) - organism.energy, meal);
             organism.energy += energyGain;
@@ -1109,8 +1161,21 @@ export class World {
             energyDelta += energyGain;
             outcome = 'success';
           } else if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
+            const tox = patch.toxicity ?? 0;
+            let yieldMultiplier = 1.0;
+            if (this.config.toxicityGeneEnabled && tox > 0) {
+              const unneutralized = Math.max(0, tox - detoxOf(organism, this.config));
+              yieldMultiplier = Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized);
+              if (unneutralized > 0.3) {
+                const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                organism.energy = Math.max(0, organism.energy - malaise);
+              }
+            }
+            if (this.config.plantDefenseEnabled || this.config.toxicityGeneEnabled) {
+              organism.lastBiteYield = Number(yieldMultiplier.toFixed(3));
+            }
             const taken = Math.min(patch.stock, this.config.carrionBite);
-            const meal = taken * organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config);
+            const meal = taken * yieldMultiplier * organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config);
             const maxEnergy = maxEnergyOf(organism, this.config);
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
@@ -1238,7 +1303,15 @@ export class World {
               if (this.config.metabolismGeneEnabled) organism.nextBirthTick = this.tick + birthCooldownOf(organism, this.config);
               if (lays) {
                 // Counted as a birth when it hatches.
-                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, shell: eggCost, child });
+                const tox = toxicityOf(child, this.config);
+                this.eggs.set(child.id, {
+                  x: birth.x,
+                  y: birth.y,
+                  laidTick: this.tick,
+                  shell: eggCost,
+                  child,
+                  ...(tox > 0 ? { toxicity: tox } : {}),
+                });
                 this.eggsLaidTotal++;
               } else {
                 newBorns.push(child);
@@ -1403,6 +1476,30 @@ export class World {
       if (Math.max(Math.abs(prey.x - attacker.x), Math.abs(prey.y - attacker.y)) > 1) continue;
       if (roll >= attack.chance) continue;
       bodies.set(prey.id, prey.energy);
+      if (this.config.predationDefenseEnabled !== false) {
+        this.deathPulses.push({
+          x: prey.x,
+          y: prey.y,
+          tag: prey.tag,
+          size: sizeOf(prey, this.config),
+          power: metabolicRateOf(prey, this.config),
+          tick: this.tick,
+        });
+      }
+      if (this.config.predationDefenseEnabled !== false && this.config.toxicityGeneEnabled) {
+        const preyTox = toxicityOf(prey, this.config);
+        if (preyTox > 0) {
+          const detox = detoxOf(attacker, this.config);
+          const unneutralized = Math.max(0, preyTox - detox);
+          if (unneutralized > 0) {
+            attacker.lastBiteYield = Number(Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized).toFixed(3));
+            if (unneutralized > 0.3) {
+              const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+              attacker.energy = Math.max(0, attacker.energy - malaise);
+            }
+          }
+        }
+      }
       prey.energy = 0;
       this.lastKill = { tick: this.tick, killerTag: attacker.tag, preyTag: prey.tag };
       attacker.kills++;
@@ -1430,8 +1527,12 @@ export class World {
         this.organisms.delete(id);
         if (this.config.carrionEnabled) {
           const energy = carrionFromBody(bodies.get(id) ?? 0, this.config);
-          if (energy > 0) this.addCarrion(org.x, org.y, energy);
-          else this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+          if (energy > 0) {
+            const tox = toxicityOf(org, this.config);
+            this.addCarrion(org.x, org.y, energy, tox > 0 ? tox : undefined);
+          } else {
+            this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+          }
         } else {
           this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
         }
@@ -1440,6 +1541,10 @@ export class World {
 
     // Increment simulation tick
     this.tick++;
+
+    if (this.deathPulses.length > 0) {
+      this.deathPulses = this.deathPulses.filter((dp) => dp.tick >= this.tick - 1);
+    }
 
     // Phase 6: Food regeneration and spawning
     this.updateEnvironment();
@@ -1723,15 +1828,28 @@ export class World {
   }
 
   /** Adds carrion energy to a cell (piling onto any already there, which then rots later). */
-  private addCarrion(x: number, y: number, energy: number): void {
+  private addCarrion(x: number, y: number, energy: number, toxicity?: number): void {
     const key = `${x},${y}`;
     const expiresAt = this.tick + 1 + this.config.carrionLifetime;
     const existing = this.carrion.get(key);
     if (existing) {
+      if (toxicity !== undefined || existing.toxicity !== undefined) {
+        const totalStock = existing.stock + energy;
+        const curTox = (existing.toxicity ?? 0) * existing.stock;
+        const newTox = (toxicity ?? 0) * energy;
+        const mergedTox = totalStock > 0 ? (curTox + newTox) / totalStock : 0;
+        existing.toxicity = Number(mergedTox.toFixed(3));
+      }
       existing.stock += energy;
       existing.expiresAt = expiresAt;
     } else {
-      this.carrion.set(key, { x, y, stock: energy, expiresAt });
+      this.carrion.set(key, {
+        x,
+        y,
+        stock: energy,
+        expiresAt,
+        ...(toxicity !== undefined && toxicity > 0 ? { toxicity } : {}),
+      });
     }
   }
 
@@ -2107,6 +2225,8 @@ export class World {
       digestiveEfficiency: mean(c.digestiveGeneEnabled, (o) => o.digestiveEfficiency ?? 1),
       carnivoreEfficiency: mean(c.carnivoreGeneEnabled, (o) => o.carnivoreEfficiency ?? c.carnivoreFounder),
       detox: mean(c.detoxGeneEnabled, (o) => o.detox ?? c.detoxFounder),
+      toughness: mean(c.toughnessGeneEnabled, (o) => o.toughness ?? c.toughnessFounder),
+      toxicity: mean(c.toxicityGeneEnabled, (o) => o.toxicity ?? c.toxicityFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

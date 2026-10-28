@@ -21,6 +21,7 @@ import type { SimulationConfig } from './sim/types';
 import type { ExperimentToggles } from './ui/controls';
 import { AUTOSAVE_KEY, deleteWorld, getWorld, infoFor, listBranches, putWorld } from './ui/saved-worlds';
 import { DEFAULT_CONFIG, FOOD_LAYOUTS, WORLD_SIZES } from './sim/config';
+import { APP_VERSION, APP_CODENAME } from './version';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -75,7 +76,7 @@ app.innerHTML = `
         <div class="sheet-peek" role="button" tabindex="0" aria-expanded="false" aria-label="Show details">
           <div class="peek-row">
             <span class="peek-pop">0 alive</span>
-            <span class="peek-season">Plenty</span>
+            <span class="peek-season">Spring</span>
             <button type="button" class="round-btn btn-settings" aria-label="Settings">${GEAR_ICON}</button>
           </div>
           <div class="group-strip" role="img" aria-label="Colour groups"></div>
@@ -86,16 +87,28 @@ app.innerHTML = `
           <button type="button" role="tab" data-tab="trends" aria-selected="false">Trends</button>
           <button type="button" role="tab" data-tab="organism" aria-selected="false">Organism</button>
         </nav>
+        <button type="button" class="round-btn btn-collapse-sheet" aria-label="Toggle details panel" title="Toggle details panel">
+          <span class="collapse-icon" aria-hidden="true">▾</span>
+        </button>
       </div>
       <div class="sheet-body">
         <section class="tab-panel" data-panel="stats">
           <p id="stats-status" class="sim-status"></p>
           <section id="metrics-container" class="metrics-section" aria-label="Simulation metrics"></section>
-          <h3 class="panel-heading">Recent events</h3>
-          <div id="events-container"></div>
-          <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
-          <div id="groups-container"></div>
-          ${LEGEND_HTML}
+          <div class="stats-columns">
+            <div class="stats-col">
+              <h3 class="panel-heading">Recent events</h3>
+              <div id="events-container"></div>
+            </div>
+            <div class="stats-col">
+              <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
+              <div id="groups-container"></div>
+            </div>
+            <div class="stats-col stats-col-legend">
+              ${LEGEND_HTML}
+              <div class="stats-version-info">Artificial Life Lab <strong>v${APP_VERSION}</strong> · ${APP_CODENAME}</div>
+            </div>
+          </div>
         </section>
         <section class="tab-panel" data-panel="trends" id="history-container" aria-label="Trends over time"></section>
         <section class="tab-panel" data-panel="organism" id="inspector-container"></section>
@@ -106,7 +119,7 @@ app.innerHTML = `
       <div class="settings-backdrop"></div>
       <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header class="settings-header">
-          <h2 id="settings-title">Settings</h2>
+          <h2 id="settings-title">Settings <span class="settings-version-tag">v${APP_VERSION}</span></h2>
           <button type="button" class="round-btn settings-close" aria-label="Close settings">✕</button>
         </header>
         <div id="settings-container" class="settings-body"></div>
@@ -316,7 +329,7 @@ function refreshPanels(): void {
 
   const groups = colourGroups(sim.organisms.values());
   const population = sim.organisms.size;
-  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config), groups);
+  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config, sim.weather), groups);
   const latest = latestEventHTML(sim.worldEvents, sim.foodRegions, sim.config);
   if (peekEvent.innerHTML !== latest) peekEvent.innerHTML = latest;
   pill.setTick(sim.tick);
@@ -421,6 +434,7 @@ const settingsView = new SettingsView(
     overgrazingEnabled: sim.config.overgrazingEnabled ?? false,
     carrionEnabled: sim.config.carrionEnabled ?? true,
     predationEnabled: sim.config.predationEnabled ?? true,
+    toughnessGeneEnabled: sim.config.toughnessGeneEnabled ?? true,
     sexEnabled: sim.config.sexEnabled ?? true,
     immigrationEnabled: sim.config.immigrationEnabled,
     plantsEnabled: sim.config.plantsEnabled,
@@ -462,6 +476,7 @@ const settingsView = new SettingsView(
     onOvergrazingChange: (enabled) => sim.setConfig({ overgrazingEnabled: enabled }),
     onCarrionChange: (enabled) => sim.setConfig({ carrionEnabled: enabled }),
     onPredationChange: (enabled) => sim.setConfig({ predationEnabled: enabled }),
+    onToughnessChange: (enabled) => sim.setConfig({ toughnessGeneEnabled: enabled }),
     onSexChange: (enabled) => sim.setConfig({ sexEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
@@ -777,18 +792,19 @@ document.addEventListener('keydown', (e) => {
 // peek strip and the playback pill) at zoom 1. Recomputed on resize,
 // rotation and when the sheet changes.
 function layout(): void {
+  const isFixed = getComputedStyle(sheetEl).position === 'fixed';
   const side = sheet.isSidePanel();
-  const peek = side ? 0 : sheet.peekHeight();
+  const peek = isFixed ? sheet.peekHeight() : 0;
   const safe = getComputedStyle(document.documentElement);
   const px = (name: string) => parseFloat(safe.getPropertyValue(name)) || 0;
   const safeTop = px('--safe-top');
-  const safeBottom = side ? px('--safe-bottom') : 0;
+  const safeBottom = side || !isFixed ? px('--safe-bottom') : 0;
   document.documentElement.style.setProperty('--peek-h', `${peek}px`);
-  sheetEl.style.setProperty('--closed-offset', `${side ? 0 : sheetEl.offsetHeight - peek - px('--safe-bottom')}px`);
+  sheetEl.style.setProperty('--closed-offset', `${isFixed ? sheetEl.offsetHeight - peek - px('--safe-bottom') : 0}px`);
   const pillSpace = 56 + 12 + 10;
   renderer.setInsets({
     top: safeTop + 8,
-    bottom: (side ? safeBottom : peek + px('--safe-bottom')) + pillSpace,
+    bottom: (isFixed ? peek + px('--safe-bottom') : safeBottom) + pillSpace,
     left: px('--safe-left'),
     right: side ? 0 : px('--safe-right'),
   });
@@ -842,6 +858,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     overgrazingEnabled: config.overgrazingEnabled ?? false,
     carrionEnabled: config.carrionEnabled ?? true,
     predationEnabled: config.predationEnabled ?? true,
+    toughnessGeneEnabled: config.toughnessGeneEnabled ?? true,
     sexEnabled: config.sexEnabled ?? true,
     immigrationEnabled: config.immigrationEnabled ?? false,
     plantsEnabled: config.plantsEnabled,

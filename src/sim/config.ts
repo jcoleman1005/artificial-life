@@ -228,6 +228,22 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   detoxMin: 0,
   detoxMax: 1,
   detoxUpkeepRate: 0.03,
+  // Red Queen Phase 2: Predator–Prey Arms Race
+  predationDefenseEnabled: true,
+  toughnessGeneEnabled: true,
+  toughnessFounder: 0.1,
+  toughnessStep: 0.05,
+  toughnessMin: 0,
+  toughnessMax: 1,
+  toughnessUpkeepRate: 0.025,
+  armorEffectiveness: 0.75,
+  armorDragCoeff: 0.35,
+  toxicityGeneEnabled: true,
+  toxicityFounder: 0.05,
+  toxicityStep: 0.05,
+  toxicityMin: 0,
+  toxicityMax: 1,
+  toxicityUpkeepRate: 0.025,
   seed: 42,
 };
 

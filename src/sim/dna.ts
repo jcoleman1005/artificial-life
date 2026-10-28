@@ -64,6 +64,8 @@ export const TraitId = {
   digestiveEfficiency: 49,
   carnivoreEfficiency: 50,
   detox: 51,
+  toughness: 52,
+  toxicity: 53,
 } as const;
 
 /** The phenotype a genome decodes to: every inherited trait except the policy dials. */
@@ -96,6 +98,8 @@ export const ABSENT_DEFAULTS = {
   digestiveEfficiency: 1.0,
   carnivoreEfficiency: 0.5,
   detox: 0.1,
+  toughness: 0.1,
+  toxicity: 0.05,
 } as const;
 
 const scratch = new DataView(new ArrayBuffer(8));

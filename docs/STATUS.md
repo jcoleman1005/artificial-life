@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Feature display audit & visual enhancements: World canvas plant defense spines, ballistic leaping trajectory arcs with intermediate drop shadows, downwind-deflected signal waves, 3-stage carrion decomposition, acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Predator–prey arms race & chemical defense; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -35,11 +35,78 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 - Tests: `tests/speciation.test.ts` (distance, ramp, per-child loss with energy conserved, no extra draws for identical genomes, control arm, snapshot round trip, smoke).
 - **Not done**: the 8-seed experiment with the three arms (off, on, flat-rate control) and the ship-on gate (`npm run experiment -- --compare hybridIncompatibilityEnabled=false,true`), the Trends histogram, inspector distance, cluster colour mode (spec §8), species detection (spec §4 clusters). Default is on per the user's decision until the gate says otherwise.
 
+## Predator–Prey Arms Race & Chemical Defense (built 2026-10-28)
+
+Antagonistic arms race between predators, prey, and scavengers operating purely via thermodynamic and kinetic constraints without behavioral scripting (`src/sim/traits.ts`, `src/sim/world.ts`, `src/sim/sensors.ts`, `src/sim/lifehistory.ts`, `src/sim/dna.ts`, tests `tests/red_queen.test.ts`):
+- **Prey Armor / Toughness (Trait 52, `toughnessGeneEnabled`, on)**:
+  - Evolving physical armor carapace ($T \in [0, 1]$) blunting predator bite kill chance: $\text{chance} = \text{baseChance} \times (1 - \text{armorEffectiveness} \times T)$.
+  - Kinetic drag: armor mass increases movement energy cost ($\text{cost} \times (1 + \text{armorDragCoeff} \times T)$).
+  - Metabolic upkeep: continuous maintenance scaling with structural body size (`toughnessUpkeepRate * toughness * sizeFactor`).
+  - Contested agility: slows priority in cell movement contention ($\text{priority} = \text{metabolicRate} / \text{drag}$).
+  - Segmented chitinous outer carapace border rendered on world canvas and organism preview card.
+- **Prey Chemical Defense & Tissue Toxicity (Trait 53, `toxicityGeneEnabled`, on)**:
+  - Evolving defensive toxins ($X \in [0, 1]$) with continuous synthesis upkeep (`toxicityUpkeepRate * toxicity * sizeFactor`).
+  - Acute malaise retaliation: predators biting toxic prey suffer unneutralized tissue damage if $T_{\text{eff}} = \max(0, X - \text{attacker.detox}) > 0.3$.
+  - Trophic feedback: blunts predator `lastBiteYield`, giving brain neural feedback on toxic prey.
+  - Toxic carrion and eggs: dead toxic organisms leave carrion retaining tissue toxicity; toxic parents lay toxic eggs. Scavengers and egg-eaters eating them suffer acute malaise and yield discounts unless detox neutralizes it.
+  - Aposematic warning venom rim and toxic carrion/egg auras rendered in UI.
+- **Involuntary Metabolic Death Pulse**:
+  - Violent kills broadcast an expanding acoustic/chemical shockwave pulse.
+  - Reach scales with victim body size and basal metabolic rate: $\text{reach} = \text{signalRadius} \times \max(0.4, \text{size} \times \text{power})$.
+  - Drifts downwind with atmospheric weather and is sensed as a directional signal by surrounding organisms.
+  - Uncoupled `moveCarrion` directional sensing from diet so herbivores and omnivores can navigate around carrion clusters and predator activity zones.
+- **Default Fingerprint**: `large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: d221240d829ed5c1 pop 741 births 2786`.
+
+## Versioning System & Ecological Seasons & Weather (built 2026-10-28)
+
+Instituted formal Semantic Versioning and replaced binary plenty/lean announcements with natural seasons and atmospheric weather (`src/version.ts`, `src/sim/seasons.ts`, `src/ui/peek-view.ts`, `src/ui/events-view.ts`, `src/ui/controls.ts`, `src/style.css`, tests `tests/version_and_seasons.test.ts`):
+- **Semantic Versioning System (v0.2.0 "Biosphere")**:
+  - Defined in `src/version.ts` and pinned in `package.json`.
+  - Prominently displayed in the Settings panel header (`<span class="settings-version-tag">v0.2.0</span>`) and modal footer, the bottom Stats panel column, and the HTML document title.
+- **Four Ecological Seasons & Atmospheric Weather Patterns**:
+  - Replaces binary "Plenty" / "Lean" announcements with four natural seasons: 🌱 Spring (renewal & regrowth), ☀️ Summer (peak fertility & warmth), 🍂 Autumn (seed maturation & cooling transition), and ❄️ Winter (lean period, frost, dormancy).
+  - Dynamic weather patterns derived from atmospheric simulation: 🌧️ Rainstorm, ❄️ Cold snap, ☀️ Heatwave, 💨 Gale, 🍃 Breezy, and 🌤️ Fair.
+  - Peek pill displays living conditions across all four map quadrants: `NW: [season] NE: [season] SE: [season] SW: [season]` (e.g. `NW: Spring NE: Summer SE: Autumn SW: Winter`), coupled with active atmospheric weather alerts (` · 🌧️ Rainstorm`).
+  - Event feed reports ecological milestones (`❄️ Winter begins in the north-west`, `🌱 Spring arrives`) and atmospheric arrivals (`🌧️ Rainstorm rolls in`, `❄️ Cold snap sweeps in`, `☀️ Heatwave builds`).
+- **2.5D Leap Hop & Parabola Guide Clean-Up**:
+  - Removed the static trajectory parabola curve and ground dashed line across grid cells.
+  - Retained the complete 2.5D airborne jump physics ($Z(u) = 4 H_{\max} u (1-u)$): the organism body lifts upwards in screen $-Y$, an altitude-softened ground drop shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, and selection indicators elevate with the jumping unit.
+
+## Responsive Landscape Desktop Layout (built 2026-10-28)
+
+Stacked landscape desktop presentation with collapsable dashboard on computer screens (`src/style.css`, `src/main.ts`, `src/ui/sheet.ts`):
+- **Full-Screen Canvas Real Estate**:
+  - *Collapsed State*: When collapsed, the bottom dashboard shrinks to an ultra-compact ~44px header bar. The world canvas expands to fill 100% of the available vertical screen real estate (`100dvh - 44px`), dynamically recalculating cell size and centering.
+  - *Expanded State*: Expands to `~42vh`, with the world canvas dynamically scaling to `58vh` to provide a clear view without being covered.
+  - *Interactive Collapse Controls*: Toggled smoothly by a dedicated collapse chevron button (`▾` / `▴`), by clicking the peek bar, or by clicking active tab buttons. Preference is persisted in `localStorage`.
+- **Horizontal Stats Dashboard**:
+  - *Header Bar*: Peek population badge, season state pill, group hue strip, settings trigger, tab navigation, and collapse toggle arranged in a single sleek bar.
+  - *Metrics Section*: Multi-column responsive grid (`repeat(auto-fit, minmax(130px, 1fr))`) stretching across the screen.
+  - *Side-by-Side 3-Column Lower Dashboard*: Recent Events feed, Colour Groups list, and Symbol Legend placed into three parallel columns (`.stats-columns`).
+  - *Expanded Trends & Inspector*: Trends charts and Genome Lineage Map automatically utilize the wide horizontal landscape width.
+- **Mobile Landscape Phone Preservation**: Viewports with `max-height: 500px` (e.g. Samsung Galaxy S21 in landscape) retain the side-panel layout, ensuring mobile touch ergonomics and vertical visibility remain intact.
+
+## Organism Adaptation Card & 2.5D Leap Overhaul (built 2026-10-28)
+
+Enhanced organism floating card and 2.5D leap physics rendering (`src/ui/organism-card.ts`, `src/style.css`, `src/render/renderer.ts`, tests `tests/organism-card.test.ts`):
+- **Evolutionary Trait Badges**: Replaced static dots (`diet`, `burn`, `breeding`) with category color-coded micro-pills with icons and quantitative values:
+  - *Diet*: `🌱 [X]% Herbivore`, `🥩 [X]% Carnivore`, or `🌾 [X]% Omnivore`.
+  - *Burn*: `⚡ [X.XX]× Burn` color-mapped to metabolic pace (cool cyan to hot orange).
+  - *Reproduction*: `🥚 Clutch [X.X]` or `🐣 Invest [X]%`.
+  - *Dynamic Standout Traits*: Prioritized badges sorted by divergence from baseline: `🦘 Leaper`, `〰️ Squeezer`, `↗️ Diagonal`, `🛡️ Detox [X]%`, `👁️ Vision [R]`, `🦣 Heavy / 🐁 Dwarf`, `🔋 Fat Cap`, `🦴 Scavenge`, `🍃 Gut`, and `🧠 +[N] Neural`.
+  - *Status Line*: Displays lineage depth, age, and activity (`Gen 14 · Age 320 · Grazing · carrying 2`).
+  - *Egg Badges*: Direct inspection shows `[🥚 Egg]`, `[🛡️ Shell X.XX]`, `[📏 Size X.X×]`, and `[⚡ Energy X]`.
+- **2.5D Leap Hop & Drop Shadow**:
+  - *Airborne Lift*: Organism body elevates vertically (screen $-Y$) along a true 2.5D hop arc $Z(u) = 4 H_{\max} u (1-u)$ over the intervening cell.
+  - *Terrain Drop Shadow*: An elliptical ground shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, scaling and softening with altitude.
+  - *Clean Action Glyphs*: Trajectory guide parabola line removed per user request, drawing standard action indicators on the airborne organism body while preserving the 2.5D jump physics.
+- **Zero Simulation Physics Drift**: Visual and UI presentation layer only; deterministic invariants preserved.
+
 ## World Canvas Visual Enhancements (built 2026-10-28)
 
 High-fidelity canvas visual enhancements and secondary dashboard expansions (`src/render/renderer.ts`, `src/ui/inspector.ts`, `src/ui/metrics-view.ts`):
 - **Plant Chemical Defense Spines**: Radiates defensive thorn needles from leaf axils at LOD 1+ (`cellSize >= 5.5`) scaling with `plant.genome.defense`.
-- **Parabolic Leaping Arc & Drop Shadow**: Leaping over an adjacent organism draws a 2-cell ballistic quadratic trajectory curve with an intermediate cell ground shadow ellipse, visually lifting the leaper above intermediate terrain.
+- **2.5D Leaping Hop & Drop Shadow**: Leaping over an adjacent organism lifts the leaper vertically along a 2.5D arc above intermediate terrain with an altitude-softened ground drop shadow ellipse tracking underneath on the terrain floor.
 - **Downwind Signal Lobes**: Skews expanding signal diamond ripples along local atmospheric wind vectors ($(w_x, w_y)$), visually showing `weatherSignalDrift`.
 - **Carrion Decomposition Stages**: 3 distinct visual degradation states (fresh crimson carcass with pink fleshy core, rotting brown-red puddle with exposed bone, and weathered bleached bone fragments).
 - **Acute Toxin Malaise Spasm Glyph**: Grazing toxic plants without adequate detox ($T_{\text{eff}} > 0.3$) triggers a vibrating amber-magenta jagged distress ring surrounding the organism.

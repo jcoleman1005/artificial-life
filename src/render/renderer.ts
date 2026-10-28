@@ -420,10 +420,32 @@ export class CanvasRenderer {
     return [(gx + 0.5) * this.cellSize, (gy + 0.5) * this.cellSize];
   }
 
+  /** Visual altitude offset (CSS px, positive = elevated upwards in screen -Y) for leaping. */
+  private leapLiftOf(org: OrganismView): number {
+    const lastAction = org.recentHistory[0];
+    if (!lastAction || !isLeapAction(lastAction.chosenAction.type) || lastAction.outcome !== 'success') {
+      return 0;
+    }
+    const [hx, hy] = directionOf(lastAction.chosenAction.type);
+    const originPx = (org.x - 2 * hx + 0.5) * this.cellSize;
+    const originPy = (org.y - 2 * hy + 0.5) * this.cellSize;
+    const targetPx = (org.x + 0.5) * this.cellSize;
+    const targetPy = (org.y + 0.5) * this.cellSize;
+    const [gx, gy] = this.displayCentre(org);
+    const totalDist = Math.hypot(targetPx - originPx, targetPy - originPy) || (2 * this.cellSize);
+    const traveled = Math.hypot(gx - originPx, gy - originPy);
+    const u = Math.max(0, Math.min(1, traveled / totalDist));
+    const rem = Math.hypot(targetPx - gx, targetPy - gy);
+    if (rem <= 0.04 * this.cellSize || u >= 0.98) return 0;
+    const Hmax = this.cellSize * 0.85;
+    return 4 * Hmax * u * (1 - u);
+  }
+
   /** Screen position (CSS px, relative to the canvas) of an organism. */
   public screenPositionOf(org: OrganismView): { x: number; y: number } {
     const [x, y] = this.displayCentre(org);
-    return { x: x - this.viewX, y: y - this.viewY };
+    const lift = this.leapLiftOf(org);
+    return { x: x - this.viewX, y: (y - lift) - this.viewY };
   }
 
   /** Screen position (CSS px, relative to the canvas) of a grid cell center. */
@@ -797,6 +819,19 @@ export class CanvasRenderer {
       diamond(cx, cy, Math.max(0.1, p) * (reach + 0.5) * cellSize, org.x, org.y);
       ctx.stroke();
     }
+    if (this.world.deathPulses) {
+      for (const dp of this.world.deathPulses) {
+        const cx = (dp.x + 0.5) * cellSize;
+        const cy = (dp.y + 0.5) * cellSize;
+        const p = this.progress;
+        const pulseReach = reach * Math.max(0.4, dp.size * (dp.power ?? 1));
+        ctx.strokeStyle = `hsla(${Math.round(dp.tag)}, 95%, 65%, ${(0.7 * (1 - p) + 0.12).toFixed(3)})`;
+        ctx.setLineDash([Math.max(2, cellSize * 0.15), Math.max(2, cellSize * 0.15)]);
+        diamond(cx, cy, Math.max(0.1, p) * (pulseReach + 0.5) * cellSize, dp.x, dp.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
     if (selected) {
       const [cx, cy] = this.displayCentre(selected);
       ctx.strokeStyle = 'rgba(103, 232, 249, 0.45)';
@@ -946,6 +981,15 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Chemically defended / toxic egg: subtle magenta/purple protective tint
+    if (egg.toxicity && egg.toxicity > 0.05) {
+      ctx.strokeStyle = `hsla(285, 80%, 65%, ${(0.3 + 0.45 * egg.toxicity).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.9, cellSize * (0.03 + 0.04 * egg.toxicity));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx + Math.max(1, cellSize * 0.04), ry + Math.max(1, cellSize * 0.04), 0, 0, TAU);
+      ctx.stroke();
+    }
+
     if (egg.id === this.selectedEggId) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.lineWidth = 2;
@@ -965,6 +1009,15 @@ export class CanvasRenderer {
 
     const isFresh = c.stock >= baseEnergy * 0.7;
     const isDecomposing = !isFresh && c.stock >= baseEnergy * 0.3;
+
+    // Chemical defense / toxicity aura
+    if (c.toxicity && c.toxicity > 0.05) {
+      ctx.strokeStyle = `hsla(285, 75%, 60%, ${(0.3 + 0.4 * c.toxicity).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, cellSize * 0.04);
+      ctx.beginPath();
+      ctx.arc(cx, cy, cellSize * 0.46 * size, 0, TAU);
+      ctx.stroke();
+    }
 
     if (isFresh) {
       // Fresh carcass: vivid crimson circle with fleshy tint
@@ -1224,22 +1277,27 @@ export class CanvasRenderer {
   private drawSelection(org: OrganismView): void {
     const { ctx, cellSize } = this;
     const [cx, cy] = this.displayCentre(org);
+    const lift = this.leapLiftOf(org);
+    const selY = cy - lift;
     const r = Math.max(5, cellSize * 0.62);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.arc(cx, selY, r, 0, TAU);
     ctx.stroke();
     ctx.strokeStyle = `hsla(${this.hueOf(org)}, 90%, 72%, 0.45)`;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(cx, cy, r + 4, 0, TAU);
+    ctx.arc(cx, selY, r + 4, 0, TAU);
     ctx.stroke();
   }
 
   private drawOrganism(org: OrganismView, detail: number): void {
     const { ctx, cellSize } = this;
-    const [cx, cy] = this.displayCentre(org);
+    const [gx, gy] = this.displayCentre(org);
+    const lift = this.leapLiftOf(org);
+    const cx = gx;
+    const cy = gy - lift;
     const config = this.world.config;
     const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1);
     const energyRatio = Math.max(0, Math.min(1, org.energy / maxEnergy));
@@ -1247,6 +1305,18 @@ export class CanvasRenderer {
     const sizeScale = config.sizeGeneEnabled ? Math.sqrt(org.size ?? 1) : 1;
     // Size by energy and body size, so glyphs stay readable and mice vs elephants are visible.
     const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio) * sizeScale);
+
+    // Airborne ground drop shadow (projected on the terrain floor beneath the leaping organism)
+    if (lift > 0.5) {
+      const Hmax = cellSize * 0.85;
+      const shadowFactor = Math.max(0, 1 - lift / Hmax);
+      const shadowScale = 0.75 + 0.25 * shadowFactor;
+      const shadowAlpha = 0.14 + 0.18 * shadowFactor;
+      ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, Math.max(2, r * shadowScale * 1.15), Math.max(1.5, r * shadowScale * 0.6), 0, 0, TAU);
+      ctx.fill();
+    }
 
     // Phenotype traits (safe fallbacks when genes are switched off or absent)
     const squeeze = config.squeezeEnabled ? (org.abilities?.squeeze ?? 0) : 0;
@@ -1373,8 +1443,30 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Prey armor / toughness: hardened chitinous carapace outer rim
+    const toughness = config.toughnessGeneEnabled ? (org.toughness ?? 0) : 0;
+    if (toughness > 0.1) {
+      ctx.strokeStyle = `hsla(38, 70%, 75%, ${(0.4 + 0.45 * toughness).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1.0, r * (0.1 + 0.12 * toughness));
+      ctx.setLineDash([Math.max(2.5, r * 0.28), Math.max(1.5, r * 0.16)]);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + Math.max(1.0, r * 0.1), b + Math.max(1.0, r * 0.1), heading, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Chemical toxicity: vivid aposematic venom rim
+    const tox = config.toxicityGeneEnabled ? (org.toxicity ?? 0) : 0;
+    if (tox > 0.1) {
+      ctx.strokeStyle = `hsla(285, 85%, 65%, ${(0.35 + 0.45 * tox).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, r * (0.08 + 0.1 * tox));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + Math.max(0.8, r * 0.08), b + Math.max(0.8, r * 0.08), heading, 0, TAU);
+      ctx.stroke();
+    }
+
     // Acute toxin distress spasm glyph: vibrating amber-magenta jagged distress ring / starburst
-    if (eating && org.lastBiteYield !== undefined && org.lastBiteYield < 0.775) {
+    if ((eating || type.startsWith('ATTACK_')) && org.lastBiteYield !== undefined && org.lastBiteYield < 0.775) {
       const malaiseNorm = Math.min(1, (0.775 - org.lastBiteYield) / 0.4);
       const ringBase = Math.max(a, b) + Math.max(1.8, cellSize * 0.12);
       const points = 10;
@@ -1475,77 +1567,17 @@ export class CanvasRenderer {
 
     const moving = isMoveAction(type) || isLeapAction(type);
     if (moving && succeeded) {
-      if (isLeapAction(type)) {
-        // Leaping: arched parabolic ballistic trajectory curve spanning 2 cells in directionOf(type)
-        const [hx, hy] = directionOf(type);
-        const x0 = cx - hx * (cellSize * 2);
-        const y0 = cy - hy * (cellSize * 2);
-        const mx = cx - hx * cellSize;
-        const my = cy - hy * cellSize;
-
-        // Subtle ground shadow underneath at the intermediate cell to visually lift the leaping organism
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-        ctx.beginPath();
-        ctx.ellipse(mx, my, cellSize * 0.38, cellSize * 0.22, 0, 0, TAU);
-        ctx.fill();
-
-        // Subtle ground track connecting origin to destination
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.lineWidth = Math.max(0.9, stroke * 0.65);
-        ctx.setLineDash([cellSize * 0.15, cellSize * 0.15]);
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(cx, cy);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Ballistic parabolic trajectory curve
-        let nx = -hy;
-        let ny = hx;
-        if (ny > 0 || (ny === 0 && nx < 0)) {
-          nx = -nx;
-          ny = -ny;
-        }
-        const arch = cellSize * 0.65;
-        const cpx = mx + nx * arch;
-        const cpy = my + ny * arch - cellSize * 0.35;
-
-        ctx.strokeStyle = GLYPH;
-        ctx.lineWidth = stroke;
-        ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.quadraticCurveTo(cpx, cpy, cx, cy);
-        ctx.stroke();
-
-        // Arrowhead at landing
-        const tx = cx - cpx;
-        const ty = cy - cpy;
-        const tLen = Math.hypot(tx, ty) || 1;
-        const ux = tx / tLen;
-        const uy = ty / tLen;
-        const wing = r * 0.32;
-        const wingX = cx - ux * wing;
-        const wingY = cy - uy * wing;
-        const px = -uy * wing * 0.7;
-        const py = ux * wing * 0.7;
-        ctx.beginPath();
-        ctx.moveTo(wingX + px, wingY + py);
-        ctx.lineTo(cx, cy);
-        ctx.lineTo(wingX - px, wingY - py);
-        ctx.stroke();
-      } else {
-        // Moving: a white arrow along the way it went
-        const [hx, hy] = directionOf(type);
-        const tip = r * 0.5;
-        const wing = r * 0.28;
-        ctx.beginPath();
-        ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
-        ctx.lineTo(cx + hx * tip, cy + hy * tip);
-        ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
-        ctx.lineTo(cx + hx * tip, cy + hy * tip);
-        ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
-        ctx.stroke();
-      }
+      // Moving (or leaping): a white arrow along the way it went
+      const [hx, hy] = directionOf(type);
+      const tip = r * 0.5;
+      const wing = r * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
+      ctx.lineTo(cx + hx * tip, cy + hy * tip);
+      ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
+      ctx.lineTo(cx + hx * tip, cy + hy * tip);
+      ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
+      ctx.stroke();
     } else if (moving) {
       // Blocked: a white bar on the side it pushed toward
       const [hx, hy] = directionOf(type);
