@@ -26,6 +26,7 @@ import type {
 } from './types';
 import type { WorldState } from './world';
 import type { BrainTrace } from './brain-trace';
+import type { SpeciesSnapshot, SpeciesState } from './species';
 
 /** What an organism did on its latest tick, as much as drawing needs. */
 export interface ActionView {
@@ -180,6 +181,8 @@ export interface SavedWorld {
   readonly world: WorldState;
   /** The event feed at the time, so it carries on after resuming. */
   readonly events: readonly WorldEvent[];
+  /** The species tracker's state (observer; older saves lack it and the species are rebuilt). */
+  readonly species?: SpeciesState;
 }
 
 /** Checks the outer shape of a loaded file before handing it to the worker. */
@@ -213,6 +216,8 @@ export type FromWorker =
         readonly fronts: readonly WeatherFront[];
         readonly wind: { readonly wx: number; readonly wy: number };
       };
+      /** Species id of each organism, in the same order as `organisms` (0: none; absent with speciesEnabled off or from older servers). */
+      readonly speciesIds?: readonly number[];
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
       /** Whether the world is playing, and at what speed (another viewer may have changed them). */
@@ -244,4 +249,8 @@ export interface PanelData {
   readonly history?: readonly HistorySample[];
   /** The heatmap the page is showing (one value per cell, row by row), only when asked for. */
   readonly heatmap?: { readonly kind: HeatmapKind; readonly cells: Float32Array };
+  /** Species list (and, with history, the count series for the stacked chart); absent with speciesEnabled off. */
+  readonly species?: SpeciesSnapshot;
+  /** The selected organism's species and its distance to that species' representative. */
+  readonly selectedSpecies?: { readonly speciesId: number; readonly distance: number } | null;
 }

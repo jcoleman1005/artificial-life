@@ -30,7 +30,11 @@ export type WorldEventBody =
   /** The first child of mating (the two parents' colour groups). */
   | { readonly kind: 'firstMating'; readonly groups: readonly [number, number] | null }
   /** An established colour group now eats mostly meat (mean carnivory >= MEAT_GROUP), or went back to plants. */
-  | { readonly kind: 'groupDiet'; readonly group: number; readonly diet: 'meat' | 'plants' };
+  | { readonly kind: 'groupDiet'; readonly group: number; readonly diet: 'meat' | 'plants' }
+  /** A new species split from a living one (species.ts). */
+  | { readonly kind: 'speciation'; readonly speciesId: number; readonly name: string; readonly parentId: number; readonly parentName: string }
+  /** A species has had no members for speciesExtinctTicks. */
+  | { readonly kind: 'speciesExtinct'; readonly speciesId: number; readonly name: string };
 
 export type WorldEvent = WorldEventBody & { readonly seq: number; readonly tick: number };
 
@@ -188,6 +192,14 @@ export class WorldEventDetector {
 
     if (silent) return [];
     const events = found.map((body): WorldEvent => ({ ...body, seq: this.nextSeq++, tick }));
+    this.log.push(...events);
+    if (this.log.length > EVENT_LOG_SIZE) this.log.splice(0, this.log.length - EVENT_LOG_SIZE);
+    return events;
+  }
+
+  /** Adds events found by another observer (e.g. the species tracker) to the log; returns them stamped. */
+  public record(bodies: readonly WorldEventBody[], tick: number): WorldEvent[] {
+    const events = bodies.map((body): WorldEvent => ({ ...body, seq: this.nextSeq++, tick }));
     this.log.push(...events);
     if (this.log.length > EVENT_LOG_SIZE) this.log.splice(0, this.log.length - EVENT_LOG_SIZE);
     return events;

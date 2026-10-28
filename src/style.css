@@ -2416,3 +2416,96 @@ button {
 .brain-ribbon { display: flex; gap: 1px; height: 14px; }
 .brain-ribbon span { flex: 1; min-width: 2px; }
 .brain-dials .weight-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
+/* Species (docs/specs/species.md) */
+.species-panel > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.species-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.85rem;
+  padding: 0;
+}
+.species-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1.6fr) minmax(40px, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.species-row.active {
+  border-color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+}
+.species-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.species-name small {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.species-gone {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  opacity: 0.75;
+}
+.species-extinct summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.species-chart canvas {
+  width: 100%;
+  display: block;
+  border-radius: 8px;
+}
+.species-legend {
+  font-size: 0.78rem;
+  margin-top: 6px;
+  line-height: 1.6;
+}
+.species-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+.species-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-size: 0.85rem;
+}
+.settings-advanced > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.settings-advanced input[type='number'] {
+  width: 96px;
+  min-height: 44px;
+}

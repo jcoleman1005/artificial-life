@@ -1,6 +1,7 @@
 import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/types';
 import { plantHue } from '../sim/plants';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
+import { speciesHue } from '../sim/species';
 import type { HeatmapKind } from '../sim/activity';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
@@ -19,7 +20,7 @@ export type MotionStyle = 'smooth' | 'fluid';
  * "r" end to purple few-well-fed "K" end). The last two read the life-history genes, so they are neutral while
  * those genes are off. Display only: nothing here feeds back into the world.
  */
-export type ColorMode = 'tag' | 'lineage' | 'diet' | 'metabolism' | 'reproStrategy';
+export type ColorMode = 'tag' | 'lineage' | 'diet' | 'metabolism' | 'reproStrategy' | 'species';
 
 /** Position of v in [min, max], 0..1 (0 when the range is empty). */
 const unit = (v: number, min: number, max: number): number => (max > min ? Math.min(1, Math.max(0, (v - min) / (max - min))) : 0);
@@ -125,6 +126,8 @@ export class CanvasRenderer {
   private baseCell = 6;
   private cellSize = 6;
   private colorMode: ColorMode = 'tag';
+  private speciesOf: ((organismId: string) => number) | null = null;
+  private highlightSpecies: number | null = null;
   // Smooth movement: where each organism was before the latest tick, and how
   // far (0..1) the current frame is through that tick.
   /** Where each organism's current glide starts, in cells (fractional when a glide was cut short). */
@@ -189,6 +192,16 @@ export class CanvasRenderer {
     this.colorMode = mode;
   }
 
+  /** Where to read an organism's species id from (the 'species' colour mode and the highlight). */
+  public setSpeciesLookup(lookup: ((organismId: string) => number) | null): void {
+    this.speciesOf = lookup;
+  }
+
+  /** Dims everyone outside this species (null: no highlight). */
+  public setHighlightSpecies(id: number | null): void {
+    this.highlightSpecies = id;
+  }
+
   public setSelectedPlant(id: string | null): void {
     this.selectedPlantId = id;
   }
@@ -212,6 +225,10 @@ export class CanvasRenderer {
     if (this.colorMode === 'diet') return 120 - 120 * org.carnivory;
     if (this.colorMode === 'metabolism') return metabolismHue(org, this.world.config);
     if (this.colorMode === 'reproStrategy') return reproStrategyHue(org, this.world.config);
+    if (this.colorMode === 'species') {
+      const id = this.speciesOf?.(org.id) ?? 0;
+      return id > 0 ? speciesHue(id) : org.tag; // no species yet: fall back to the tag
+    }
     return this.colorMode === 'tag' ? org.tag : lineageHue(org.lineage.id);
   }
 
@@ -641,6 +658,7 @@ export class CanvasRenderer {
     for (const org of this.world.organisms.values()) {
       if (!inView(org.x, org.y)) continue;
       if (family && org.lineage.id !== family) ctx.globalAlpha = 0.18;
+      else if (this.highlightSpecies !== null && this.speciesOf?.(org.id) !== this.highlightSpecies) ctx.globalAlpha = 0.18;
       this.drawOrganism(org, detail);
       ctx.globalAlpha = 1;
     }

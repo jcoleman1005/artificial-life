@@ -13,6 +13,8 @@ import { OrganismCard } from './ui/organism-card';
 import { PeekView, groupsTableHTML, seasonSummary } from './ui/peek-view';
 import { colourGroups } from './sim/groups';
 import { givenName } from './ui/names';
+import { SpeciesChart, selectedSpeciesHTML, speciesListHTML } from './ui/species-view';
+import { SpeciesSettings } from './ui/species-settings';
 import { LEGEND_HTML } from './ui/legend';
 import { eventListHTML, latestEventHTML } from './ui/events-view';
 import type { OverlayMode } from './render/renderer';
@@ -103,6 +105,10 @@ app.innerHTML = `
             <div class="stats-col">
               <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
               <div id="groups-container"></div>
+              <details class="species-panel">
+                <summary class="panel-heading">Species <small>clusters in genome; tap one to highlight it</small></summary>
+                <div id="species-container"></div>
+              </details>
             </div>
             <div class="stats-col stats-col-legend">
               ${LEGEND_HTML}
@@ -110,6 +116,7 @@ app.innerHTML = `
           </div>
         </section>
         <section class="tab-panel" data-panel="trends" id="history-container" aria-label="Trends over time"></section>
+        <section class="tab-panel" data-panel="trends" id="species-trends" aria-label="Species over time"></section>
         <section class="tab-panel" data-panel="organism" id="inspector-container"></section>
       </div>
     </aside>
@@ -146,6 +153,9 @@ const sim = new SimulationClient({
     settingsView.setToggles(togglesFor(sim.config));
     settingsView.setSeed(sim.config.seed);
     historyView.setController(sim.config.controller);
+    speciesSettings.sync(sim.config);
+    highlightedSpecies = null;
+    renderer.setHighlightSpecies(null);
     renderer.resize();
     renderer.clearMotion();
     layout();
@@ -160,6 +170,7 @@ const sim = new SimulationClient({
     // Changed by another viewer of the shared world.
     settingsView.setToggles(togglesFor(sim.config));
     historyView.setController(sim.config.controller);
+    speciesSettings.sync(sim.config);
     refreshPanels();
   },
   connection: (connected) => {
@@ -169,10 +180,25 @@ const sim = new SimulationClient({
   },
 });
 const renderer = new CanvasRenderer(canvas, sim);
+renderer.setSpeciesLookup((id) => sim.speciesOf(id));
 
 // 2. Views
 const metricsView = new MetricsView($('#metrics-container'));
 const groupsContainer = $('#groups-container');
+const speciesContainer = $('#species-container');
+const speciesChart = new SpeciesChart($('#species-trends'));
+/** The species whose members are lit on the map (null: none). */
+let highlightedSpecies: number | null = null;
+let lastSpeciesHTML = '';
+speciesContainer.addEventListener('click', (e) => {
+  const row = (e.target as Element).closest<HTMLElement>('[data-species]');
+  if (!row) return;
+  const id = Number(row.dataset.species);
+  highlightedSpecies = highlightedSpecies === id ? null : id;
+  renderer.setHighlightSpecies(highlightedSpecies);
+  needsRender = true;
+  refreshPanels();
+});
 const eventsContainer = $('#events-container');
 const peekEvent = $('.peek-event');
 const statsStatus = $('#stats-status');
@@ -356,10 +382,16 @@ function refreshPanels(): void {
       if (metrics) metricsView.render(metrics);
       const groupsHtml = groupsTableHTML(groups, population);
       if (groupsContainer.innerHTML !== groupsHtml) groupsContainer.innerHTML = groupsHtml;
+      const speciesHTML = speciesListHTML(sim.getSpecies(), highlightedSpecies);
+      if (speciesHTML !== lastSpeciesHTML) {
+        speciesContainer.innerHTML = speciesHTML;
+        lastSpeciesHTML = speciesHTML;
+      }
       const eventsHtml = eventListHTML(sim.worldEvents, sim.foodRegions, sim.config);
       if (eventsContainer.innerHTML !== eventsHtml) eventsContainer.innerHTML = eventsHtml;
     } else if (tab === 'trends') {
       historyView.render(sim.getHistorySamples());
+      speciesChart.render(sim.getSpecies());
     } else {
       const plantPatch = selectedPlantId ? findPlant(selectedPlantId) : undefined;
       if (plantPatch) lastPlantPatch = plantPatch;
@@ -396,6 +428,7 @@ function refreshPanels(): void {
         lastSelectedAncestry,
       );
       brainView.update(detail && shown.alive ? detail.id : null, sim.tick);
+      if (detail && shown.alive) $('#inspector-container').insertAdjacentHTML('afterbegin', selectedSpeciesHTML(sim.getSpecies(), sim.getSelectedSpecies()));
     }
   }
   lastPanelRefresh = performance.now();
@@ -497,6 +530,10 @@ const settingsView = new SettingsView(
     onLoadFile: (file) => void loadFromFile(file),
   }
 );
+const speciesSettings = new SpeciesSettings($('#settings-container'), sim.config, (patch) => {
+  sim.setConfig(patch);
+  speciesSettings.sync(sim.config);
+});
 
 /** Stops and restarts the world from tick 0 with the given seed (and settings needing a fresh world). */
 function restart(seed: string | number, config?: Partial<typeof sim.config>): void {

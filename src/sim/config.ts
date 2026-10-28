@@ -221,6 +221,15 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   detoxMin: 0,
   detoxMax: 1,
   detoxUpkeepRate: 0.03,
+  // Species detection: an observer, so none of these can change a fingerprint (docs/specs/species.md).
+  speciesEnabled: true,
+  speciesInterval: 50,
+  speciesThreshold: 0.15,
+  speciesMinSize: 5,
+  speciesPersistTicks: 200,
+  speciesExtinctTicks: 100,
+  speciesBrainWeight: 0.3,
+  speciesTagWeight: 0.1,
   seed: 42,
 };
 
