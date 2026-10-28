@@ -1313,7 +1313,7 @@ export class World {
       }
 
       // Clamp energy [0, maxEnergy]
-      organism.energy = Math.max(0, Math.min(this.config.maxEnergy, organism.energy));
+      organism.energy = Math.max(0, Math.min(maxEnergyOf(organism, this.config), organism.energy));
       organism.age++;
 
       // Record decision history

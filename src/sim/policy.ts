@@ -12,7 +12,7 @@ import { isKin, shareWeightFor, tagSimilarity } from './tags';
 import { isLeapAction, unitDirectionOf } from './directions';
 import { carrionYield, killChance } from './traits';
 import { isParentOf, isParentOrChild } from './family';
-import { thresholdOf } from './lifehistory';
+import { maxEnergyOf, thresholdOf } from './lifehistory';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -258,7 +258,7 @@ export function getLegalActions(
   // organism that is below half energy (organisms can see whether a
   // neighbour is hungry). The recipient eats it; energy is never transferred.
   if (sensed.canGive) {
-    const half = config.maxEnergy / 2;
+    const half = maxEnergyOf(organism, config) / 2;
     const candidateGives: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'GIVE_NORTH', dx: 0, dy: -1 },
       { type: 'GIVE_SOUTH', dx: 0, dy: 1 },
@@ -398,7 +398,7 @@ export function scoreAction(
       // Reproduction score increases with energy above reproduction threshold
       const threshold = thresholdOf(organism, config);
       const excessEnergy = Math.max(0, organism.energy - threshold);
-      const headroom = Math.max(1, config.maxEnergy - threshold);
+      const headroom = Math.max(1, maxEnergyOf(organism, config) - threshold);
       const fullness = excessEnergy / headroom;
       const reproComponent = policy.reproduceDrive * fullness * 3.5 + 0.2;
       components['surplusDrive'] = Number(reproComponent.toFixed(3));
