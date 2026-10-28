@@ -1,5 +1,6 @@
 import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/types';
 import { plantHue } from '../sim/plants';
+import { bodyScaleOf } from '../sim/growth';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import { speciesHue } from '../sim/species';
 import type { HeatmapKind } from '../sim/activity';
@@ -1286,10 +1287,12 @@ export class CanvasRenderer {
     const cx = gx;
     const cy = gy - lift;
     const config = this.world.config;
-    const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1);
+    // Growth: a juvenile is drawn smaller (render only), and its energy is shown against its smaller capacity.
+    const bodyScale = bodyScaleOf(org, config);
+    const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1) * bodyScale;
     const energyRatio = Math.max(0, Math.min(1, org.energy / maxEnergy));
     const hue = Math.round(this.hueOf(org));
-    const sizeScale = config.sizeGeneEnabled ? Math.sqrt(org.size ?? 1) : 1;
+    const sizeScale = (config.sizeGeneEnabled ? Math.sqrt(org.size ?? 1) : 1) * Math.sqrt(bodyScale);
     // Size by energy and body size, so glyphs stay readable and mice vs elephants are visible.
     const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio) * sizeScale);
 

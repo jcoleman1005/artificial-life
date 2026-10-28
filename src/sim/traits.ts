@@ -1,6 +1,7 @@
 import type { PRNG } from './prng';
 import type { Abilities, AbilityName, Organism, SimulationConfig } from './types';
 import { carnivoreEfficiencyOf, digestiveEfficiencyOf, maxEnergyOf, sizeOf } from './lifehistory';
+import { bodyScaleOf, senescenceFactorOf } from './growth';
 
 /** Carry capacity for a founder (pioneer or immigrant): 1–3 units. */
 export function founderCarryCapacity(config: Readonly<SimulationConfig>, prng: PRNG): number {
@@ -89,7 +90,7 @@ export function inheritAbilityEfficiency(parent: number, config: Readonly<Simula
  * squeeze squeezeCostMultiplier + 1 − e (3 − e), leap leapCostMultiplier + 1 − e (3.5 − e).
  */
 export function moveEnergyCost(
-  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity'>>,
+  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity'>>,
   move: { readonly leap: boolean; readonly diagonal: boolean; readonly squeeze: boolean },
   config: Readonly<SimulationConfig>
 ): number {
@@ -97,8 +98,9 @@ export function moveEnergyCost(
   const abilities = isOrganism ? (subject as Pick<Organism, 'abilities'>).abilities : (subject as Abilities);
   let moveCost = config.moveCost;
   if (isOrganism) {
-    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity'>;
-    const size = sizeOf(org, config);
+    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity'>;
+    // Mass moved: the size gene's, times body scale while growing (1 when grown).
+    const size = sizeOf(org, config) * bodyScaleOf(org, config);
     moveCost *= size;
     if (config.fatEnabled && config.fatDragCoeff > 0) {
       const fat = org.fat ?? 0;
@@ -129,10 +131,14 @@ export function herbivoryOf(organism: Readonly<Pick<Organism, 'carnivory' | 'her
 
 /** Energy spent per tick just staying alive, including the upkeep of body traits. */
 export function metabolismCost(organism: Readonly<Organism>, config: Readonly<SimulationConfig>): number {
+  // Kleiber scaling on the effective size: the size gene's, times body scale while growing.
+  const bodyScale = bodyScaleOf(organism, config);
   const sizeFactor =
     config.sizeGeneEnabled && organism.size !== undefined
-      ? Math.pow(organism.size, config.sizeMetabolismExponent ?? 0.75)
-      : 1;
+      ? Math.pow(organism.size * bodyScale, config.sizeMetabolismExponent ?? 0.75)
+      : bodyScale < 1
+        ? Math.pow(bodyScale, config.sizeMetabolismExponent ?? 0.75)
+        : 1;
   const metabolicRate =
     config.metabolismGeneEnabled && organism.metabolicRate !== undefined ? organism.metabolicRate : 1;
   const baseCost = config.tickMetabolismCost * sizeFactor * metabolicRate;
@@ -161,7 +167,7 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.detoxUpkeepRate * organism.detox * sizeFactor
       : 0;
 
-  return (
+  const total =
     baseCost +
     sensoryUpkeep +
     digestiveUpkeep +
@@ -179,8 +185,10 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
     // Stage 2: every gene costs upkeep, so genome length is under selection.
     (config.dnaVariationEnabled && organism.genome ? config.dnaUpkeepPerGene * (organism.genome.length / 3) : 0) +
     // Stage 3: each expressed connection of an acquired hidden unit (past the founders' 6) costs upkeep; founders pay 0.
-    (config.dnaEnabled && config.dnaGrowableBrain && organism.circuit ? config.dnaUpkeepPerConnection * organism.circuit.acquiredConnections : 0)
-  );
+    (config.dnaEnabled && config.dnaGrowableBrain && organism.circuit ? config.dnaUpkeepPerConnection * organism.circuit.acquiredConnections : 0);
+  // Ageing: past senescenceAge the whole upkeep rises (x1 otherwise, and with ageing off).
+  const aged = senescenceFactorOf(organism, config);
+  return aged === 1 ? total : total * aged;
 }
 
 /** A founder's diet: mostly a plant eater (carnivory 0–0.2), so any taste for meat has to evolve. */
@@ -196,17 +204,23 @@ export function inheritCarnivory(parent: number, config: Readonly<SimulationConf
 }
 
 /** Energy from one unit of plant food: less for meat eaters, when carrion is on; herbivory × yield with split diets. */
-export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herbivory' | 'digestiveEfficiency'>>, config: Readonly<SimulationConfig>): number {
+export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herbivory' | 'digestiveEfficiency' | 'maturity'>>, config: Readonly<SimulationConfig>): number {
   const eff = digestiveEfficiencyOf(organism, config);
-  if (splitDiets(config)) return config.foodEnergyYield * herbivoryOf(organism, config) * eff;
-  if (!config.carrionEnabled) return config.foodEnergyYield * eff;
-  return config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory) * eff;
+  // A small body takes a smaller bite: yield scales with body scale (x1 when grown, and with growth off).
+  const scale = bodyScaleOf(organism, config);
+  const meal = splitDiets(config)
+    ? config.foodEnergyYield * herbivoryOf(organism, config) * eff
+    : !config.carrionEnabled
+      ? config.foodEnergyYield * eff
+      : config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory) * eff;
+  return scale === 1 ? meal : meal * scale;
 }
 
 /** Energy from a full carrion meal (carrionBite of carrion energy); 0 when carrion is off. */
-export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency' | 'carnivoreEfficiency'>>, config: Readonly<SimulationConfig>): number {
+export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency' | 'carnivoreEfficiency' | 'maturity'>>, config: Readonly<SimulationConfig>): number {
   const eff = digestiveEfficiencyOf(organism, config) * carnivoreEfficiencyOf(organism, config);
-  return config.carrionEnabled ? config.carrionBite * organism.carnivory * eff : 0;
+  // A small body takes a smaller bite (x1 when grown, and with growth off).
+  return config.carrionEnabled ? config.carrionBite * bodyScaleOf(organism, config) * organism.carnivory * eff : 0;
 }
 
 /** Carrion energy a body leaves: a fixed amount plus a share of what it still held. Never more than the body cost. */

@@ -11,6 +11,7 @@ import type {
   FoodRegion,
   LegalAction,
   Organism,
+  GrowthMetrics,
   LifeMetrics,
   NutrientMetrics,
   SimulationConfig,
@@ -71,6 +72,7 @@ import {
   sizeOf,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
+import { bodyScaleOf, carryCapacityOf, diesOfOldAge, growthCostOf, growthRateOf, isMature, maturityOf } from './growth';
 import { capGenome, compileCircuit, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, growableBrain, internalUnits, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
@@ -165,6 +167,9 @@ const WORLD_COUNTERS = [
   'eggsHatchedTotal',
   'eggsDecayedTotal',
   'eggsEatenTotal',
+  'growthHeatTotal',
+  'growthEnergyLostTotal',
+  'deathsOldAgeTotal',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
@@ -224,6 +229,10 @@ export class World {
   public eggsLaidTotal = 0;
   public eggsHatchedTotal = 0;
   public eggsDecayedTotal = 0;
+  /** Growth: energy paid as heat to grow, and energy a newborn could not hold (above its small body's capacity) and lost. Ageing: deaths at maxAge. */
+  public growthHeatTotal = 0;
+  public growthEnergyLostTotal = 0;
+  public deathsOldAgeTotal = 0;
   public eggsEatenTotal = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
@@ -285,6 +294,9 @@ export class World {
     this.eggsLaidTotal = 0;
     this.eggsHatchedTotal = 0;
     this.eggsDecayedTotal = 0;
+    this.growthHeatTotal = 0;
+    this.growthEnergyLostTotal = 0;
+    this.deathsOldAgeTotal = 0;
     this.eggsEatenTotal = 0;
     this.lastKill = null;
     this.lastMating = null;
@@ -480,6 +492,7 @@ export class World {
       policy,
       ...phenotype,
       ...(genome ? { genome } : {}),
+      ...(this.config.growthEnabled ? { maturity: 1 } : {}), // founders and immigrants are grown
       memory: newMemory(x, y),
       kills: 0,
       ...(this.config.plantDefenseEnabled ? { lastBiteYield: 1.0 } : {}),
@@ -562,7 +575,7 @@ export class World {
 
   /** A saved organism back as a live one (with the growable brain, its circuit recompiled from the genome). */
   private static restoreOrganism({ genome, ...o }: SavedOrganism, config: Readonly<SimulationConfig>): Organism {
-    const upgraded = genome ? upgradeGenome(genome, o.brain.skip.length) : undefined;
+    const upgraded = genome ? upgradeGenome(genome, o.brain.skip.length, config) : undefined;
     return {
       ...clone(o),
       ...(upgraded ? { genome: upgraded } : {}),
@@ -628,6 +641,9 @@ export class World {
     if (state.version !== 1) throw new Error(`Unknown world state version ${String(state.version)}`);
     const world = new World({ ...state.config, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0, foodRegionCount: 0 });
     Object.assign(world.config, state.config);
+    // Saves from before growth and ageing continue without them (their organisms are grown and have no age limit).
+    if (state.config.growthEnabled === undefined) world.config.growthEnabled = false;
+    if (state.config.ageingEnabled === undefined) world.config.ageingEnabled = false;
     world.prng.setSeed(state.prng.seed);
     world.prng.setState(state.prng.state);
     world.tick = state.tick;
@@ -1098,7 +1114,8 @@ export class World {
             energyDelta += energyGain;
             outcome = 'success';
           } else if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
-            const taken = Math.min(patch.stock, this.config.carrionBite);
+            // A small body takes a smaller bite (x1 when grown, and with growth off).
+            const taken = Math.min(patch.stock, this.config.carrionBite * bodyScaleOf(organism, this.config));
             const meal = taken * organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config);
             const maxEnergy = maxEnergyOf(organism, this.config);
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
@@ -1243,7 +1260,7 @@ export class World {
 
         case 'PICK_UP': {
           const patch = this.foodPatches.get(`${organism.x},${organism.y}`);
-          if (patch && patch.stock > 0 && organism.carriedFood < organism.carryCapacity) {
+          if (patch && patch.stock > 0 && organism.carriedFood < carryCapacityOf(organism, this.config)) {
             patch.stock -= 1;
             grazePlant(patch, this.tick, this.plantCounters);
             this.biteCell(patch);
@@ -1309,11 +1326,25 @@ export class World {
 
       // Memory takes in what was sensed at the start of this tick.
       if (this.config.memoryEnabled && organism.memorySpan > 0) {
-        updateMemory(organism.memory, organism.memoryWeights, sensed, organism.carryCapacity, startCell, this.tick);
+        updateMemory(organism.memory, organism.memoryWeights, sensed, carryCapacityOf(organism, this.config), startCell, this.tick);
+      }
+
+      // Growth: a fed juvenile adds maturity (1 / its growth duration) and pays heat for it
+      // (more per tick the shorter its duration, see growthCostOf); a hungry one stalls.
+      let energyCap = this.config.maxEnergy;
+      if (this.config.growthEnabled && (organism.maturity ?? 1) < 1) {
+        if (organism.energy >= this.config.growthEnergyFloor * maxEnergyOf(organism, this.config)) {
+          const heat = growthCostOf(organism, this.config);
+          organism.maturity = Math.min(1, (organism.maturity ?? 1) + growthRateOf(organism, this.config));
+          organism.energy -= heat;
+          energyDelta -= heat;
+          this.growthHeatTotal += heat;
+        }
+        energyCap = Math.min(energyCap, maxEnergyOf(organism, this.config));
       }
 
       // Clamp energy [0, maxEnergy]
-      organism.energy = Math.max(0, Math.min(this.config.maxEnergy, organism.energy));
+      organism.energy = Math.max(0, Math.min(energyCap, organism.energy));
       organism.age++;
 
       // Record decision history
@@ -1412,7 +1443,13 @@ export class World {
     // carrionBodyEnergy plus carrionEfficiency of the energy it still held (a
     // starved body holds none; a killed one usually some).
     for (const [id, org] of Array.from(this.organisms.entries())) {
-      if (org.energy <= 0) {
+      // Ageing: a body that reaches maxAge dies, leaving carrion like any body (its remaining energy counts as body energy).
+      const oldAge = org.energy > 0 && diesOfOldAge(org, this.config);
+      if (oldAge) {
+        this.deathsOldAgeTotal++;
+        bodies.set(id, org.energy);
+      }
+      if (org.energy <= 0 || oldAge) {
         this.deceasedCount++;
         this.deceasedLifespanSum += org.age;
         this.deathsTotal++;
@@ -1457,13 +1494,18 @@ export class World {
     this.nextOrganismSeq++;
     const policy = mutatePolicy(policySource, this.config, this.prng);
     const inherited = this.inheritBody(parent, mate);
+    // With growth a newborn is small: its body holds less, and energy past that is lost (counted).
+    const maturity = this.config.growthEnabled ? this.config.hatchMaturity : undefined;
+    const capacity = maxEnergyOf(maturity === undefined ? inherited : { ...inherited, maturity }, this.config);
+    if (maturity !== undefined && energy > capacity) this.growthEnergyLostTotal += energy - capacity;
     const child: Organism = {
       id: `org-${this.nextOrganismSeq}`,
       x: birth.x,
       y: birth.y,
-      energy: Math.min(energy, maxEnergyOf(inherited, this.config)),
+      energy: Math.min(energy, capacity),
       policy,
       ...inherited,
+      ...(maturity === undefined ? {} : { maturity }),
       memory: newMemory(birth.x, birth.y),
       kills: 0,
       ...(this.config.plantDefenseEnabled ? { lastBiteYield: 1.0 } : {}),
@@ -1505,7 +1547,7 @@ export class World {
   private mate(a: Organism, b: Organism, blocked: Set<string>, newBorns: Organism[]): boolean {
     const { config } = this;
     const tax = config.reproductionMetabolismTax;
-    const ready = (o: Organism) => o.energy >= thresholdOf(o, config) && this.tick >= (o.nextBirthTick ?? 0);
+    const ready = (o: Organism) => o.energy >= thresholdOf(o, config) && this.tick >= (o.nextBirthTick ?? 0) && isMature(o, config);
     if (!ready(a) || !ready(b)) return false;
     const share = (o: Organism) => Math.floor(o.energy * investmentOf(o, config));
     const shareA = share(a);
@@ -2002,6 +2044,7 @@ export class World {
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
       overgrazing: this.cellHealth ? this.cellHealth.metrics(this.soil(), this.foodRegions.length, this.fertile()) : null,
       life: this.lifeMetrics(organisms),
+      growth: this.growthMetrics(organisms),
       weather: this.weather && this.config.weatherEnabled ? this.weather.getMetrics(seasonAt(this.tick, this.config)?.season ?? null) : null,
       nutrients: this.computeNutrientMetrics(),
     };
@@ -2058,6 +2101,23 @@ export class World {
     };
   }
 
+  private growthMetrics(organisms: readonly Organism[]): GrowthMetrics | null {
+    const c = this.config;
+    if (!c.growthEnabled && !c.ageingEnabled) return null;
+    const n = organisms.length;
+    const mean = (value: (o: Organism) => number) => (n > 0 ? Number((organisms.reduce((a, o) => a + value(o), 0) / n).toFixed(3)) : 0);
+    return {
+      meanMaturity: mean((o) => maturityOf(o, c)),
+      juvenileFraction: mean((o) => (isMature(o, c) ? 0 : 1)),
+      senescentFraction: mean((o) => (c.ageingEnabled && o.age > c.senescenceAge ? 1 : 0)),
+      meanAge: mean((o) => o.age),
+      deathsOldAgeTotal: this.deathsOldAgeTotal,
+      meanLifespan: this.deceasedCount > 0 ? Number((this.deceasedLifespanSum / this.deceasedCount).toFixed(1)) : 0,
+      growthHeatTotal: Number(this.growthHeatTotal.toFixed(2)),
+      growthEnergyLostTotal: Number(this.growthEnergyLostTotal.toFixed(2)),
+    };
+  }
+
   private lifeMetrics(organisms: readonly Organism[]): LifeMetrics | null {
     const c = this.config;
     if (!LIFE_GENES.some((g) => g.enabled(c))) return null;
@@ -2077,6 +2137,7 @@ export class World {
       digestiveEfficiency: mean(c.digestiveGeneEnabled, (o) => o.digestiveEfficiency ?? 1),
       carnivoreEfficiency: mean(c.carnivoreGeneEnabled, (o) => o.carnivoreEfficiency ?? c.carnivoreFounder),
       detox: mean(c.detoxGeneEnabled, (o) => o.detox ?? c.detoxFounder),
+      growthDuration: mean(c.growthEnabled && c.growthGeneEnabled, (o) => o.growthDuration ?? c.growthDurationFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,
