@@ -683,7 +683,7 @@ button {
 .peek-season {
   flex: 1;
   min-width: 0;
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   letter-spacing: -0.01em;
   color: #e2e8f0;
   white-space: nowrap;
@@ -703,8 +703,8 @@ button {
     font-size: var(--text-base);
   }
   .peek-season {
-    font-size: 0.6875rem;
-    letter-spacing: -0.02em;
+    font-size: 0.76rem;
+    letter-spacing: -0.01em;
   }
 }
 

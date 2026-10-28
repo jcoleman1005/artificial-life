@@ -66,7 +66,7 @@ Instituted formal Semantic Versioning and replaced binary plenty/lean announceme
 - **Four Ecological Seasons & Atmospheric Weather Patterns**:
   - Replaces binary "Plenty" / "Lean" announcements with four natural seasons: 🌱 Spring (renewal & regrowth), ☀️ Summer (peak fertility & warmth), 🍂 Autumn (seed maturation & cooling transition), and ❄️ Winter (lean period, frost, dormancy).
   - Dynamic weather patterns derived from atmospheric simulation: 🌧️ Rainstorm, ❄️ Cold snap, ☀️ Heatwave, 💨 Gale, 🍃 Breezy, and 🌤️ Fair.
-  - Peek pill displays living conditions across all four map quadrants: `NW: [season] NE: [season] SE: [season] SW: [season]` (e.g. `NW: Spring NE: Summer SE: Autumn SW: Winter`), coupled with active atmospheric weather alerts (` · 🌧️ Rainstorm`).
+  - Peek pill displays living conditions across all four map quadrants using compact icons: `NW: [icon] NE: [icon] SE: [icon] SW: [icon]` (🌱 sprout for Spring, ☀️ sun for Summer, 🍂 orange leaf for Autumn/Fall, ❄️ snowflake for Winter; e.g. `NW: 🌱 NE: ☀️ SE: 🍂 SW: ❄️`), coupled with active atmospheric weather alerts (` · 🌧️ Rainstorm`). Hover tooltip provides full text details (`NW: Spring (🌱)  NE: Summer (☀️) ...`).
   - Event feed reports ecological milestones (`❄️ Winter begins in the north-west`, `🌱 Spring arrives`) and atmospheric arrivals (`🌧️ Rainstorm rolls in`, `❄️ Cold snap sweeps in`, `☀️ Heatwave builds`).
 - **2.5D Leap Hop & Parabola Guide Clean-Up**:
   - Removed the static trajectory parabola curve and ground dashed line across grid cells.

@@ -163,13 +163,15 @@ export function quadrantSeasons(
 
 export interface SeasonSummary {
   readonly text: string;
+  readonly tooltip?: string;
   readonly lean: boolean;
   readonly season?: EcologicalSeason;
 }
 
 /**
- * World ecological seasons formatted across the four map quadrants:
- * NW:[season] NE:[season] SE:[season] SW:[season]
+ * World ecological seasons formatted across the four map quadrants using compact icons:
+ * NW: [icon] NE: [icon] SE: [icon] SW: [icon]
+ * (🌱 sprout for Spring, ☀️ sun for Summer, 🍂 orange leaf for Autumn/Fall, ❄️ snowflake for Winter)
  * coupled with dynamic atmospheric weather pattern summaries.
  */
 export function seasonSummary(
@@ -189,12 +191,14 @@ export function seasonSummary(
   }
 
   const qs = quadrantSeasons(tick, regions, config);
-  const seasonsText = qs.map((q) => `${q.id}: ${q.season}`).join(' ');
+  const seasonsText = qs.map((q) => `${q.id}: ${q.icon}`).join(' ');
   const text = pattern ? `${seasonsText} · ${pattern}` : seasonsText;
+  const tooltip = qs.map((q) => `${q.id}: ${q.season} (${q.icon})`).join('  ') + (pattern ? ` · ${pattern}` : '');
   const anyLean = qs.some((q) => q.phase === 'lean');
 
   return {
     text,
+    tooltip,
     lean: anyLean,
     season: eco.season,
   };
@@ -220,7 +224,7 @@ export class PeekView {
     if (this.popEl.textContent !== pop) this.popEl.textContent = pop;
     if (this.seasonEl.textContent !== season.text) {
       this.seasonEl.textContent = season.text;
-      this.seasonEl.title = season.text;
+      this.seasonEl.title = season.tooltip ?? season.text;
     }
     this.seasonEl.classList.toggle('lean', season.lean);
     this.seasonEl.classList.toggle('spring', season.season === 'Spring');
