@@ -79,7 +79,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Live brain viewer (observer only; `docs/specs/brain-viewer.md`): `inspectBrain` / `BrainTrace`, proven not to change `stateHash()` (2026-10-28).
 - Growth and ageing (`growthEnabled`, `ageingEnabled`, on; `docs/specs/growth.md`): hatch small, grow while fed, maturity gate on REPRODUCE/MATE, senescence and old-age death; brain input `maturity` (2026-10-28).
 - Growth duration gene (`growthGeneEnabled`, on; trait 52): inherited time to adulthood; faster growth costs more heat in total (2026-10-28).
-- Inherited hatch maturity (queued; `docs/specs/hatch-maturity.md`): newborn maturity as a gene, paid through the clutch pool (2026-10-28).
+- Inherited hatch maturity (`hatchMaturityGeneEnabled`, on with growth; trait 53; `docs/specs/hatch-maturity.md`): newborn maturity as a gene, paid through the child's minimum viable energy (2026-10-28).
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.
