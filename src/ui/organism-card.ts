@@ -156,6 +156,22 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
     });
   }
 
+  // Growth pace (growth gene): standout only when well away from the founders' 100 ticks.
+  if (config.growthEnabled && config.growthGeneEnabled && org.growthDuration !== undefined) {
+    const d = org.growthDuration;
+    const fast = d <= config.growthDurationFounder * 0.6;
+    const slow = d >= config.growthDurationFounder * 1.6;
+    if (fast || slow) {
+      standouts.push({
+        icon: fast ? '🐇' : '🐢',
+        label: fast ? 'Fast grower' : 'Slow grower',
+        value: `${Math.round(d)}`,
+        category: 'morphology',
+        score: 44 + Math.min(10, Math.abs(Math.log2(d / config.growthDurationFounder)) * 4),
+      });
+    }
+  }
+
   // Chemical Defense & Sensory
   if (config.detoxGeneEnabled && (org.detox ?? 0) >= 0.15) {
     standouts.push({

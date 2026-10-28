@@ -171,7 +171,8 @@ describe('Mating', () => {
   });
 
   it('makes one child when both ask, each parent paying its own share plus the tax', () => {
-    const world = quietWorld({ reproductionThreshold: 40, reproductionEnergyFraction: 0.5, reproductionMetabolismTax: 5 });
+    // growth off: a newborn's small body would clip the shares this test checks (tests/growth.test.ts covers growth)
+    const world = quietWorld({ reproductionThreshold: 40, reproductionEnergyFraction: 0.5, reproductionMetabolismTax: 5, growthEnabled: false });
     const a = makeOrganism('a', 5, 5, { energy: 60, brain: ASKER, lineage: { id: 'lin-a', parentId: null, generation: 3, birthTick: 0 } });
     const b = makeOrganism('b', 6, 5, { energy: 80, brain: ASKER, tag: 180 });
     addAll(world, a, b);
@@ -463,7 +464,8 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   });
 
   it('charges each parent its own energy × its own investment, plus the tax', () => {
-    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5 });
+    // growth off: a newborn's small body would clip the shares this test checks (tests/growth.test.ts covers growth)
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, growthEnabled: false });
     const [a, b] = pair(world, { energy: 60, investment: 0.2 }, { energy: 80, investment: 0.6 });
     world.step();
     const kids = children(world);
@@ -476,7 +478,7 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   it('takes the clutch size from the carrier and splits the pair\'s shares equally', () => {
     const seen = new Set<string>();
     for (let seed = 0; seed < 16; seed++) {
-      const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5 });
+      const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5, growthEnabled: false }); // growth off: a newborn's small body would clip the split
       pair(world, { energy: 80, clutchSize: 3 }, { energy: 80, clutchSize: 1 });
       world.step();
       const kids = children(world);

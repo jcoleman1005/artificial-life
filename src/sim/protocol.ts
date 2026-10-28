@@ -58,6 +58,9 @@ export interface OrganismView {
   readonly digestiveEfficiency?: number;
   readonly carnivoreEfficiency?: number;
   readonly detox?: number;
+  /** Fed ticks to grow up (growth gene), and how grown the body is, 0..1 (growthEnabled; absent means grown). */
+  readonly growthDuration?: number;
+  readonly maturity?: number;
   readonly lastBiteYield?: number;
   /** Life-history genes the colour modes and card read (absent while their switch is off). */
   readonly metabolicRate?: number;
@@ -125,6 +128,8 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.digestiveEfficiency !== undefined ? { digestiveEfficiency: org.digestiveEfficiency } : {}),
     ...(org.carnivoreEfficiency !== undefined ? { carnivoreEfficiency: org.carnivoreEfficiency } : {}),
     ...(org.detox !== undefined ? { detox: org.detox } : {}),
+    ...(org.growthDuration !== undefined ? { growthDuration: org.growthDuration } : {}),
+    ...(org.maturity !== undefined ? { maturity: org.maturity } : {}),
     ...(org.lastBiteYield !== undefined ? { lastBiteYield: org.lastBiteYield } : {}),
     ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0
       ? { acquiredBrainUnits: org.circuit.effectiveAcquiredUnits }

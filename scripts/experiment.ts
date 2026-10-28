@@ -130,6 +130,8 @@ function runJob(job: Job): RunResult {
   const onWindfall = new Set<string>();
   // Stage 2: genome length (mean and spread) at five checkpoints, and the cost of the steps themselves.
   const genomeSeries: { mean: number; sd: number }[] = [];
+  // Growth gene: the population's mean growth duration at five checkpoints (reported as growthDuration.t<tick>).
+  const growthDurationSeries: [number, number][] = [];
   let stepMs = 0;
   let organismSteps = 0;
   const diagnostics = new Diagnostics();
@@ -151,6 +153,10 @@ function runJob(job: Job): RunResult {
     if (world.config.dnaVariationEnabled && t % Math.floor(job.ticks / 5) === 0 && genomeSeries.length < 5) {
       const s = genomeStats(Array.from(world.organisms.values(), (o) => o.genome ?? new Uint32Array(0)), world.config);
       genomeSeries.push({ mean: s.meanLength, sd: s.sdLength });
+    }
+    if (world.config.growthEnabled && world.config.growthGeneEnabled && t % Math.floor(job.ticks / 5) === 0 && growthDurationSeries.length < 5) {
+      const durations = Array.from(world.organisms.values(), (o) => o.growthDuration).filter((d): d is number => d !== undefined);
+      if (durations.length > 0) growthDurationSeries.push([t, durations.reduce((a, d) => a + d, 0) / durations.length]);
     }
     if (world.config.plantsEnabled) {
       for (const p of world.foodPatches.values()) {
@@ -292,6 +298,21 @@ function runJob(job: Job): RunResult {
     ),
     extinct: organisms.length === 0 ? 1 : 0,
     ...(organisms.length > 0 ? { energy: mean((o) => o.energy) } : {}),
+    // Growth and ageing (docs/specs/growth.md): only while either is on.
+    ...(m.growth
+      ? {
+          meanMaturity: m.growth.meanMaturity,
+          'juvenile%': 100 * m.growth.juvenileFraction,
+          'senescent%': 100 * m.growth.senescentFraction,
+          meanAge: m.growth.meanAge,
+          meanLifespan: m.growth.meanLifespan,
+          deathsOldAge: m.growth.deathsOldAgeTotal,
+          growthHeat: m.growth.growthHeatTotal,
+        }
+      : {}),
+    ...(world.config.growthEnabled && world.config.growthGeneEnabled && organisms.length > 0
+      ? { growthDuration: mean((o) => o.growthDuration ?? world.config.growthDurationFounder), ...Object.fromEntries(growthDurationSeries.map(([t, v]) => [`growthDuration.t${t}`, v])) }
+      : {}),
     ...(continuousAbilities(world.config) && organisms.length > 0 ? abilityEfficiencyResults(organisms) : {}),
     ...(splitDiets(world.config) && organisms.length > 0
       ? {

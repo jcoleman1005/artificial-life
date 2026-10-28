@@ -88,6 +88,49 @@ describe('Default world', () => {
     });
   });
 
+  it('runs growth and ageing, with the logged constants (docs/findings.md, Parameter log)', () => {
+    expect({
+      growthEnabled: DEFAULT_CONFIG.growthEnabled,
+      hatchMaturity: DEFAULT_CONFIG.hatchMaturity,
+      hatchScale: DEFAULT_CONFIG.hatchScale,
+      growthTicks: DEFAULT_CONFIG.growthTicks,
+      growthEnergyFloor: DEFAULT_CONFIG.growthEnergyFloor,
+      growthCostPerTick: DEFAULT_CONFIG.growthCostPerTick,
+      matureAt: DEFAULT_CONFIG.matureAt,
+      growthGeneEnabled: DEFAULT_CONFIG.growthGeneEnabled,
+      growthDurationFounder: DEFAULT_CONFIG.growthDurationFounder,
+      growthDurationMin: DEFAULT_CONFIG.growthDurationMin,
+      growthDurationMax: DEFAULT_CONFIG.growthDurationMax,
+      growthDurationStep: DEFAULT_CONFIG.growthDurationStep,
+      growthDurationCostExponent: DEFAULT_CONFIG.growthDurationCostExponent,
+      ageingEnabled: DEFAULT_CONFIG.ageingEnabled,
+      senescenceAge: DEFAULT_CONFIG.senescenceAge,
+      senescenceRate: DEFAULT_CONFIG.senescenceRate,
+      maxAge: DEFAULT_CONFIG.maxAge,
+    }).toEqual({
+      growthEnabled: true,
+      hatchMaturity: 0.35,
+      hatchScale: 0.4,
+      growthTicks: 100,
+      growthEnergyFloor: 0.4,
+      growthCostPerTick: 0.05,
+      matureAt: 0.9,
+      growthGeneEnabled: true,
+      growthDurationFounder: 100,
+      growthDurationMin: 20,
+      growthDurationMax: 800,
+      growthDurationStep: 10,
+      growthDurationCostExponent: 1.5,
+      ageingEnabled: true,
+      senescenceAge: 4000,
+      senescenceRate: 0.001,
+      maxAge: 8000,
+    });
+    // The maturity input starts with no weight, so no founder is born with an opinion about it.
+    expect(BRAIN_INPUTS[BRAIN_INPUTS.length - 1]).toBe('maturity');
+    expect(HEAD_START_SKIP[BRAIN_INPUTS.indexOf('maturity')]).toBe(0);
+  });
+
   it('keeps the logged brain head starts for attacking and mating (docs/findings.md, Parameter log)', () => {
     const skip = (name: (typeof BRAIN_INPUTS)[number]) => HEAD_START_SKIP[BRAIN_INPUTS.indexOf(name)];
     expect([skip('isAttack'), skip('attackKillChance'), skip('attackAlike'), skip('attackFamily'), skip('attackHunger')]).toEqual([

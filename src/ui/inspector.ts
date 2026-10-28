@@ -9,6 +9,7 @@ import { LIFE_GENES, birthCooldownOf, clutchSizeOf } from '../sim/lifehistory';
 import { GENE_WORDS, GeneClass, TraitId, genomeStats, geneClassOf, geneCount, geneIndexOf, isExpressed } from '../sim/dna';
 import { describeDoing } from './organism-card';
 import { renderLineageMap } from './lineage-view';
+import { lifeStageOf, maturityOf } from '../sim/growth';
 
 /** Pills for the life-history genes that are switched on in this world (and torpor / fat state). */
 export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationConfig>): string {
@@ -45,6 +46,13 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (c.detoxGeneEnabled && o.detox !== undefined) {
     out.push(pill('Detox', `${Math.round(o.detox * 100)}%`));
   }
+  if (c.growthEnabled || c.ageingEnabled) {
+    const stage = lifeStageOf(o, c);
+    const grown = c.growthEnabled ? ` · ${Math.round(maturityOf(o, c) * 100)}% grown` : '';
+    out.push(pill('Life stage', `${stage[0].toUpperCase()}${stage.slice(1)}${grown}`));
+    out.push(pill('Age', c.ageingEnabled ? `${o.age} of ${c.maxAge} ticks` : `${o.age} ticks`));
+  }
+  if (o.growthDuration !== undefined) out.push(pill('Growth', `${o.growthDuration.toFixed(0)} fed ticks to adult`));
   return out.join('');
 }
 
@@ -118,6 +126,7 @@ export function genomeTraitRows(o: Readonly<Organism>, c: Readonly<SimulationCon
     digestiveEfficiency: 'Digestion',
     carnivoreEfficiency: 'Meat digestion',
     detox: 'Detoxification',
+    growthDuration: 'Growth duration',
   };
   for (const g of LIFE_GENES) {
     add(lifeLabels[g.field] ?? g.field, g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);

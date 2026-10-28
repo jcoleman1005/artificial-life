@@ -197,6 +197,7 @@ export type WorldCountedMetric =
   | 'plants'
   | 'overgrazing'
   | 'life'
+  | 'growth'
   | 'weather'
   | 'nutrients';
 
