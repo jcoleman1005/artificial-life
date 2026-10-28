@@ -37,6 +37,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Footprint space rule (2026-10-28, decided, not built): one body per cell; derived footprint radius draws large bodies overlapping and drives crowding pressure; squeeze and leap are size-gated.
 - Energy ledger (2026-10-28, decided, not built): observer that checks energy in minus out equals the change in stored energy every tick; every new gene must balance.
 - Thermal physics (2026-10-28, decided, not built): cold and heat both cost, scaled by surface-area-to-volume, fat and metabolic rate; no thermal gene; `thermalPhysicsEnabled` switch.
+- Line of sight (2026-10-28, decided, conditional on a perf budget, not built): walls and bodies block sight inside the sensing window; `lineOfSightEnabled` switch; weather coupling is held.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
