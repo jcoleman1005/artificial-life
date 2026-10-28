@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Settings panel feature alignment: Weather, Nutrients, Predation, Mating, Carrion, Overgrazing, DNA toggles; Endogenous soil-plant-unit nutrient cycle; Dynamic multi-front weather systems; Genome Lineage Map; Egg inspection; UI/UX mobile refactor; Genome trend dashboard; Tier 1 basic physical genes; DNA Stage 3 growable brain; and carnivore efficiency)._
+_Last updated: 2026-10-28 (Feature display audit & visual enhancements: World canvas plant defense spines, ballistic leaping trajectory arcs with intermediate drop shadows, downwind-deflected signal waves, 3-stage carrion decomposition, acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -27,6 +27,17 @@ _Last updated: 2026-10-28 (Settings panel feature alignment: Weather, Nutrients,
 ## What exists (summary)
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
+
+## World Canvas Visual Enhancements (built 2026-10-28)
+
+High-fidelity canvas visual enhancements and secondary dashboard expansions (`src/render/renderer.ts`, `src/ui/inspector.ts`, `src/ui/metrics-view.ts`):
+- **Plant Chemical Defense Spines**: Radiates defensive thorn needles from leaf axils at LOD 1+ (`cellSize >= 5.5`) scaling with `plant.genome.defense`.
+- **Parabolic Leaping Arc & Drop Shadow**: Leaping over an adjacent organism draws a 2-cell ballistic quadratic trajectory curve with an intermediate cell ground shadow ellipse, visually lifting the leaper above intermediate terrain.
+- **Downwind Signal Lobes**: Skews expanding signal diamond ripples along local atmospheric wind vectors ($(w_x, w_y)$), visually showing `weatherSignalDrift`.
+- **Carrion Decomposition Stages**: 3 distinct visual degradation states (fresh crimson carcass with pink fleshy core, rotting brown-red puddle with exposed bone, and weathered bleached bone fragments).
+- **Acute Toxin Malaise Spasm Glyph**: Grazing toxic plants without adequate detox ($T_{\text{eff}} > 0.3$) triggers a vibrating amber-magenta jagged distress ring surrounding the organism.
+- **Inspector & Dashboards**: Added Detoxification gene pill, local micro-climate, kin pull vector, and scavenging senses in the Inspector; added Biosphere Nutrients, Atmospheric Weather, Plant Ecology, and Tribe formation metric cards in the Stats panel.
+- **Zero Calculation Impact**: Pure read-only projections of pre-tick snapshots; zero extra PRNG draws; bit-identical determinism preserved.
 
 ## Genome Lineage Map (built 2026-10-27)
 

@@ -750,17 +750,41 @@ export class CanvasRenderer {
 
   /**
    * Signals spreading to their real reach (a diamond: reach is counted in
-   * steps), and the selected organism's own signal reach.
+   * steps), and the selected organism's own signal reach. Skewed downwind
+   * when weather wind is active.
    */
   private drawSignalRipples(selected: OrganismView | undefined): void {
     const { ctx, cellSize } = this;
     const reach = this.world.config.signalRadius;
-    const diamond = (cx: number, cy: number, r: number) => {
+    const diamond = (cx: number, cy: number, r: number, gx: number, gy: number) => {
+      let k = 0;
+      let ux = 0;
+      let uy = 0;
+      if (this.world.weather) {
+        const wind = this.world.weather.getWind(gx, gy);
+        const speed = Math.hypot(wind.wx, wind.wy);
+        if (speed > 0.05) {
+          k = speed * 0.3;
+          ux = wind.wx / speed;
+          uy = wind.wy / speed;
+        }
+      }
+      const rawPts: readonly [number, number][] = [
+        [0, -r],
+        [r, 0],
+        [0, r],
+        [-r, 0],
+      ];
       ctx.beginPath();
-      ctx.moveTo(cx, cy - r);
-      ctx.lineTo(cx + r, cy);
-      ctx.lineTo(cx, cy + r);
-      ctx.lineTo(cx - r, cy);
+      for (let i = 0; i < 4; i++) {
+        const [dx, dy] = rawPts[i];
+        const dot = k > 0 ? (dx * ux + dy * uy) / r : 0;
+        const stretch = 1 + k * dot;
+        const px = cx + dx * stretch;
+        const py = cy + dy * stretch;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
       ctx.closePath();
     };
     ctx.lineWidth = Math.max(1, cellSize * 0.06);
@@ -770,7 +794,7 @@ export class CanvasRenderer {
       const [cx, cy] = this.displayCentre(org);
       const p = this.progress;
       ctx.strokeStyle = `hsla(${this.hueOf(org)}, 85%, 70%, ${(0.55 * (1 - p) + 0.08).toFixed(3)})`;
-      diamond(cx, cy, Math.max(0.1, p) * (reach + 0.5) * cellSize);
+      diamond(cx, cy, Math.max(0.1, p) * (reach + 0.5) * cellSize, org.x, org.y);
       ctx.stroke();
     }
     if (selected) {
@@ -778,7 +802,7 @@ export class CanvasRenderer {
       ctx.strokeStyle = 'rgba(103, 232, 249, 0.45)';
       ctx.fillStyle = 'rgba(103, 232, 249, 0.04)';
       ctx.setLineDash([3, 5]);
-      diamond(cx, cy, (reach + 0.5) * cellSize);
+      diamond(cx, cy, (reach + 0.5) * cellSize, selected.x, selected.y);
       ctx.fill();
       ctx.stroke();
       ctx.setLineDash([]);
@@ -935,38 +959,121 @@ export class CanvasRenderer {
     const { ctx, cellSize } = this;
     const cx = (c.x + 0.5) * cellSize;
     const cy = (c.y + 0.5) * cellSize;
+    const config = this.world.config;
+    const baseEnergy = config.carrionBodyEnergy;
     const size = Math.min(1, 0.5 + c.stock / 100); // by the energy left in it
-    ctx.fillStyle = 'rgba(190, 18, 60, 0.22)';
-    ctx.beginPath();
-    ctx.arc(cx, cy, cellSize * 0.42 * size, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = BONE;
-    ctx.strokeStyle = BONE;
-    if (detail < 0.5) {
+
+    const isFresh = c.stock >= baseEnergy * 0.7;
+    const isDecomposing = !isFresh && c.stock >= baseEnergy * 0.3;
+
+    if (isFresh) {
+      // Fresh carcass: vivid crimson circle with fleshy tint
+      ctx.fillStyle = 'rgba(225, 29, 72, 0.38)';
       ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(0.7, cellSize * 0.1 * size), 0, TAU);
+      ctx.arc(cx, cy, cellSize * 0.44 * size, 0, TAU);
       ctx.fill();
-      return;
+
+      // Fleshy tint core
+      ctx.fillStyle = 'rgba(251, 113, 133, 0.48)';
+      ctx.beginPath();
+      ctx.arc(cx - cellSize * 0.04, cy - cellSize * 0.04, cellSize * 0.26 * size, 0, TAU);
+      ctx.fill();
+
+      if (detail < 0.5) {
+        ctx.fillStyle = 'rgba(244, 63, 94, 0.9)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(0.7, cellSize * 0.12 * size), 0, TAU);
+        ctx.fill();
+        return;
+      }
+      // Fleshy nodule with subtle submerged bone tip
+      ctx.fillStyle = 'rgba(254, 205, 211, 0.85)';
+      ctx.strokeStyle = 'rgba(254, 205, 211, 0.85)';
+      const half = cellSize * 0.16 * size;
+      const knob = cellSize * 0.05;
+      ctx.lineWidth = Math.max(0.9, cellSize * 0.06);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - half, cy + half * 0.5);
+      ctx.lineTo(cx + half, cy - half * 0.5);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      for (const [bx, by] of [
+        [cx - half, cy + half * 0.5],
+        [cx + half, cy - half * 0.5],
+      ] as const) {
+        ctx.moveTo(bx + knob, by);
+        ctx.arc(bx, by, knob, 0, TAU);
+      }
+      ctx.fill();
+    } else if (isDecomposing) {
+      // Decomposing flesh: darker brown-red puddle with exposed bone
+      ctx.fillStyle = 'rgba(127, 29, 29, 0.32)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, cellSize * 0.42 * size, 0, TAU);
+      ctx.fill();
+
+      ctx.fillStyle = BONE;
+      ctx.strokeStyle = BONE;
+      if (detail < 0.5) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(0.7, cellSize * 0.1 * size), 0, TAU);
+        ctx.fill();
+        return;
+      }
+      // Prominent exposed bone: a bar with a knob at each end
+      const half = cellSize * 0.2 * size;
+      const knob = cellSize * 0.06;
+      ctx.lineWidth = Math.max(1, cellSize * 0.07);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - half, cy + half * 0.6);
+      ctx.lineTo(cx + half, cy - half * 0.6);
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      for (const [bx, by] of [
+        [cx - half, cy + half * 0.6],
+        [cx + half, cy - half * 0.6],
+      ] as const) {
+        ctx.moveTo(bx + knob, by);
+        ctx.arc(bx, by, knob, 0, TAU);
+      }
+      ctx.fill();
+    } else {
+      // Weathered bones: desaturated faint weathered stain with pale bone fragments
+      ctx.fillStyle = 'rgba(120, 113, 108, 0.16)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, cellSize * 0.36 * size, 0, TAU);
+      ctx.fill();
+
+      const paleBone = 'rgba(214, 211, 200, 0.82)';
+      ctx.fillStyle = paleBone;
+      ctx.strokeStyle = paleBone;
+      if (detail < 0.5) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, Math.max(0.6, cellSize * 0.08 * size), 0, TAU);
+        ctx.fill();
+        return;
+      }
+      // Disjoint pale bone fragments / shards
+      const frag = cellSize * 0.15 * size;
+      ctx.lineWidth = Math.max(0.8, cellSize * 0.05);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - frag, cy - frag * 0.2);
+      ctx.lineTo(cx - frag * 0.2, cy - frag * 0.7);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + frag * 0.2, cy + frag * 0.3);
+      ctx.lineTo(cx + frag * 0.9, cy + frag * 0.1);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx + frag * 0.3, cy - frag * 0.4, Math.max(0.6, cellSize * 0.04), 0, TAU);
+      ctx.fill();
+      ctx.lineCap = 'butt';
     }
-    // A small bone: a bar with a knob at each end
-    const half = cellSize * 0.2 * size;
-    const knob = cellSize * 0.06;
-    ctx.lineWidth = Math.max(1, cellSize * 0.07);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(cx - half, cy + half * 0.6);
-    ctx.lineTo(cx + half, cy - half * 0.6);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    for (const [bx, by] of [
-      [cx - half, cy + half * 0.6],
-      [cx + half, cy - half * 0.6],
-    ] as const) {
-      ctx.moveTo(bx + knob, by);
-      ctx.arc(bx, by, knob, 0, TAU);
-    }
-    ctx.fill();
   }
 
   /**
@@ -1026,6 +1133,23 @@ export class CanvasRenderer {
         const a = (i / leaves) * TAU + 0.3;
         const r0 = r * 0.82;
         const r1 = r * (0.98 + 0.14 * unit(g.dispersal, 6, 10));
+        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      }
+      ctx.stroke();
+    }
+
+    // Sharp thorn/spine needles radiating from leaf axils for defended plants
+    if (plant.genome.defense !== undefined && plant.genome.defense > 0.2 && cellSize >= 5.5) {
+      const spineCount = 3 + Math.round(plant.genome.defense * 5);
+      const spineLen = r * (0.35 + 0.35 * plant.genome.defense);
+      ctx.strokeStyle = `hsla(15, 85%, 65%, ${(0.45 + 0.45 * plant.genome.defense).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, cellSize * 0.04);
+      ctx.beginPath();
+      for (let i = 0; i < spineCount; i++) {
+        const a = (i / spineCount) * TAU + (Math.PI / spineCount) + 0.3;
+        const r0 = r * 0.55;
+        const r1 = r0 + spineLen;
         ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
         ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
       }
@@ -1249,6 +1373,45 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Acute toxin distress spasm glyph: vibrating amber-magenta jagged distress ring / starburst
+    if (eating && org.lastBiteYield !== undefined && org.lastBiteYield < 0.775) {
+      const malaiseNorm = Math.min(1, (0.775 - org.lastBiteYield) / 0.4);
+      const ringBase = Math.max(a, b) + Math.max(1.8, cellSize * 0.12);
+      const points = 10;
+      const t = performance.now() * 0.018;
+      ctx.strokeStyle = `hsla(300, 80%, 60%, ${(0.65 + 0.25 * malaiseNorm).toFixed(2)})`;
+      ctx.fillStyle = `hsla(330, 85%, 55%, ${(0.12 + 0.1 * malaiseNorm).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1, cellSize * 0.055);
+      ctx.beginPath();
+      for (let i = 0; i < points * 2; i++) {
+        const angle = (i / (points * 2)) * TAU + (t * 0.2) % TAU;
+        const isSpike = i % 2 === 1;
+        const vibe = Math.sin(t * 3 + i * 1.8) * cellSize * 0.06 * malaiseNorm;
+        const spikeLen = isSpike ? cellSize * (0.15 + 0.18 * malaiseNorm) : 0;
+        const rad = ringBase + spikeLen + vibe;
+        const px = cx + Math.cos(angle) * rad;
+        const py = cy + Math.sin(angle) * rad;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Sharp amber inner spasms
+      ctx.strokeStyle = `hsla(38, 95%, 58%, ${(0.7 * malaiseNorm).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, cellSize * 0.035);
+      ctx.beginPath();
+      for (let i = 0; i < points; i++) {
+        const angle = (i / points) * TAU + (t * 0.4) % TAU;
+        const rad0 = ringBase * 0.75;
+        const rad1 = ringBase * 1.05;
+        ctx.moveTo(cx + Math.cos(angle) * rad0, cy + Math.sin(angle) * rad0);
+        ctx.lineTo(cx + Math.cos(angle) * rad1, cy + Math.sin(angle) * rad1);
+      }
+      ctx.stroke();
+    }
+
     // Predatory / Carnivore forward mandible bevel at the leading edge (+f)
     if (carnivory >= 0.22 && !eating) {
       const strength = Math.min(1, (carnivory - 0.2) / 0.65);
@@ -1312,17 +1475,77 @@ export class CanvasRenderer {
 
     const moving = isMoveAction(type) || isLeapAction(type);
     if (moving && succeeded) {
-      // Moving (or leaping): a white arrow along the way it went
-      const [hx, hy] = directionOf(type);
-      const tip = r * 0.5;
-      const wing = r * 0.28;
-      ctx.beginPath();
-      ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
-      ctx.lineTo(cx + hx * tip, cy + hy * tip);
-      ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
-      ctx.lineTo(cx + hx * tip, cy + hy * tip);
-      ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
-      ctx.stroke();
+      if (isLeapAction(type)) {
+        // Leaping: arched parabolic ballistic trajectory curve spanning 2 cells in directionOf(type)
+        const [hx, hy] = directionOf(type);
+        const x0 = cx - hx * (cellSize * 2);
+        const y0 = cy - hy * (cellSize * 2);
+        const mx = cx - hx * cellSize;
+        const my = cy - hy * cellSize;
+
+        // Subtle ground shadow underneath at the intermediate cell to visually lift the leaping organism
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+        ctx.beginPath();
+        ctx.ellipse(mx, my, cellSize * 0.38, cellSize * 0.22, 0, 0, TAU);
+        ctx.fill();
+
+        // Subtle ground track connecting origin to destination
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.lineWidth = Math.max(0.9, stroke * 0.65);
+        ctx.setLineDash([cellSize * 0.15, cellSize * 0.15]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Ballistic parabolic trajectory curve
+        let nx = -hy;
+        let ny = hx;
+        if (ny > 0 || (ny === 0 && nx < 0)) {
+          nx = -nx;
+          ny = -ny;
+        }
+        const arch = cellSize * 0.65;
+        const cpx = mx + nx * arch;
+        const cpy = my + ny * arch - cellSize * 0.35;
+
+        ctx.strokeStyle = GLYPH;
+        ctx.lineWidth = stroke;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(cpx, cpy, cx, cy);
+        ctx.stroke();
+
+        // Arrowhead at landing
+        const tx = cx - cpx;
+        const ty = cy - cpy;
+        const tLen = Math.hypot(tx, ty) || 1;
+        const ux = tx / tLen;
+        const uy = ty / tLen;
+        const wing = r * 0.32;
+        const wingX = cx - ux * wing;
+        const wingY = cy - uy * wing;
+        const px = -uy * wing * 0.7;
+        const py = ux * wing * 0.7;
+        ctx.beginPath();
+        ctx.moveTo(wingX + px, wingY + py);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(wingX - px, wingY - py);
+        ctx.stroke();
+      } else {
+        // Moving: a white arrow along the way it went
+        const [hx, hy] = directionOf(type);
+        const tip = r * 0.5;
+        const wing = r * 0.28;
+        ctx.beginPath();
+        ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
+        ctx.lineTo(cx + hx * tip, cy + hy * tip);
+        ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
+        ctx.lineTo(cx + hx * tip, cy + hy * tip);
+        ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
+        ctx.stroke();
+      }
     } else if (moving) {
       // Blocked: a white bar on the side it pushed toward
       const [hx, hy] = directionOf(type);

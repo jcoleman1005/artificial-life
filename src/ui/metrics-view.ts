@@ -114,6 +114,21 @@ export class MetricsView {
           <span class="m-label">Carrion</span>
           <span class="m-val">${metrics.carrionStock ?? 0} energy <small>(${metrics.carrionEatenTotal ?? 0} meals eaten)</small></span>
         </div>
+        ${
+          metrics.plants
+            ? `<div class="metric-card"><span class="m-label">Plants</span><span class="m-val">${metrics.plants.count} <small>(${metrics.plants.seedlings} seedlings, ${metrics.plants.dormant} dormant)</small></span></div>`
+            : ''
+        }
+        ${
+          metrics.nutrients
+            ? `<div class="metric-card"><span class="m-label">Nutrients</span><span class="m-val">${metrics.nutrients.totalBiosphereNutrients.toFixed(0)} <small>(soil ${metrics.nutrients.totalSoilNutrients.toFixed(0)}, bio ${(metrics.nutrients.totalPlantNutrients + metrics.nutrients.totalOrganismNutrients + metrics.nutrients.totalCarrionNutrients).toFixed(0)})</small></span></div>`
+            : ''
+        }
+        ${
+          metrics.weather
+            ? `<div class="metric-card"><span class="m-label">Weather</span><span class="m-val">${metrics.weather.frontCount} fronts <small>(${metrics.weather.avgTemp >= 0 ? '+' : ''}${metrics.weather.avgTemp.toFixed(1)}° temp, wind ${metrics.weather.windSpeed.toFixed(1)})</small></span></div>`
+            : ''
+        }
       </div>
 
       <details class="diversity-collapsible">
@@ -150,6 +165,23 @@ export class MetricsView {
             <span class="div-label">Reproduce Drive Var</span>
             <span class="div-val">${diversity.reproduceDriveVariance.toFixed(3)}</span>
           </div>
+          ${
+            metrics.tribes
+              ? `
+          <div class="div-item">
+            <span class="div-label">Tribe Count</span>
+            <span class="div-val">${metrics.tribes.tribeCount} <small>(largest: ${metrics.tribes.largestTribe})</small></span>
+          </div>
+          <div class="div-item">
+            <span class="div-label">Population in Tribes</span>
+            <span class="div-val">${Math.round(metrics.tribes.inTribeFraction * 100)}%</span>
+          </div>
+          <div class="div-item">
+            <span class="div-label">Kin Clustering</span>
+            <span class="div-val">${Math.round(metrics.tribes.localKinFraction * 100)}% <small>(chance ${Math.round(metrics.tribes.globalKinFraction * 100)}%)</small></span>
+          </div>`
+              : ''
+          }
         </div>
       </details>
     `

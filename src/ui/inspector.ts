@@ -42,6 +42,9 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (o.carnivoreEfficiency !== undefined) {
     out.push(pill('Meat digestion', `${Math.round(o.carnivoreEfficiency * 100)}%`));
   }
+  if (c.detoxGeneEnabled && o.detox !== undefined) {
+    out.push(pill('Detox', `${Math.round(o.detox * 100)}%`));
+  }
   return out.join('');
 }
 
@@ -110,9 +113,14 @@ export function genomeTraitRows(o: Readonly<Organism>, c: Readonly<SimulationCon
     eggRate: 'Egg share',
     metabolicRate: 'Metabolic rate',
     clutchSize: 'Clutch size',
+    size: 'Size',
+    sensingRadius: 'Vision',
+    digestiveEfficiency: 'Digestion',
+    carnivoreEfficiency: 'Meat digestion',
+    detox: 'Detoxification',
   };
   for (const g of LIFE_GENES) {
-    add(lifeLabels[g.field], g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);
+    add(lifeLabels[g.field] ?? g.field, g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);
   }
   return rows;
 }
@@ -287,6 +295,53 @@ export class InspectorView {
         ? `dx:${sensed.nearestOrganism.dx}, dy:${sensed.nearestOrganism.dy} (dist: ${sensed.nearestOrganism.distance})`
         : 'None';
 
+      const kinPullHtml = sensed.kinPull
+        ? `
+          <div class="sense-item" title="Kin attraction / stranger repulsion vector">
+            <span class="sense-label">Kin Pull</span>
+            <span class="sense-val">dx: ${sensed.kinPull.dx.toFixed(2)}, dy: ${sensed.kinPull.dy.toFixed(2)}</span>
+          </div>`
+        : '';
+
+      const carrionSenseHtml =
+        sensed.canEatCarrion || sensed.currentCellCarrion > 0 || sensed.nearestCarrion
+          ? `
+          <div class="sense-item">
+            <span class="sense-label">Scavenging / Carrion</span>
+            <span class="sense-val ${sensed.canEatCarrion ? 'highlight-food' : ''}">${
+              sensed.currentCellCarrion > 0
+                ? `${sensed.currentCellCarrion} available${sensed.canEatCarrion ? ' (can eat)' : ''}`
+                : '0 available'
+            } · nearest: ${
+              sensed.nearestCarrion
+                ? `dist ${sensed.nearestCarrion.distance} (dx:${sensed.nearestCarrion.dx}, dy:${sensed.nearestCarrion.dy})`
+                : 'none in radius'
+            }</span>
+          </div>`
+          : '';
+
+      let weatherSenseHtml = '';
+      if (sensed.weatherTemp !== undefined || sensed.weatherRain !== undefined) {
+        let weatherStr = `temp: ${(sensed.weatherTemp ?? 0) >= 0 ? '+' : ''}${(sensed.weatherTemp ?? 0).toFixed(2)}, rain: ${Math.round((sensed.weatherRain ?? 0) * 100)}%`;
+        if (sensed.weatherWind) {
+          weatherStr += `, wind: ${sensed.weatherWind.wx.toFixed(2)}, ${sensed.weatherWind.wy.toFixed(2)}`;
+        }
+        weatherSenseHtml = `
+          <div class="sense-item">
+            <span class="sense-label">Micro-climate</span>
+            <span class="sense-val">${weatherStr}</span>
+          </div>`;
+      }
+
+      const lastBiteHtml =
+        organism.lastBiteYield !== undefined
+          ? `
+          <div class="sense-item" title="Last bite nutritional efficiency">
+            <span class="sense-label">Last Bite Yield</span>
+            <span class="sense-val">${Math.round(organism.lastBiteYield * 100)}%</span>
+          </div>`
+          : '';
+
       sensesHtml = `
         <div class="senses-grid">
           <div class="sense-item">
@@ -305,6 +360,7 @@ export class InspectorView {
             <span class="sense-label">Similar ≥${Math.round(config.kinSimilarity * 100)}% / Different ≤${Math.round(config.strangerSimilarity * 100)}%</span>
             <span class="sense-val">${sensed.nearbyKinCount} / ${sensed.nearbyStrangerCount}</span>
           </div>
+          ${kinPullHtml}
           <div class="sense-item">
             <span class="sense-label">Parent With Food</span>
             <span class="sense-val">${parentSenseStr}</span>
@@ -321,6 +377,9 @@ export class InspectorView {
             <span class="sense-label">Current Cell Food</span>
             <span class="sense-val">${sensed.currentCellFood > 0 ? `${sensed.currentCellFood} available` : '0'}</span>
           </div>
+          ${carrionSenseHtml}
+          ${weatherSenseHtml}
+          ${lastBiteHtml}
         </div>
       `;
 
