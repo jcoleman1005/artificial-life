@@ -132,6 +132,7 @@ function runJob(job: Job): RunResult {
   const genomeSeries: { mean: number; sd: number }[] = [];
   // Growth gene: the population's mean growth duration at five checkpoints (reported as growthDuration.t<tick>).
   const growthDurationSeries: [number, number][] = [];
+  const hatchMaturitySeries: [number, number][] = [];
   let stepMs = 0;
   let organismSteps = 0;
   const diagnostics = new Diagnostics();
@@ -157,6 +158,10 @@ function runJob(job: Job): RunResult {
     if (world.config.growthEnabled && world.config.growthGeneEnabled && t % Math.floor(job.ticks / 5) === 0 && growthDurationSeries.length < 5) {
       const durations = Array.from(world.organisms.values(), (o) => o.growthDuration).filter((d): d is number => d !== undefined);
       if (durations.length > 0) growthDurationSeries.push([t, durations.reduce((a, d) => a + d, 0) / durations.length]);
+    }
+    if (world.config.growthEnabled && world.config.hatchMaturityGeneEnabled && t % Math.floor(job.ticks / 5) === 0 && hatchMaturitySeries.length < 5) {
+      const hs = Array.from(world.organisms.values(), (o) => o.hatchMaturity).filter((d): d is number => d !== undefined);
+      if (hs.length > 0) hatchMaturitySeries.push([t, hs.reduce((a, d) => a + d, 0) / hs.length]);
     }
     if (world.config.plantsEnabled) {
       for (const p of world.foodPatches.values()) {
@@ -312,6 +317,9 @@ function runJob(job: Job): RunResult {
       : {}),
     ...(world.config.growthEnabled && world.config.growthGeneEnabled && organisms.length > 0
       ? { growthDuration: mean((o) => o.growthDuration ?? world.config.growthDurationFounder), ...Object.fromEntries(growthDurationSeries.map(([t, v]) => [`growthDuration.t${t}`, v])) }
+      : {}),
+    ...(world.config.growthEnabled && world.config.hatchMaturityGeneEnabled && organisms.length > 0
+      ? { hatchMaturity: mean((o) => o.hatchMaturity ?? world.config.hatchMaturity), ...Object.fromEntries(hatchMaturitySeries.map(([t, v]) => [`hatchMaturity.t${t}`, v])) }
       : {}),
     ...(continuousAbilities(world.config) && organisms.length > 0 ? abilityEfficiencyResults(organisms) : {}),
     ...(splitDiets(world.config) && organisms.length > 0

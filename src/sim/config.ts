@@ -235,6 +235,10 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   growthDurationMax: 800,
   growthDurationStep: 10,
   growthDurationCostExponent: 1.5, // heat per tick x (growthTicks / duration)^1.5: total cost to grow ~ duration^-0.5 (4x faster = 2x the heat, 4x slower = half)
+  hatchMaturityGeneEnabled: true, // with growth: the maturity a newborn starts at is an inherited gene (trait 53); launch cost scales with it
+  hatchMaturityMin: 0.2,
+  hatchMaturityMax: 1.0,
+  hatchMaturityStep: 0.05,
   ageingEnabled: true,
   senescenceAge: 4000, // upkeep starts rising past this age
   senescenceRate: 0.001, // extra upkeep multiplier per tick past senescenceAge (x5 at maxAge)

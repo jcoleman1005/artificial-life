@@ -60,6 +60,8 @@ export interface OrganismView {
   readonly detox?: number;
   /** Fed ticks to grow up (growth gene), and how grown the body is, 0..1 (growthEnabled; absent means grown). */
   readonly growthDuration?: number;
+  /** Maturity this organism's newborns start at (hatch maturity gene). */
+  readonly hatchMaturity?: number;
   readonly maturity?: number;
   readonly lastBiteYield?: number;
   /** Life-history genes the colour modes and card read (absent while their switch is off). */
@@ -129,6 +131,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.carnivoreEfficiency !== undefined ? { carnivoreEfficiency: org.carnivoreEfficiency } : {}),
     ...(org.detox !== undefined ? { detox: org.detox } : {}),
     ...(org.growthDuration !== undefined ? { growthDuration: org.growthDuration } : {}),
+    ...(org.hatchMaturity !== undefined ? { hatchMaturity: org.hatchMaturity } : {}),
     ...(org.maturity !== undefined ? { maturity: org.maturity } : {}),
     ...(org.lastBiteYield !== undefined ? { lastBiteYield: org.lastBiteYield } : {}),
     ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0

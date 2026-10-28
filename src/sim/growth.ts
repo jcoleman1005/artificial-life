@@ -84,3 +84,33 @@ export function lifeStageOf(o: Readonly<Pick<Organism, 'maturity' | 'age'>>, c: 
   if (c.ageingEnabled && o.age > c.senescenceAge) return 'senescent';
   return 'adult';
 }
+
+/**
+ * The maturity this organism's newborns start at: its inherited hatchMaturity
+ * gene while that is on (hatchMaturityGeneEnabled), otherwise the fixed
+ * hatchMaturity (also the fallback for an organism with no such gene, e.g. from
+ * an older save). Meaningful only with growth on.
+ */
+export function hatchMaturityOf(o: Readonly<Pick<Organism, 'hatchMaturity'>>, c: Readonly<SimulationConfig>): number {
+  return c.hatchMaturityGeneEnabled ? (o.hatchMaturity ?? c.hatchMaturity) : c.hatchMaturity;
+}
+
+/** Whether a newborn's launch cost follows its own hatch maturity (growth and the gene both on). */
+export const hatchCostActive = (c: Readonly<SimulationConfig>): boolean => c.growthEnabled && c.hatchMaturityGeneEnabled;
+
+/**
+ * Provisioning ratio of a newborn born at maturity `h`: its body scale relative to
+ * the reference newborn (the world's hatchMaturity). Exactly 1 at the reference
+ * (and with the gene or growth off), so a founder-like child costs what it
+ * always did; a precocial child costs proportionally more, an altricial one less.
+ * The ratio is a property of the body being launched, not a reward: nothing here
+ * names a preferred hatch maturity.
+ */
+export function launchRatioOf(h: number, c: Readonly<SimulationConfig>): number {
+  if (!hatchCostActive(c)) return 1;
+  const scale = (m: number) => c.hatchScale + (1 - c.hatchScale) * m;
+  return scale(h) / scale(c.hatchMaturity);
+}
+
+/** Minimum energy a child born at maturity `h` needs to be launched: minViableChildEnergy x launchRatio. */
+export const minViableEnergyAt = (h: number, c: Readonly<SimulationConfig>): number => c.minViableChildEnergy * launchRatioOf(h, c);

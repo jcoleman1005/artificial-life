@@ -172,6 +172,22 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
     }
   }
 
+  // Hatch maturity (hatch gene): precocial young are born well developed, altricial ones small and helpless.
+  if (config.growthEnabled && config.hatchMaturityGeneEnabled && org.hatchMaturity !== undefined) {
+    const h = org.hatchMaturity;
+    const precocial = h >= config.hatchMaturity + 0.25;
+    const altricial = h <= config.hatchMaturity - 0.1;
+    if (precocial || altricial) {
+      standouts.push({
+        icon: precocial ? '🦆' : '🐣',
+        label: precocial ? 'Precocial' : 'Altricial',
+        value: `${Math.round(h * 100)}%`,
+        category: 'morphology',
+        score: 44 + Math.min(10, Math.abs(h - config.hatchMaturity) * 20),
+      });
+    }
+  }
+
   // Chemical Defense & Sensory
   if (config.detoxGeneEnabled && (org.detox ?? 0) >= 0.15) {
     standouts.push({
