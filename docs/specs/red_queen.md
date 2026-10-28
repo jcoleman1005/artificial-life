@@ -1,29 +1,33 @@
-# Spec: Red Queen Coevolutionary Dynamics
+# Spec: Red Queen Coevolutionary Dynamics & Predator–Prey Arms Race
 
-_Status: Proposed specification (2026-10-27). Addresses evolutionary homeostasis/stagnation via antagonistic biotic coevolution. Unifies Roadmap Phase 2 Item 9 ("Evolving pathogen") and Phase 3 Item 10.3 ("Plant defense and herbivore detox"). Follows [`WORLD_RULES.md`](../../WORLD_RULES.md) and [`AGENTS.md`](../../AGENTS.md)._
+_Status: Approved specification (2026-10-27). Replaces pathogens with an authentic Predator–Prey Arms Race and couples it with Trophic Plant Defense vs. Herbivore Detox. Follows [`WORLD_RULES.md`](../../WORLD_RULES.md) and [`AGENTS.md`](../../AGENTS.md)._
 
 ## Executive Summary
 
-After ~2,000–5,000 ticks in a static or strictly periodic world, natural selection drives organisms to a single Evolutionarily Stable Strategy (ESS). Purifying/stabilizing selection eliminates novel variation, and genetic drift strips founder diversity down to a single dominant lineage.
+After ~2,000–5,000 ticks in a static or strictly periodic world, natural selection drives organisms to a single Evolutionarily Stable Strategy (ESS). Stabilizing selection eliminates novel variation, and genetic drift strips founder diversity down to a single dominant lineage.
 
-The **Red Queen Hypothesis** (Van Valen 1973, Hamilton 1980) states that in coevolutionary systems, organisms must constantly evolve and adapt simply to maintain current fitness against adapting counter-species. This specification details two coupled antagonistic coevolutionary engines that create a **perpetually non-stationary fitness landscape**:
+The **Red Queen Hypothesis** (Van Valen 1973) states that organisms in coevolutionary ecosystems must continuously adapt and evolve simply to maintain current fitness against adapting counter-species. This specification details two coupled antagonistic coevolutionary engines that create a **perpetually non-stationary fitness landscape** without artificial omniscient radars or hardcoded behavioral scripts:
 
-1. **Trophic Arms Race (Plant Chemical Defense vs. Herbivore Detoxification)**: A continuous bi-directional cycle between plant toxicity/unpalatability and organism metabolic digestive enzyme investment.
-2. **Epidemiological Arms Race (Density-Dependent Pathogens & Negative Frequency-Dependent Selection)**: Strain-specific pathogens that decimate dense, genetically uniform monocultures, granting rare alleles an intrinsic survival advantage.
+1. **Trophic Arms Race (Plant Chemical Defense vs. Herbivore Detoxification)**: A continuous bi-directional cycle between plant chemical/structural defense and organism metabolic liver/digestive enzyme investment.
+2. **Predator–Prey Arms Race (Prey Toughness, Involuntary Death Pulses & Emergent Evasion)**: An antagonistic coevolutionary cycle between predator hunting and prey defenses:
+   - **Involuntary Death Pulse**: Violent kills release an acoustic/chemical shockwave with the victim's genetic tag into the physical signal grid, allowing kin to evolve scattering flight.
+   - **Carrion Scent Uncoupling**: Sensed carcass direction is uncoupled from diet, allowing herbivores to evolve aversion to kill sites while carnivores pursue them.
+   - **Prey Armor / Toughness**: Evolvable body toughness trait (Trait 52) that reduces bite fatality at the price of continuous metabolic mass upkeep.
+   - **Allometric Size Divergence**: Physical scaling of energy capacity, combat survival, and movement agility naturally bifurcates populations into armored megafauna, agile microfauna, and pursuit carnivores.
 
-Both engines start **on by default** behind individual switches (`plantDefenseEnabled`, `pathogenEnabled`), with switch-off bit-identity preserving existing fingerprints.
+Both engines start **on by default** behind individual switches (`plantDefenseEnabled`, `predationDefenseEnabled`), with switch-off bit-identity preserving existing fingerprints.
 
 ---
 
 ## 1. Loop 1: Plant Defense vs. Herbivore Detox (Trophic Arms Race)
 
 ### 1.1 Biological Principle
-In the current world, plants are passive resources: they evolve growth and rooting strategies, but never resist grazing. Consequently, herbivores have no culinary challenge and quickly optimize for passive foraging.
+In the current world, plants are passive resources: they evolve growth and rooting strategies, but never resist grazing. Consequently, herbivores face no biochemical challenge and quickly optimize for passive foraging.
 
 Under this loop:
-- Plants evolve chemical or structural defenses (e.g., secondary metabolites, tannins, thorns) that reduce edible yield or inflict metabolic malaise on grazers.
+- Plants evolve chemical or structural defenses (e.g., secondary metabolites, tannins, thorns) that reduce edible yield and inflict acute gut damage on grazers.
 - Organisms evolve an inherited metabolic `detox` trait that neutralizes plant defenses at the cost of continuous metabolic enzyme upkeep.
-- When plants are undefended, herbivores shed detox upkeep to conserve energy. As herbivore detox drops, defended plant mutants suddenly gain an escape from grazing and spread. In response, herbivores must re-evolve detox or starve.
+- When plants are undefended, herbivores shed detox upkeep to conserve energy. As herbivore detox drops, defended plant mutants suddenly gain an escape from grazing and spread. In response, herbivores must re-evolve detox or suffer severe toxicity.
 
 ```mermaid
 flowchart TD
@@ -50,7 +54,7 @@ defense: {
 - **Defense Upkeep / Growth Trade-off**:
   Synthesizing defensive compounds consumes metabolic energy. A plant pays continuous biomass upkeep scaled by its defense:
   $$\text{upkeep}_{\text{defense}} = \text{plantUpkeep} \times \text{size} \times (1 + \text{plantDefenseCostFactor} \times \text{defense})$$
-  *(Default `plantDefenseCostFactor`: 0.5)*. Undefended plants grow faster and invest more in seed reproduction on open, safe ground.
+  *(Default `plantDefenseCostFactor`: 0.5)*. Undefended plants grow faster and invest more in seed reproduction on open ground.
 
 - **Effect on Grazing**:
   When an organism bites a plant with defense $D \in [0, 1]$:
@@ -60,7 +64,7 @@ defense: {
   - **Yield Degradation**: The edible energy harvested from the bite is discounted by effective toxicity:
     $$E_{\text{absorbed}} = \text{foodEnergyYield} \times (1 - \text{defenseYieldPenalty} \times T_{\text{eff}}) \times \text{digestiveEfficiency}$$
     *(Default `defenseYieldPenalty`: 0.75)*.
-  - **Toxicity Damage (Malaise)**: If unneutralized defense exceeds a threshold ($T_{\text{eff}} > 0.3$), the toxic bite inflicts acute tissue irritation / gut damage:
+  - **Toxicity Malaise (Acute Damage)**: If unneutralized defense exceeds a threshold ($T_{\text{eff}} > 0.3$), the toxic bite inflicts acute tissue irritation / gut damage:
     $$\Delta E_{\text{harm}} = \text{toxinMalaiseCost} \times (T_{\text{eff}} - 0.3)$$
     *(Default `toxinMalaiseCost`: 8.0)*.
 
@@ -82,52 +86,66 @@ To enable active behavioural discrimination without hardcoded instincts:
 
 ---
 
-## 2. Loop 2: Density-Dependent Pathogens & NFDS (Epidemiological Arms Race)
+## 2. Loop 2: Predator–Prey Arms Race (Prey Toughness & Emergent Evasion)
 
 ### 2.1 Biological Principle
-In nature, pathogens act as a major brake on monoculture dominance. When a single genotype or lineage proliferates, it provides a dense, contiguous transmission substrate. A pathogen adapted to that host signature causes an epidemic crash.
+In nature, predation drives the evolution of evasion, body armor, and alarm signaling. Instead of artificial omniscient radars, organisms evolve responses to **observable physical events**:
+1. Shockwaves and acoustic cries released when an adjacent creature is violently attacked.
+2. The physical presence and scent of decaying carcasses.
+3. Morphological armor that blunts predator bites.
 
-This generates **Negative Frequency-Dependent Selection (NFDS)**:
-- Common genotypes suffer high epidemic mortality.
-- Rare genotypes (with divergent surface tags or immune configurations) are resistant to the prevailing pathogen strain, enjoying high survival and reproductive success.
-- Stabilizing selection is permanently broken: genetic diversity is actively protected.
-
-### 2.2 Pathogen Entity & Transmission Dynamics
-Pathogens are modeled as lightweight transmissable vectors:
-```typescript
-export interface Pathogen {
-  readonly id: number;
-  targetTag: number; // Host tag hue [0, 360) this strain is specialized to infect
-  virulence: number; // Metabolic drain / mortality severity [0.1, 1.0]
-  transmissibility: number; // Base probability of jumping per contact [0.1, 0.8]
-}
-
-export interface InfectionState {
-  pathogen: Pathogen;
-  viralLoad: number; // Current infection severity [0.0, 1.0]
-  ticksRemaining: number; // Course of infection before clearance or death
-}
+```mermaid
+flowchart TD
+    subgraph PredatorPreyCycle["Predator–Prey Coevolutionary Cycle"]
+        H["Herbivore Population Booms"] -->|"Abundant prey for hunters"| P["Predators Multiply"]
+        P -->|"Intense predation pressure"| T["Prey Evolve Armor & Fleeing"]
+        T -->|"Attacks fail; prey scatter"| S["Predator Starvation & Decline"]
+        S -->|"Predators scarce; armor upkeep shed"| H
+    end
 ```
 
-- **Transmission Vectors**:
-  - Direct contact: Organisms sharing an adjacent Chebyshev cell or squeezing past each other.
-  - Environmental fomite: Carrion corpses retain active viral load for half their rotting lifetime.
-  - Downwind aerial drift: High winds (`weatherWindCoupling`) carry spore transmission downwind.
+### 2.2 Involuntary Death Pulse (The "Death Cry")
+When an organism is killed by an `ATTACK` action:
+- **Physical Event**: The dying organism automatically broadcasts an involuntary shockwave into the simulation's signal grid.
+- **Payload**:
+  - `tag`: The victim's exact genetic tag hue ($\theta \in [0, 360)$).
+  - `strength`: Proportional to victim size ($1.0 \times \text{size}$).
+- **Propagation**: The pulse decays over distance according to signal physics and drifts downwind with dynamic weather wind vectors.
+- **Emergent Response**:
+  - Nearby herd mates sense the signal via existing `nearestSignal` and `moveSignalAlike` inputs.
+  - Brains that evolve a **negative weight** on `moveSignalAlike` will instinctively scatter and sprint in the opposite direction the moment a group-mate falls.
+  - Opportunistic scavengers or secondary carnivores can evolve a **positive weight**, learning that a distress cry signals fresh carrion.
 
-- **Strain-Host Tag Compatibility**:
-  Infection probability scales with genetic similarity between host tag $\theta_h$ and pathogen target tag $\theta_p$:
-  $$\Delta \theta = \min(|\theta_h - \theta_p|, 360 - |\theta_h - \theta_p|)$$
-  $$P_{\text{infect}} = \text{transmissibility} \times \cos^2\left(\frac{\Delta \theta}{360} \times \pi\right)$$
-  If the host's tag diverges by $\ge 90^\circ$ from the pathogen's target, the host is completely immune to that strain.
+### 2.3 Carrion Scent Uncoupling
+In [`src/sim/brain.ts`](file:///home/jcoleman/Projects/artificial-life/src/sim/brain.ts#L349), the direction of the nearest corpse was previously multiplied by `organism.carnivory`:
+```typescript
+out[o++] = isMove ? aligned(dx, dy, sensed.nearestCarrion, 0.25) * organism.carnivory : 0; // moveCarrion
+```
+This locked `moveCarrion` permanently to 0 for pure herbivores (`carnivory = 0`), making it impossible for prey to smell a slaughter site.
+- **Fix**: Remove the diet multiplier from `moveCarrion`, passing the raw directional alignment: `aligned(dx, dy, sensed.nearestCarrion, 0.25)`.
+- **Emergence**:
+  - Carnivores maintain positive weights $\to$ approach carrion to feed.
+  - Herbivores evolve negative weights $\to$ steer away from slaughter sites and kill zones where predators lurk.
 
-- **Pathogen Mutation (Red Queen Tracking)**:
-  When a pathogen replicates into a new host, its `targetTag` mutates with probability `pathogenMutationRate` (0.15) with standard deviation $15^\circ$. Pathogens continually track whichever host lineage is currently most populous.
+### 2.4 Prey Armor / Toughness Trait (`toughness`, Trait 52)
+Added to organism life-history traits in [`src/sim/lifehistory.ts`](file:///home/jcoleman/Projects/artificial-life/src/sim/lifehistory.ts) and DNA genome mapping in [`src/sim/dna.ts`](file:///home/jcoleman/Projects/artificial-life/src/sim/dna.ts):
+- Switch: `toughnessGeneEnabled: boolean` (default: `true`).
+- Slider: `toughness` $\in [0, 1.0]$, step `0.05`, bounds `[0, 1.0]`.
+- Founders: Uniform in `[0.05, 0.2]`.
+- **Mass Upkeep**:
+  Growing dense hide, thick carapace, or protective plates costs continuous metabolic maintenance:
+  $$\Delta E_{\text{upkeep}} = \text{toughnessUpkeepRate} \times \text{toughness} \times \text{size}$$
+  *(Default `toughnessUpkeepRate`: 0.025)*.
+- **Combat Mechanics**:
+  When an attacker bites prey in [`src/sim/traits.ts`](file:///home/jcoleman/Projects/artificial-life/src/sim/traits.ts):
+  $$\text{killChance} = \text{baseChance} \times (1 - \text{armorEffectiveness} \times \text{prey.toughness})$$
+  *(Default `armorEffectiveness`: 0.75)*. At max toughness ($1.0$), bite lethality is cut by 75%, allowing the prey to survive and escape.
 
-- **Host Pathology & Recovery**:
-  - Infected organisms suffer an additional tick upkeep:
-    $$\Delta E_{\text{fever}} = \text{pathogenDamageRate} \times \text{viralLoad}$$
-  - High viral load ($> 0.6$) temporarily locks the organism out of mating/reproduction.
-  - Survivors clear the infection after `infectionDuration` (default: 80 ticks) and acquire transient immunity (antibodies) for 300 ticks against that strain.
+### 2.5 Emergent Allometric Size Divergence
+Because `size` (Trait 47) already scales energy capacity, movement cost, and basal metabolism, the predator–prey arms race drives natural ecological bifurcation:
+- **Megafauna Niche**: Large body size provides massive energy storage, reducing an attacker's relative energy share in `killChance`. Combined with high `toughness`, large prey become living tanks, but pay heavy movement and metabolic upkeep.
+- **Microfauna Niche**: Dwarfism minimizes movement cost and lowers the reproduction energy threshold. Tiny prey bypass armor upkeep entirely, relying on fast generation turnover and evasive leaping.
+- **Apex Predator Niche**: Hunters are pressured to grow larger to overpower prey, but are hard-capped by the $S^{0.75}$ metabolic starvation cliff when prey disperse.
 
 ---
 
@@ -136,9 +154,8 @@ export interface InfectionState {
 ```mermaid
 classDiagram
     class World {
-        +pathogens: Map~number, Pathogen~
-        +infections: Map~string, InfectionState~
-        +stepPathogens()
+        +stepAttacks()
+        +depositDeathPulse(x, y, tag, size)
     }
 
     class Plant {
@@ -148,69 +165,55 @@ classDiagram
 
     class Organism {
         +detox: number
-        +infection: InfectionState
+        +toughness: number
         +lastBiteYield: number
     }
 
-    World --> Plant : manages grazing
-    World --> Organism : updates upkeep & disease
+    World --> Plant : manages grazing & defense
+    World --> Organism : updates upkeep & combat
     Organism ..> Plant : eats / absorbs toxin
+    Organism ..> Organism : attacks / emits death pulse
 ```
 
-### 3.1 Flat Decoded Arrays
-Consistent with Tier 1 basic physical genes, `detox` is decoded once at birth into the organism's flat buffer:
+### 3.1 Flat Decoded Arrays & Zero-Allocation Invariants
 - `organism.detox`: number (clamped to $[0, 1]$).
-- Zero-dose fallback: If `detoxGeneEnabled = false`, defaults to $0.0$ with zero upkeep.
-
-### 3.2 State Serialization & Migrations
-- `WorldState.plantCounters` extended with:
-  - `plantDefenseMean: number`
-  - `plantToxBitesTotal: number`
-- `WorldState` optionally serializes `activePathogens: PathogenState[]` when `pathogenEnabled` is true.
-- Old snapshots without pathogen fields load cleanly with an empty pathogen map.
+- `organism.toughness`: number (clamped to $[0, 1]$).
+- When switches are off, both default to $0.0$ with zero upkeep, preserving bit-identity.
 
 ---
 
-## 4. Performance & Budget Verification
-
-- **Plant Defense Check**: Evaluated only during `EAT` actions ($\approx 10\text{--}40$ per tick total). Complexity is $O(1)$ arithmetic.
-- **Pathogen Transmission**: Evaluated strictly on organisms that are already adjacent (reusing the existing spatial collision/movement grid). No global distance loops.
-- **Tick Time Impact**: Target $< 3.5\%$ overhead at 500 organisms on the reference container, comfortably within the 5% `WORLD_RULES.md` budget.
-
----
-
-## 5. UI, Mobile Ergonomics & Visuals
+## 4. UI, Mobile Ergonomics & Visuals
 
 1. **Renderer (Dark Theme / Samsung Galaxy S21)**:
-   - **Defended Plants**: Rosettes develop spiky/brambled geometric serrations and darker purple/forest accents as `defense` approaches 1.0.
-   - **Pathogen Visuals**: Infected organisms display a subtle pulsing aura or particle spores in the hue of the infecting strain.
-   - **New Overlay ("Pathogens & Disease")**: Heatmap showing local infection density and active viral plumes.
+   - **Defended Plants**: Rosettes develop brambled/spiky contours and darker purple/forest accents as `defense` increases.
+   - **Armored Organisms**: Carapace ring or hardened geometric border indicating `toughness`.
+   - **Death Pulse**: Expanding, fading acoustic shockwave ring in the victim's hue when killed.
 2. **Inspector**:
    - Plant Card: Displays `Defense: 42% (Upkeep: +0.005/tick)`.
-   - Organism Card: Displays `Detox: 35% (Upkeep: -0.01/tick)` and `Health: Infected (Strain #184 - 45 ticks left)`.
+   - Organism Card: Displays `Detox: 35%` and `Armor: 40% (Upkeep: -0.012/tick)`.
 3. **Trends Dashboard**:
-   - New Coevolution chart: Co-plotted time-series of mean `Plant Defense` vs. mean `Herbivore Detox`.
-   - Pathogen chart: Active strains, total infected population, and lineage casualty counts.
+   - Coevolution Chart: Mean `Plant Defense` vs. mean `Herbivore Detox`.
+   - Predation Chart: Mean `Prey Toughness` vs. `Carnivore Population` and `Attack Kill Rate`.
 
 ---
 
-## 6. Phased Implementation Roadmap
+## 5. Phased Implementation Plan
 
-* **Phase 1: Trophic Chemical Coevolution**
+* **Phase 1: Trophic Arms Race (Plant Defense & Herbivore Detox)**
   - Add `defense` to `PLANT_TRAITS`.
-  - Add `detox` gene (Trait 51) to `lifehistory.ts` and `dna.ts`.
-  - Wire grazing yield discount and toxin malaise into `world.ts`.
-  - Unit tests verifying energy conservation, enzymatic upkeep, and switch-off bit-identity.
-* **Phase 2: Sensory Feedback & Plant Discrimination**
+  - Add `detox` gene (Trait 51) to `lifehistory.ts`, `dna.ts`, and `config.ts`.
+  - Wire grazing yield discount and acute malaise damage into `world.ts`.
   - Append `lastBiteYield` to `BRAIN_INPUTS`.
-  - Visual plant styling for defense.
-* **Phase 3: Density-Dependent Pathogens (NFDS)**
-  - Implement `pathogenEnabled` vector transmission and strain-host tag matching.
-  - Pathogen infection overlay and trends graphs.
+  - Unit tests verifying energy conservation, enzymatic upkeep, and switch-off bit-identity.
 
----
+* **Phase 2: Predator–Prey Arms Race (Death Pulse, Carrion Scent & Toughness)**
+  - Uncouple `moveCarrion` direction from `carnivory` in `brain.ts`.
+  - Emit involuntary death pulse on fatal attacks in `world.ts`.
+  - Add `toughness` gene (Trait 52) to `lifehistory.ts`, `dna.ts`, and `config.ts`.
+  - Wire armor damage reduction into `killChance` in `traits.ts`.
+  - Unit tests verifying combat probabilities, distress shockwave propagation, and switch-off bit-identity.
 
-## 7. Open Decisions for User Review
-
-1. **Pathogen Lethality**: Should severe infection directly kill organisms when energy is low, or act primarily as an energetic drain / reproductive inhibitor? (Recommended: energetic drain + reproductive lock, which causes mortality via starvation naturally without hardcoded execution).
-2. **Toxicity Mode**: Should plant defense cause purely reduced edible yield, or both reduced yield and acute damage when detox is low? (Recommended: both, so high toxicity actively punishes naive grazers).
+* **Phase 3: Visuals, Trends & Mobile Ergonomics**
+  - Spiky plant rendering and carapace borders in `renderer.ts`.
+  - Death pulse particle/shockwave animation.
+  - Inspector chips and Trends tab coevolution metrics.

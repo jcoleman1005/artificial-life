@@ -135,9 +135,10 @@ export class CanvasRenderer {
    * Where each organism is drawn this frame, in cells: it follows its glide
    * position with a short lag (MOTION_SMOOTHING_MS), so at high speeds a
    * blob stepping back and forth every tick drifts instead of jittering.
+   * Heading angle (radians) tracks the latest movement or directional action.
    * Display only; the world is unaffected.
    */
-  private drawn = new Map<string, { x: number; y: number; vx: number; vy: number }>();
+  private drawn = new Map<string, { x: number; y: number; vx: number; vy: number; heading: number }>();
   private lastRenderAt = 0;
   private motionSettled = true;
   private motionStyle: MotionStyle = 'fluid';
@@ -365,13 +366,16 @@ export class CanvasRenderer {
     const settleMs = Math.max(FLUID_SETTLE_MIN_MS, Math.min(FLUID_SETTLE_MAX_MS, FLUID_SETTLE_GAPS * this.paceMs));
     const omega = 4 / settleMs;
     const decay = Math.exp(-omega * dt);
-    const next = new Map<string, { x: number; y: number; vx: number; vy: number }>();
+    const next = new Map<string, { x: number; y: number; vx: number; vy: number; heading: number }>();
     let settled = true;
     for (const org of this.world.organisms.values()) {
       const [tx, ty] = this.gridPosition(org);
       const was = this.drawn.get(org.id);
+      const lastType = org.recentHistory[0]?.chosenAction.type;
+      const [adx, ady] = lastType ? directionOf(lastType) : [0, 0];
       if (!was || Math.abs(tx - was.x) + Math.abs(ty - was.y) > MAX_SMOOTHED_JUMP) {
-        next.set(org.id, { x: tx, y: ty, vx: 0, vy: 0 });
+        const initialHeading = adx !== 0 || ady !== 0 ? Math.atan2(ady, adx) : -Math.PI / 2;
+        next.set(org.id, { x: tx, y: ty, vx: 0, vy: 0, heading: initialHeading });
         continue;
       }
       let x: number, y: number, vx: number, vy: number;
@@ -390,8 +394,20 @@ export class CanvasRenderer {
         vx = 0;
         vy = 0;
       }
+      let heading = was.heading;
+      const mvx = tx - was.x;
+      const mvy = ty - was.y;
+      if (Math.hypot(mvx, mvy) > 0.04) {
+        const targetAngle = Math.atan2(mvy, mvx);
+        const diff = Math.atan2(Math.sin(targetAngle - heading), Math.cos(targetAngle - heading));
+        heading += diff * Math.min(1, follow * 1.5 + 0.25);
+      } else if (adx !== 0 || ady !== 0) {
+        const targetAngle = Math.atan2(ady, adx);
+        const diff = Math.atan2(Math.sin(targetAngle - heading), Math.cos(targetAngle - heading));
+        heading += diff * Math.min(1, follow * 1.2 + 0.2);
+      }
       if (Math.abs(tx - x) + Math.abs(ty - y) > 0.01 || Math.abs(vx) + Math.abs(vy) > 0.0005) settled = false;
-      next.set(org.id, { x, y, vx, vy });
+      next.set(org.id, { x, y, vx, vy, heading });
     }
     this.drawn = next;
     this.motionSettled = settled;
@@ -876,19 +892,41 @@ export class CanvasRenderer {
     const { ctx, cellSize } = this;
     const cx = (egg.x + 0.5) * cellSize;
     const cy = (egg.y + 0.5) * cellSize;
-    ctx.fillStyle = '#f5efe0';
-    ctx.strokeStyle = 'rgba(70, 50, 20, 0.7)';
-    ctx.lineWidth = Math.max(1, cellSize * 0.05);
+    const sizeScale = Math.max(0.7, Math.min(1.5, Math.sqrt(egg.size || 1)));
+    const rx = cellSize * 0.2 * sizeScale;
+    const ry = cellSize * 0.27 * sizeScale;
+    const tagHue = Math.round(egg.tag ?? 45);
+    const shellStrength = Math.max(0, Math.min(1, egg.shell ?? 0.5));
+
+    // Shell body tinted gently by parent lineage tag
+    ctx.fillStyle = `hsl(${tagHue}, 38%, 86%)`;
     ctx.beginPath();
-    ctx.ellipse(cx, cy, cellSize * 0.2, cellSize * 0.27, 0, 0, TAU);
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
     ctx.fill();
-    if (detail >= 0.5) ctx.stroke();
+
+    // Inner embryo yolk core visible when zoomed in
+    if (detail >= 0.35) {
+      const energyNorm = Math.max(0.3, Math.min(1, (egg.energy || 25) / 60));
+      ctx.fillStyle = `hsla(${tagHue}, 78%, 56%, 0.65)`;
+      ctx.beginPath();
+      ctx.arc(cx, cy + ry * 0.1, rx * 0.52 * energyNorm, 0, TAU);
+      ctx.fill();
+    }
+
+    // Calcified shell rim: thickness and contrast reflect shell buffer durability
+    if (cellSize >= 5.5) {
+      ctx.strokeStyle = `rgba(55, 42, 24, ${(0.35 + 0.55 * shellStrength).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, cellSize * (0.035 + 0.055 * shellStrength));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
+      ctx.stroke();
+    }
 
     if (egg.id === this.selectedEggId) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(cx, cy, Math.max(5, cellSize * 0.5), 0, TAU);
+      ctx.arc(cx, cy, Math.max(5, cellSize * 0.5 * sizeScale), 0, TAU);
       ctx.stroke();
     }
   }
@@ -933,37 +971,73 @@ export class CanvasRenderer {
 
   /**
    * A plant: a rosette of leaves sized by its whole mass (edible plus roots),
-   * coloured by strategy (greyed while dormant), with a berry per fifth of
-   * its edible capacity on top. Seedlings are small dots.
+   * coloured by strategy (greyed while dormant), with leaf count from maxBiomass,
+   * blade shape from growthRate, root halo from roots/rootShare, and berries
+   * scaled by seedSize. Seedlings are small dots.
    */
   private drawPlant(patch: FoodPatch, plant: Plant, detail: number): void {
     const { ctx, cellSize } = this;
     const cx = (patch.x + 0.5) * cellSize;
     const cy = (patch.y + 0.5) * cellSize;
-    const hue = plantHue(plant.genome);
+    const g = plant.genome;
+    const hue = plantHue(g);
     const size = plant.biomass + plant.roots;
     const r = cellSize * (0.12 + 0.34 * Math.min(1, Math.sqrt(size / 10)));
     const sat = plant.dormant ? 12 : 55;
+
+    // Subterranean root halo when roots / rootShare are substantial
+    if (plant.roots > 0.4 && cellSize >= 5.5) {
+      const rootRadius = cellSize * (0.14 + 0.28 * Math.min(1, Math.sqrt(plant.roots / 6)));
+      ctx.strokeStyle = `hsla(32, 48%, 32%, ${(0.25 + 0.35 * g.rootShare).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, cellSize * 0.055);
+      ctx.beginPath();
+      ctx.arc(cx, cy, rootRadius, 0, TAU);
+      ctx.stroke();
+    }
+
     ctx.fillStyle = `hsla(${hue}, ${sat}%, ${plant.dormant ? 45 : 38}%, 0.85)`;
     ctx.beginPath();
-    if (detail < 0.5 || size < 1) {
+    if (cellSize < 5.5 || size < 1) {
       ctx.arc(cx, cy, Math.max(0.7, r), 0, TAU);
     } else {
-      // Five leaves around the centre
-      for (let i = 0; i < 5; i++) {
-        const a = (i / 5) * TAU + 0.3;
-        const lx = cx + Math.cos(a) * r * 0.5;
-        const ly = cy + Math.sin(a) * r * 0.5;
-        ctx.moveTo(lx + r * 0.55, ly);
-        ctx.ellipse(lx, ly, r * 0.55, r * 0.38, a, 0, TAU);
+      // Leaf count (3..8) scales with genetic maxBiomass; blade aspect scales with growthRate
+      const leaves = 3 + Math.round(unit(g.maxBiomass, 1, 20) * 5);
+      const growthNorm = unit(g.growthRate, 0.01, 1);
+      const leafLen = r * (0.48 + 0.16 * growthNorm);
+      const leafWid = r * (0.44 - 0.14 * growthNorm);
+      const spread = r * (plant.dormant ? 0.28 : 0.5);
+      for (let i = 0; i < leaves; i++) {
+        const a = (i / leaves) * TAU + 0.3;
+        const lx = cx + Math.cos(a) * spread;
+        const ly = cy + Math.sin(a) * spread;
+        ctx.moveTo(lx + leafLen, ly);
+        ctx.ellipse(lx, ly, leafLen, leafWid, a, 0, TAU);
       }
     }
     ctx.fill();
-    if (patch.stock > 0 && detail >= 0.5) {
+
+    // High-dispersal spore/pappus tips at high zoom
+    if (detail >= 0.7 && g.dispersal >= 6 && size >= 1 && !plant.dormant) {
+      const leaves = 3 + Math.round(unit(g.maxBiomass, 1, 20) * 5);
+      ctx.strokeStyle = 'rgba(236, 253, 245, 0.55)';
+      ctx.lineWidth = Math.max(0.7, cellSize * 0.035);
+      ctx.beginPath();
+      for (let i = 0; i < leaves; i++) {
+        const a = (i / leaves) * TAU + 0.3;
+        const r0 = r * 0.82;
+        const r1 = r * (0.98 + 0.14 * unit(g.dispersal, 6, 10));
+        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        ctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      }
+      ctx.stroke();
+    }
+
+    if (patch.stock > 0 && cellSize >= 7) {
       const ratio = Math.max(0, Math.min(1, patch.stock / patch.capacity));
       const berries = Math.max(1, Math.ceil(ratio * 5));
       const spread = berries === 1 ? 0 : cellSize * 0.14;
-      const br = cellSize * 0.09;
+      const seedScale = 0.78 + 0.45 * unit(g.seedSize, 0.2, 4);
+      const br = cellSize * 0.085 * seedScale;
       ctx.fillStyle = BERRY;
       ctx.beginPath();
       for (let i = 0; i < berries; i++) {
@@ -1045,18 +1119,40 @@ export class CanvasRenderer {
     const config = this.world.config;
     const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1);
     const energyRatio = Math.max(0, Math.min(1, org.energy / maxEnergy));
-    const hue = this.hueOf(org);
+    const hue = Math.round(this.hueOf(org));
     const sizeScale = config.sizeGeneEnabled ? Math.sqrt(org.size ?? 1) : 1;
     // Size by energy and body size, so glyphs stay readable and mice vs elephants are visible.
     const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio) * sizeScale);
 
-    if (detail <= 0) {
-      // Tiny cells: a plain dot with a faint halo
+    // Phenotype traits (safe fallbacks when genes are switched off or absent)
+    const squeeze = config.squeezeEnabled ? (org.abilities?.squeeze ?? 0) : 0;
+    const leap = config.leapEnabled ? (org.abilities?.leap ?? 0) : 0;
+    const diagonal = config.diagonalMoves ? (org.abilities?.diagonal ?? 0) : 0;
+    const fatCap = config.fatEnabled ? (org.fatCapacity ?? 0) : 0;
+    const fatHeld = config.fatEnabled ? (org.fat ?? 0) : 0;
+    const fatRatio = fatCap > 0 ? Math.min(1, fatHeld / Math.max(10, fatCap)) : 0;
+    const torpor = config.torporEnabled && org.rested ? (org.torporDepth ?? 0) : 0;
+    const carnivory = org.carnivory * (config.carnivoreGeneEnabled ? (org.carnivoreEfficiency ?? 1) : 1);
+
+    // Body aspect: streamlined along heading for squeeze, plumper laterally when fat-loaded
+    const heading = this.drawn.get(org.id)?.heading ?? -Math.PI / 2;
+    const a = r * (1 + 0.2 * squeeze - 0.05 * fatRatio);
+    const b = r * (1 - 0.13 * squeeze + 0.22 * fatRatio);
+    const fx = Math.cos(heading);
+    const fy = Math.sin(heading);
+    const rx = -fy;
+    const ry = fx;
+
+    const sat = torpor > 0.1 ? Math.round(82 - 35 * torpor) : 82;
+    const baseLight = Math.round(40 + 18 * energyRatio);
+
+    if (cellSize < 5.5) {
+      // Ultra-compact cells: fast 2-layer dot + fat/torpor cues
       ctx.fillStyle = `hsla(${hue}, 90%, 65%, 0.22)`;
       ctx.beginPath();
-      ctx.arc(cx, cy, r * 1.9, 0, TAU);
+      ctx.arc(cx, cy, r * 1.85, 0, TAU);
       ctx.fill();
-      ctx.fillStyle = `hsl(${hue}, 85%, ${50 + 18 * energyRatio}%)`;
+      ctx.fillStyle = `hsl(${hue}, ${sat}%, ${baseLight + 10}%)`;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, TAU);
       ctx.fill();
@@ -1066,32 +1162,145 @@ export class CanvasRenderer {
     const last = org.recentHistory[0];
     const type = last?.chosenAction.type ?? 'REST';
     const succeeded = last?.outcome === 'success';
+    const eating = (type === 'EAT' || type === 'EAT_CARRION') && succeeded;
 
     // Signalling: two soft rings in its own hue
-    if (type === 'SIGNAL' && succeeded) {
+    if (type === 'SIGNAL' && succeeded && detail > 0) {
       ctx.lineWidth = Math.max(1, cellSize * 0.06);
       for (const [scale, alpha] of [[1.45, 0.55], [2.0, 0.28]] as const) {
-        ctx.strokeStyle = `hsla(${hue}, 90%, 75%, ${alpha * detail})`;
+        ctx.strokeStyle = `hsla(${hue}, 90%, 75%, ${(alpha * detail).toFixed(2)})`;
         ctx.beginPath();
         ctx.arc(cx, cy, r * scale, 0, TAU);
         ctx.stroke();
       }
     }
 
-    // The orb: a radial gradient lit from the top-left. Eating takes a bite out.
-    const gradient = ctx.createRadialGradient(cx - r * 0.4, cy - r * 0.4, r * 0.1, cx, cy, r);
-    gradient.addColorStop(0, `hsl(${hue}, 90%, 74%)`);
-    gradient.addColorStop(1, `hsl(${hue}, 70%, ${38 + 17 * energyRatio}%)`);
-    ctx.fillStyle = gradient;
+    // LOD 1+: Rear propulsion fin/chevron for leapers (drawn behind body)
+    if (leap > 0.05) {
+      const finLen = r * (0.28 + 0.22 * leap);
+      const finSpread = b * 0.48;
+      const bx = cx - fx * (a * 0.85);
+      const by = cy - fy * (a * 0.85);
+      ctx.strokeStyle = `hsla(${hue}, ${sat}%, 72%, 0.85)`;
+      ctx.lineWidth = Math.max(1, r * 0.16);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(bx + rx * finSpread - fx * finLen, by + ry * finSpread - fy * finLen);
+      ctx.lineTo(bx - fx * (finLen * 0.25), by - fy * (finLen * 0.25));
+      ctx.lineTo(bx - rx * finSpread - fx * finLen, by - ry * finSpread - fy * finLen);
+      ctx.stroke();
+    }
+
+    // LOD 2: 45° diagonal setae/notches for diagonal movers
+    if (diagonal > 0.05 && detail >= 0.35) {
+      ctx.strokeStyle = `hsla(${hue}, ${sat}%, 76%, ${(0.75 * detail).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.9, r * 0.13);
+      ctx.beginPath();
+      const c45 = 0.7071;
+      for (const sx of [-1, 1] as const) {
+        for (const sy of [-1, 1] as const) {
+          const dx = (fx * sx * a + rx * sy * b) * c45;
+          const dy = (fy * sx * a + ry * sy * b) * c45;
+          ctx.moveTo(cx + dx * 0.88, cy + dy * 0.88);
+          ctx.lineTo(cx + dx * (1.16 + 0.12 * diagonal), cy + dy * (1.16 + 0.12 * diagonal));
+        }
+      }
+      ctx.stroke();
+    }
+
+    // Two-tone layered pebble body (replaces expensive per-organism createRadialGradient)
+    ctx.fillStyle = `hsl(${hue}, ${sat}%, ${baseLight}%)`;
     ctx.beginPath();
-    if ((type === 'EAT' || type === 'EAT_CARRION') && succeeded) {
+    if (eating) {
       ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, r, Math.PI * 0.2, Math.PI * 1.8);
+      ctx.ellipse(cx, cy, a, b, heading, Math.PI * 0.22, Math.PI * 1.78);
       ctx.closePath();
     } else {
-      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.ellipse(cx, cy, a, b, heading, 0, TAU);
     }
     ctx.fill();
+
+    // Top-left specular pebble highlight + inner digestive core modulation
+    if (!eating) {
+      const gutBoost = config.digestiveGeneEnabled ? unit(org.digestiveEfficiency ?? 1, 0.5, 1.5) : 0.5;
+      ctx.fillStyle = `hsla(${hue}, 90%, 76%, ${(0.34 + 0.22 * gutBoost).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.22, cy - r * 0.22, a * 0.62, b * 0.58, heading, 0, TAU);
+      ctx.fill();
+    }
+
+    // Fat reserve: warm amber adipose inner rim when carrying stored fat
+    if (fatHeld > 1) {
+      const fatAlpha = Math.min(0.9, 0.35 + 0.55 * fatRatio);
+      ctx.strokeStyle = `hsla(42, 95%, 62%, ${fatAlpha.toFixed(2)})`;
+      ctx.lineWidth = Math.max(1, r * (0.12 + 0.18 * fatRatio));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a * 0.86, b * 0.86, heading, 0, TAU);
+      ctx.stroke();
+    }
+
+    // Torpor rest shell: cool frosted outer rim when hibernating/resting in torpor
+    if (torpor > 0.1) {
+      ctx.strokeStyle = `hsla(200, 45%, 82%, ${(0.35 + 0.5 * torpor).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1, r * 0.16);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + 1.2, b + 1.2, heading, 0, TAU);
+      ctx.stroke();
+    }
+
+    // Predatory / Carnivore forward mandible bevel at the leading edge (+f)
+    if (carnivory >= 0.22 && !eating) {
+      const strength = Math.min(1, (carnivory - 0.2) / 0.65);
+      const tipX = cx + fx * (a * (1.02 + 0.16 * strength));
+      const tipY = cy + fy * (a * (1.02 + 0.16 * strength));
+      const baseX = cx + fx * (a * 0.68);
+      const baseY = cy + fy * (a * 0.68);
+      const jawSpread = b * (0.28 + 0.18 * strength);
+      ctx.strokeStyle = `rgba(251, 113, 133, ${(0.55 + 0.4 * strength).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1, r * 0.16);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'miter';
+      ctx.beginPath();
+      ctx.moveTo(baseX + rx * jawSpread, baseY + ry * jawSpread);
+      ctx.lineTo(tipX, tipY);
+      ctx.lineTo(baseX - rx * jawSpread, baseY - ry * jawSpread);
+      ctx.stroke();
+    }
+
+    // LOD 2: Sensory aperture crescent & neural/memory core nodes
+    if (detail >= 0.35) {
+      const senseR = config.sensingGeneEnabled ? (org.sensingRadius ?? config.sensingRadius) : config.sensingRadius;
+      if (senseR > 2.2) {
+        const span = (0.22 + 0.14 * unit(senseR, 2, 6)) * Math.PI;
+        ctx.strokeStyle = `hsla(190, 90%, 82%, ${(0.45 * detail).toFixed(2)})`;
+        ctx.lineWidth = Math.max(0.9, r * 0.11);
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, a + Math.max(1.5, r * 0.22), b + Math.max(1.5, r * 0.22), heading, -span, span);
+        ctx.stroke();
+      }
+
+      const memSpan = config.memoryEnabled ? (org.memorySpan ?? 0) : 0;
+      const brainExtra = org.acquiredBrainUnits ?? 0;
+      const nodeCount = Math.min(3, (memSpan >= 8 ? 1 : 0) + (memSpan >= 24 ? 1 : 0) + (brainExtra > 0 ? 1 : 0));
+      if (nodeCount > 0 && detail >= 0.55) {
+        const nodeR = Math.max(0.8, r * 0.1);
+        ctx.fillStyle = `rgba(255, 255, 255, ${(0.82 * detail).toFixed(2)})`;
+        ctx.beginPath();
+        for (let i = 0; i < nodeCount; i++) {
+          const offsetLat = (i - (nodeCount - 1) / 2) * (b * 0.36);
+          const nx = cx + fx * (a * 0.48) + rx * offsetLat;
+          const ny = cy + fy * (a * 0.48) + ry * offsetLat;
+          ctx.moveTo(nx + nodeR, ny);
+          ctx.arc(nx, ny, nodeR, 0, TAU);
+        }
+        ctx.fill();
+      }
+    }
+
+    if (detail <= 0) {
+      return;
+    }
 
     ctx.globalAlpha = detail;
     ctx.strokeStyle = GLYPH;
@@ -1130,7 +1339,7 @@ export class CanvasRenderer {
       ctx.beginPath();
       ctx.roundRect(cx - half, cy - half * 0.8, half * 2, half * 1.8, half * 0.5);
       ctx.stroke();
-    } else if ((type !== 'EAT' && type !== 'EAT_CARRION') || !succeeded) {
+    } else if (!eating) {
       // Resting or anything else: a soft white core
       ctx.globalAlpha = detail * 0.7;
       ctx.beginPath();

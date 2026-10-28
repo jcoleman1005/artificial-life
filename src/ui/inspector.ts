@@ -501,14 +501,16 @@ export class InspectorView {
       dispersal: 'Seed dispersal (cells)',
       rootShare: 'Root share',
       leanDormancy: 'Lean dormancy',
+      defense: 'Defense (chemical/thorns)',
     };
     const rows = PLANT_TRAIT_KEYS.map((key) => {
       const r = PLANT_TRAITS[key];
-      const pct = ((g[key] - r.min) / (r.max - r.min)) * 100;
+      const val = g[key] ?? 0;
+      const pct = ((val - r.min) / (r.max - r.min)) * 100;
       return `
             <div class="weight-row">
               <span class="weight-name">${traitLabels[key]}</span>
-              <span class="weight-num">${g[key].toFixed(2)}</span>
+              <span class="weight-num">${val.toFixed(2)}</span>
               <div class="weight-track">
                 <div class="weight-fill" style="left: 0; width: ${pct.toFixed(1)}%; background-color: #4ade80;"></div>
               </div>

@@ -64,6 +64,7 @@ import {
   torporUpkeepFactor,
   LIFE_GENES,
   carnivoreEfficiencyOf,
+  detoxOf,
   digestiveEfficiencyOf,
   maxEnergyOf,
   metabolicRateOf,
@@ -413,7 +414,7 @@ export class World {
     if (this.obstacles.has(key) || this.foodPatches.has(key)) return false;
     if (this.config.plantsEnabled) {
       // A founder plant instead of a patch, starting with the patch's stock.
-      const plant = createPlant(this.plantCounters, founderGenome(this.prng), this.config.foodPatchInitialStock, this.tick, null);
+      const plant = createPlant(this.plantCounters, founderGenome(this.prng, this.config), this.config.foodPatchInitialStock, this.tick, null);
       plantAt(this.foodPatches, this.soil(), gridWidth, x, y, plant);
       return true;
     }
@@ -481,6 +482,7 @@ export class World {
       ...(genome ? { genome } : {}),
       memory: newMemory(x, y),
       kills: 0,
+      ...(this.config.plantDefenseEnabled ? { lastBiteYield: 1.0 } : {}),
       lineage: {
         id: `lineage-${this.nextOrganismSeq}`,
         parentId: null,
@@ -568,6 +570,7 @@ export class World {
       brain: upgradeBrain(clone(o.brain)),
       carnivory: o.carnivory ?? 0,
       kills: o.kills ?? 0,
+      ...(config.plantDefenseEnabled && o.lastBiteYield !== undefined ? { lastBiteYield: o.lastBiteYield } : {}),
       dispersal: o.dispersal ?? 1,
       memorySpan: o.memorySpan ?? 0,
       memoryWeights: o.memoryWeights ? [...o.memoryWeights] : new Array<number>(MEMORY_WEIGHT_COUNT).fill(0),
@@ -1039,7 +1042,25 @@ export class World {
             (fromPatch || organism.carriedFood > 0) &&
             (organism.energy < maxEnergy || fatRoom(organism, this.config) >= 1)
           ) {
-            const meal = plantYield(organism, this.config);
+            let meal = plantYield(organism, this.config);
+            let biteEfficiency = 1.0;
+            if (fromPatch && this.config.plantDefenseEnabled && patch.plant) {
+              const plantDefense = patch.plant.genome.defense ?? 0;
+              const detox = detoxOf(organism, this.config);
+              const unneutralized = Math.max(0, plantDefense - detox);
+              if (unneutralized > 0) {
+                const penalty = Math.min(1, unneutralized * this.config.defenseYieldPenalty);
+                meal *= (1 - penalty);
+                biteEfficiency = Math.max(0, 1 - penalty);
+                if (unneutralized > 0.3) {
+                  const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                  organism.energy -= malaise;
+                  energyDelta -= malaise;
+                  spentEnergy += malaise;
+                }
+              }
+            }
+            organism.lastBiteYield = Number(biteEfficiency.toFixed(3));
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
             this.storeSurplus(organism, meal - energyGain);
@@ -1445,6 +1466,7 @@ export class World {
       ...inherited,
       memory: newMemory(birth.x, birth.y),
       kills: 0,
+      ...(this.config.plantDefenseEnabled ? { lastBiteYield: 1.0 } : {}),
       lineage: {
         id: parent.lineage.id,
         parentId: parent.id,
@@ -2046,6 +2068,7 @@ export class World {
       sensingRadius: mean(c.sensingGeneEnabled, (o) => o.sensingRadius ?? c.sensingRadius),
       digestiveEfficiency: mean(c.digestiveGeneEnabled, (o) => o.digestiveEfficiency ?? 1),
       carnivoreEfficiency: mean(c.carnivoreGeneEnabled, (o) => o.carnivoreEfficiency ?? c.carnivoreFounder),
+      detox: mean(c.detoxGeneEnabled, (o) => o.detox ?? c.detoxFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

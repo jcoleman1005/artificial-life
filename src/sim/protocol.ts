@@ -13,6 +13,7 @@ import type { HeatmapKind } from './activity';
 import type { AncestorNode } from './lineage';
 export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
+  Abilities,
   CarrionPatch,
   DecisionOutcome,
   FoodPatch,
@@ -43,6 +44,13 @@ export interface OrganismView {
   readonly carriedFood: number;
   /** Diet, 0 (plants) to 1 (meat). */
   readonly carnivory: number;
+  readonly herbivory?: number;
+  readonly abilities?: Abilities;
+  readonly memorySpan?: number;
+  readonly fat?: number;
+  readonly fatCapacity?: number;
+  readonly torporDepth?: number;
+  readonly rested?: boolean;
   readonly size?: number;
   readonly sensingRadius?: number;
   readonly digestiveEfficiency?: number;
@@ -51,6 +59,8 @@ export interface OrganismView {
   readonly metabolicRate?: number;
   readonly investment?: number;
   readonly clutchSize?: number;
+  /** Acquired hidden brain units when dnaGrowableBrain is active (display only). */
+  readonly acquiredBrainUnits?: number;
   /** Only the latest decision (or none). */
   readonly recentHistory: readonly ActionView[];
 }
@@ -99,10 +109,20 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     age: org.age,
     carriedFood: org.carriedFood,
     carnivory: org.carnivory,
+    ...(org.herbivory !== undefined ? { herbivory: org.herbivory } : {}),
+    abilities: { diagonal: org.abilities.diagonal, squeeze: org.abilities.squeeze, leap: org.abilities.leap },
+    memorySpan: org.memorySpan,
+    ...(org.fat !== undefined ? { fat: org.fat } : {}),
+    ...(org.fatCapacity !== undefined ? { fatCapacity: org.fatCapacity } : {}),
+    ...(org.torporDepth !== undefined ? { torporDepth: org.torporDepth } : {}),
+    ...(org.rested !== undefined ? { rested: org.rested } : {}),
     ...(org.size !== undefined ? { size: org.size } : {}),
     ...(org.sensingRadius !== undefined ? { sensingRadius: org.sensingRadius } : {}),
     ...(org.digestiveEfficiency !== undefined ? { digestiveEfficiency: org.digestiveEfficiency } : {}),
     ...(org.carnivoreEfficiency !== undefined ? { carnivoreEfficiency: org.carnivoreEfficiency } : {}),
+    ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0
+      ? { acquiredBrainUnits: org.circuit.effectiveAcquiredUnits }
+      : {}),
     metabolicRate: org.metabolicRate,
     investment: org.investment,
     clutchSize: org.clutchSize,
