@@ -32,6 +32,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Clutch gene (`clutchGeneEnabled`, on; trait 46): continuous fecundity partition slider ($f \in [1.0, 6.0]$), founders 1, steps smoothly by `clutchStep` 0.2; matings only.
 - Tier 1 physical & energetic basic genes (2026-10-27; size, sensingRadius, metabolicRate, digestiveEfficiency, energyReserveCap with fat drag; traits 47–49 in lifehistory.ts, switches on by default).
 - Size physics (2026-10-28): fixed allometric exponents; energy cap is `maxEnergyOf` everywhere; corpse energy scales with size.
+- Tempo (2026-10-28, decided, not built): sub-step clock from metabolic rate and size, capped at 2 actions per tick, `tempoEnabled` switch; combat deferred until tempo and health are settled.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
