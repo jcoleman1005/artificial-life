@@ -1409,7 +1409,7 @@ export class World {
     }
 
     // Phase 5: Deaths. With carrion on, every body is left where it fell:
-    // carrionBodyEnergy plus carrionEfficiency of the energy it still held (a
+    // carrionBodyEnergy × size plus carrionEfficiency of the energy it still held (a
     // starved body holds none; a killed one usually some).
     for (const [id, org] of Array.from(this.organisms.entries())) {
       if (org.energy <= 0) {
@@ -1418,11 +1418,11 @@ export class World {
         this.deathsTotal++;
         this.organisms.delete(id);
         if (this.config.carrionEnabled) {
-          const energy = carrionFromBody(bodies.get(id) ?? 0, this.config);
+          const energy = carrionFromBody(bodies.get(id) ?? 0, this.config, sizeOf(org, this.config));
           if (energy > 0) this.addCarrion(org.x, org.y, energy);
-          else this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+          else this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
         } else {
-          this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+          this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
         }
       }
     }

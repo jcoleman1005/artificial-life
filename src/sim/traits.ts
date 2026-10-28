@@ -209,9 +209,12 @@ export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'di
   return config.carrionEnabled ? config.carrionBite * organism.carnivory * eff : 0;
 }
 
-/** Carrion energy a body leaves: a fixed amount plus a share of what it still held. Never more than the body cost. */
-export function carrionFromBody(bodyEnergy: number, config: Readonly<SimulationConfig>): number {
-  return config.carrionBodyEnergy + config.carrionEfficiency * Math.max(0, bodyEnergy);
+/**
+ * Carrion energy a body leaves: a fixed amount that scales with body size (1 without the size gene)
+ * plus a share of what it still held. Never more than the body cost.
+ */
+export function carrionFromBody(bodyEnergy: number, config: Readonly<SimulationConfig>, size = 1): number {
+  return config.carrionBodyEnergy * size + config.carrionEfficiency * Math.max(0, bodyEnergy);
 }
 
 /**
