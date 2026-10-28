@@ -36,9 +36,28 @@ export interface ClientEvents {
 /** What the always-on server says about itself at /api/info. */
 export interface ServerInfo {
   readonly app: 'alife-server';
+  readonly buildId?: string;
   readonly frameIntervalMs: number;
   readonly maxTicksPerSecond: number;
   readonly watchOnly: boolean;
+}
+
+const CONTROL_TOKEN_KEY = 'alife:control-token';
+
+/** Reads ?control=TOKEN (or ?admin=TOKEN) from the URL or sessionStorage so a separate control link unlocks a watch-only server. */
+function getControlToken(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('control') ?? params.get('admin');
+    if (fromUrl !== null) {
+      if (fromUrl) sessionStorage.setItem(CONTROL_TOKEN_KEY, fromUrl);
+      else sessionStorage.removeItem(CONTROL_TOKEN_KEY);
+      return fromUrl || null;
+    }
+    return sessionStorage.getItem(CONTROL_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /** Asks the page's own origin whether it is the always-on server (a plain static host or Vite answers otherwise). */
@@ -46,7 +65,9 @@ async function probeServer(): Promise<ServerInfo | null> {
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), 3000);
   try {
-    const response = await fetch('api/info', { cache: 'no-store', signal: abort.signal });
+    const token = getControlToken();
+    const headers: Record<string, string> = token ? { 'X-Control-Token': token } : {};
+    const response = await fetch('api/info', { cache: 'no-store', headers, signal: abort.signal });
     if (!response.ok || !(response.headers.get('content-type') ?? '').includes('json')) return null;
     const info = (await response.json()) as Partial<ServerInfo>;
     return info.app === 'alife-server' ? (info as ServerInfo) : null;
@@ -139,14 +160,21 @@ export class SimulationClient implements WorldView {
     this.mode = 'server';
     this.serverInfo = info;
     let viewer: number | null = null;
+    let currentBuildId = info.buildId;
     const post = (message: ToWorker) => {
       if (viewer === null) {
         this.queue.push(message);
         return;
       }
+      const token = getControlToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Viewer': String(viewer),
+        ...(token ? { 'X-Control-Token': token } : {}),
+      };
       fetch('api/command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Viewer': String(viewer) },
+        headers,
         body: JSON.stringify(message),
       })
         .then(async (response) => {
@@ -159,7 +187,13 @@ export class SimulationClient implements WorldView {
     this.transport = post;
     const source = new EventSource('api/events');
     source.addEventListener('hello', (event) => {
-      viewer = (JSON.parse((event as MessageEvent<string>).data) as { viewer: number }).viewer;
+      const hello = JSON.parse((event as MessageEvent<string>).data) as { viewer: number; buildId?: string };
+      if (currentBuildId && hello.buildId && hello.buildId !== currentBuildId) {
+        window.location.reload();
+        return;
+      }
+      if (hello.buildId) currentBuildId = hello.buildId;
+      viewer = hello.viewer;
       // A new connection is a new viewer: tell it what this page is showing.
       const restore: ToWorker[] = [];
       if (this.selectedId) restore.push({ kind: 'select', id: this.selectedId });

@@ -62,7 +62,7 @@ export class SimulationHost {
   public world: World;
   private readonly env: HostEnvironment;
   private running = false;
-  private ticksPerSecond = 6;
+  private ticksPerSecond = 3;
   private accumulator = 0;
   private lastPump = 0;
   private timer: unknown = null;
@@ -199,9 +199,9 @@ export class SimulationHost {
     this.timer = null;
     if (!this.running) return;
     const now = this.env.now();
-    this.accumulator += Math.min(now - this.lastPump, MAX_LAG_MS);
-    this.lastPump = now;
     const interval = 1000 / this.ticksPerSecond;
+    this.accumulator += Math.min(now - this.lastPump, Math.max(MAX_LAG_MS, interval));
+    this.lastPump = now;
     let stepped = 0;
     while (this.accumulator >= interval) {
       this.stepWorld();
@@ -270,7 +270,8 @@ export class SimulationHost {
 
   private scheduleNext(): void {
     const interval = 1000 / this.ticksPerSecond;
-    this.timer = this.env.schedule(() => this.pump(), Math.max(1, interval - this.accumulator));
+    const elapsed = this.env.now() - this.lastPump;
+    this.timer = this.env.schedule(() => this.pump(), Math.max(1, interval - this.accumulator - elapsed));
   }
 
   private stopTimer(): void {
