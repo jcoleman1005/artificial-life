@@ -21,6 +21,7 @@ import type {
   WorldMetrics,
 } from './types';
 import type { WorldState } from './world';
+import type { BrainTrace } from './brain-trace';
 
 /** What an organism did on its latest tick, as much as drawing needs. */
 export interface ActionView {
@@ -112,7 +113,9 @@ export type ToWorker =
   /** Ask for the whole world as a SavedWorld. */
   | { readonly kind: 'save'; readonly requestId: number }
   /** Replace the world with a saved one (paused). */
-  | { readonly kind: 'load'; readonly saved: SavedWorld };
+  | { readonly kind: 'load'; readonly saved: SavedWorld }
+  /** Read-only: how an organism would decide right now (answered with `brainTrace`). Observer; changes nothing. */
+  | { readonly kind: 'inspectBrain'; readonly requestId: number; readonly organismId: string };
 
 /** A saved world, as kept in the browser or written to a file. */
 export interface SavedWorld {
@@ -167,6 +170,8 @@ export type FromWorker =
   | { readonly kind: 'config'; readonly config: SimulationConfig }
   | { readonly kind: 'csv'; readonly requestId: number; readonly csv: string }
   | { readonly kind: 'saved'; readonly requestId: number; readonly saved: SavedWorld }
+  /** The answer to `inspectBrain` (trace is null if that organism is not alive). */
+  | { readonly kind: 'brainTrace'; readonly requestId: number; readonly organismId: string; readonly trace: BrainTrace | null }
   /** A load failed (bad or incompatible file); the current world is kept. */
   | { readonly kind: 'error'; readonly message: string };
 

@@ -424,6 +424,20 @@ export function lastCircuitHidden(): number {
 }
 
 /**
+ * Copies and restores the scoreCircuit scratch (DIRECT, lastHidden). Only
+ * read-only observers (the brain trace) use these: they score a circuit
+ * between a tick's own scoreCircuit call and its reads of the scratch, so
+ * they put the scratch back as they found it.
+ */
+export function saveCircuitScratch(): { readonly direct: Float64Array; readonly hidden: number } {
+  return { direct: DIRECT.slice(), hidden: lastHidden };
+}
+export function restoreCircuitScratch(saved: { readonly direct: Float64Array; readonly hidden: number }): void {
+  DIRECT.set(saved.direct);
+  lastHidden = saved.hidden;
+}
+
+/**
  * Chooses among legal actions with the organism's brain. Scores carry the
  * nonzero direct contributions plus the hidden layer's total, so the
  * inspector can show what drove each choice.

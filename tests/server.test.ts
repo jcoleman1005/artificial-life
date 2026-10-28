@@ -296,6 +296,8 @@ describe('Always-on server over HTTP', () => {
       fetch(`${base}/api/command`, { method: 'POST', headers: { 'X-Viewer': String(viewer) }, body: JSON.stringify(body) });
     expect((await post({ kind: 'reset', seed: 1 })).status).toBe(403);
     expect((await post({ kind: 'select', id: null })).status).toBe(204);
+    // The brain viewer's read-only request is allowed even when watch-only.
+    expect((await post({ kind: 'inspectBrain', requestId: 1, organismId: 'nobody' })).status).toBe(204);
     await server!.close();
 
     server = null;

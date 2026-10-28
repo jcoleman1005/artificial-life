@@ -76,6 +76,8 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
 export class InspectorView {
   private readonly container: HTMLElement;
   private onDeselectCallback?: () => void;
+  /** The persistent Brain section (src/ui/brain-view.ts), re-attached after each render. */
+  private brainElement?: HTMLElement;
 
   constructor(container: HTMLElement, onDeselect?: () => void) {
     this.container = container;
@@ -87,6 +89,10 @@ export class InspectorView {
         this.onDeselectCallback?.();
       }
     });
+  }
+
+  public setBrainElement(element: HTMLElement): void {
+    this.brainElement = element;
   }
 
   public render(
@@ -348,6 +354,8 @@ export class InspectorView {
           </div>
         </details>
 
+        <div class="brain-slot"></div>
+
         <details class="inspector-section">
           <summary><strong>Recent Decision Log</strong></summary>
           <div class="table-wrapper">
@@ -370,6 +378,8 @@ export class InspectorView {
       </div>
     `
     );
+    const slot = this.container.querySelector('.brain-slot');
+    if (slot && this.brainElement) slot.replaceWith(this.brainElement);
   }
 
   /** A plant: its genome against each trait's range, its mass, and its line. `tick` is the world's tick (for age). */
