@@ -56,6 +56,7 @@ describe('Artificial Life Core Mechanics', () => {
       detoxGeneEnabled: false,
       toughnessGeneEnabled: false,
       toxicityGeneEnabled: false,
+      stealthGeneEnabled: false,
       moveCost: 2.0,
       maxEnergy: 50,
       initialEnergy: 10,

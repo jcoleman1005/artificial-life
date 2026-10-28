@@ -1634,6 +1634,18 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Stealth: cryptic ambush camouflage stippled rim
+    const stealth = config.stealthGeneEnabled ? (org.stealth ?? 0) : 0;
+    if (stealth > 0.1) {
+      ctx.strokeStyle = `hsla(160, 45%, 65%, ${(0.3 + 0.4 * stealth).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, r * (0.08 + 0.1 * stealth));
+      ctx.setLineDash([Math.max(1.5, r * 0.15), Math.max(2, r * 0.25)]);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + Math.max(0.6, r * 0.08), b + Math.max(0.6, r * 0.08), heading, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // Acute toxin distress spasm glyph: vibrating amber-magenta jagged distress ring / starburst
     if ((eating || type.startsWith('ATTACK_')) && org.lastBiteYield !== undefined && org.lastBiteYield < 0.775) {
       const malaiseNorm = Math.min(1, (0.775 - org.lastBiteYield) / 0.4);

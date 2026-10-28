@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Seasonal weather hue harmonization & storm cloud parallax; 4-quadrant season display; Predator–prey arms race & chemical defense; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Stealth & death pulse dampening trait; Seasonal weather hue harmonization & storm cloud parallax; 4-quadrant season display; Predator–prey arms race & chemical defense; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -55,7 +55,20 @@ Antagonistic arms race between predators, prey, and scavengers operating purely 
   - Reach scales with victim body size and basal metabolic rate: $\text{reach} = \text{signalRadius} \times \max(0.4, \text{size} \times \text{power})$.
   - Drifts downwind with atmospheric weather and is sensed as a directional signal by surrounding organisms.
   - Uncoupled `moveCarrion` directional sensing from diet so herbivores and omnivores can navigate around carrion clusters and predator activity zones.
-- **Default Fingerprint**: `large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: d221240d829ed5c1 pop 741 births 2786`.
+
+## Stealth & Death Pulse Dampening (built 2026-10-28)
+
+Evolving stealth trait that modulates ambush surprise and death pulse shockwaves through thermodynamic and physical constraints (`src/sim/traits.ts`, `src/sim/world.ts`, `src/sim/lifehistory.ts`, `src/sim/dna.ts`, `src/render/renderer.ts`, `src/ui/organism-card.ts`, tests `tests/red_queen.test.ts`):
+- **Stealth Trait (Trait 54, `stealthGeneEnabled`, on)**:
+  - Inherited slider ($S \in [0, 1]$), founders 0.1, step 0.05.
+  - Continuous metabolic mass upkeep: $\text{upkeep} = \text{stealthUpkeepRate} \times S \times \text{sizeFactor}$.
+  - Ambush lethality bonus: boosts attack kill chance via $(1 + \text{stealthAmbushBonus} \times S)$, blunted by prey toughness armor.
+  - Death pulse dampening and silencing: emitted shockwave power scales with $(1 - \text{attacker.stealth}) \times (1 - \text{prey.stealth})$.
+  - Death pulse negation: if power $\le 0.05$ (e.g. at full stealth $\ge 0.95$), the death pulse is completely eliminated and silenced, emitting zero directional shockwaves or sensory traces.
+  - UI: Stippled camouflage rim around stealthy organisms on the world canvas and preview card, plus `🥷 Stealth` badge on the adaptation card.
+- **Bit-Identity & Fingerprint**:
+  - Switch off (`--set stealthGeneEnabled=false`) matches previous baseline bit-identically: `large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: 2e4adb9c3dd7f55d pop 725 births 3027`.
+  - **New default**: `large dials: 73616296841f0df2 pop 792 births 3481 · large brain: 16d97260cf1fd805 pop 666 births 3430`.
 
 ## Versioning System & Ecological Seasons & Weather (built 2026-10-28)
 

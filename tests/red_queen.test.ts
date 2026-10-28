@@ -533,6 +533,7 @@ describe('Red Queen: Plant Defense & Herbivore Detox', () => {
         signalTick: -1,
         recentHistory: [],
         size: 1.0,
+        stealth: 0.0,
       };
 
       const preyBrain = createHeadStartBrain(w.prng, w.config);
@@ -564,6 +565,7 @@ describe('Red Queen: Plant Defense & Herbivore Detox', () => {
         signalTick: -1,
         recentHistory: [],
         size: 1.0,
+        stealth: 0.0,
         metabolicRate: preyRate,
       };
 
@@ -596,6 +598,7 @@ describe('Red Queen: Plant Defense & Herbivore Detox', () => {
         signalTick: -1,
         recentHistory: [],
         size: 1.0,
+        stealth: 0.0,
       };
 
       w.organisms.set(attacker.id, attacker);
@@ -893,5 +896,253 @@ describe('Red Queen: Plant Defense & Herbivore Detox', () => {
 
     expect(world.eggsEatenTotal).toBe(1);
     expect(eater.lastBiteYield).toBeCloseTo(1 - 0.5 * 0.9, 2);
+  });
+
+  it('charges continuous mass upkeep for stealth proportional to body mass', () => {
+    const config = quietWorld({
+      stealthGeneEnabled: true,
+      stealthUpkeepRate: 0.02,
+    }).config;
+
+    const baseOrg: Organism = {
+      id: 'org',
+      x: 0,
+      y: 0,
+      energy: 50,
+      policy: {} as never,
+      brain: {} as never,
+      abilities: { diagonal: 0, squeeze: 0, leap: 0 },
+      carnivory: 0,
+      tag: 0,
+      carryCapacity: 0,
+      dispersal: 1,
+      memorySpan: 0,
+      memoryWeights: [],
+      memory: { home: null, rememberedFood: null, rememberedSignal: null, registers: [0, 0, 0] },
+      kills: 0,
+      lineage: { id: 'lin', parentId: null, generation: 1, birthTick: 0 },
+      age: 0,
+      offspringCount: 0,
+      foodEatenCount: 0,
+      carriedFood: 0,
+      foodGiven: 0,
+      foodReceived: 0,
+      signalTick: -1,
+      recentHistory: [],
+      size: 1.0,
+      stealth: 0.0,
+    };
+
+    const costZero = metabolismCost(baseOrg, config);
+    const costStealth = metabolismCost({ ...baseOrg, stealth: 0.8 }, config);
+    expect(costStealth).toBeCloseTo(costZero + 0.02 * 0.8 * 1.0, 4);
+
+    const costLargeStealth = metabolismCost({ ...baseOrg, size: 2.0, stealth: 0.8 }, config);
+    expect(costLargeStealth).toBeGreaterThan(costStealth);
+  });
+
+  it('boosts attack kill chance with predator stealth (ambush bonus)', () => {
+    const config = quietWorld({
+      stealthGeneEnabled: true,
+      stealthAmbushBonus: 0.3,
+      toughnessGeneEnabled: false,
+    }).config;
+
+    const attacker: Pick<Organism, 'energy' | 'carnivory' | 'stealth'> = {
+      energy: 50,
+      carnivory: 1.0,
+      stealth: 0.0,
+    };
+    const prey: Pick<Organism, 'energy' | 'toughness'> = {
+      energy: 50,
+      toughness: 0.0,
+    };
+
+    const chanceNoStealth = killChance(attacker, prey, config);
+    const chanceStealth = killChance({ ...attacker, stealth: 0.8 }, prey, config);
+
+    expect(chanceStealth).toBeCloseTo(chanceNoStealth * (1 + 0.3 * 0.8), 4);
+    expect(chanceStealth).toBeGreaterThan(chanceNoStealth);
+  });
+
+  it('minimizes death pulse power with predator stealth and completely negates it at full stealth', () => {
+    const worldNormal = quietWorld({
+      predationDefenseEnabled: true,
+      predationEnabled: true,
+      stealthGeneEnabled: true,
+      metabolismGeneEnabled: true,
+    });
+    const worldSilent = quietWorld({
+      predationDefenseEnabled: true,
+      predationEnabled: true,
+      stealthGeneEnabled: true,
+      metabolismGeneEnabled: true,
+    });
+
+    const createPair = (w: World, attackerStealth: number) => {
+      const attackerBrain = createHeadStartBrain(w.prng, w.config);
+      attackerBrain.skip[BRAIN_INPUTS.indexOf('isAttack')] = 100;
+
+      const attacker: Organism = {
+        id: 'pred',
+        x: 5,
+        y: 5,
+        energy: 80,
+        policy: {} as never,
+        brain: attackerBrain,
+        abilities: { diagonal: 0, squeeze: 0, leap: 0 },
+        carnivory: 1.0,
+        tag: 10,
+        carryCapacity: 0,
+        dispersal: 1,
+        memorySpan: 0,
+        memoryWeights: [],
+        memory: { home: null, rememberedFood: null, rememberedSignal: null, registers: [0, 0, 0] },
+        kills: 0,
+        lineage: { id: 'lin-pred', parentId: null, generation: 1, birthTick: 0 },
+        age: 0,
+        offspringCount: 0,
+        foodEatenCount: 0,
+        carriedFood: 0,
+        foodGiven: 0,
+        foodReceived: 0,
+        signalTick: -1,
+        recentHistory: [],
+        size: 1.0,
+        stealth: attackerStealth,
+      };
+
+      const preyBrain = createHeadStartBrain(w.prng, w.config);
+      preyBrain.skip[BRAIN_INPUTS.indexOf('isRest')] = 100;
+
+      const prey: Organism = {
+        id: 'prey',
+        x: 5,
+        y: 6,
+        energy: 10,
+        policy: {} as never,
+        brain: preyBrain,
+        abilities: { diagonal: 0, squeeze: 0, leap: 0 },
+        carnivory: 0,
+        tag: 200,
+        carryCapacity: 0,
+        dispersal: 1,
+        memorySpan: 0,
+        memoryWeights: [],
+        memory: { home: null, rememberedFood: null, rememberedSignal: null, registers: [0, 0, 0] },
+        kills: 0,
+        lineage: { id: 'lin-prey', parentId: null, generation: 1, birthTick: 0 },
+        age: 0,
+        offspringCount: 0,
+        foodEatenCount: 0,
+        carriedFood: 0,
+        foodGiven: 0,
+        foodReceived: 0,
+        signalTick: -1,
+        recentHistory: [],
+        size: 1.0,
+        metabolicRate: 1.0,
+        stealth: 0.0,
+      };
+
+      w.organisms.set(attacker.id, attacker);
+      w.organisms.set(prey.id, prey);
+    };
+
+    createPair(worldNormal, 0.4);
+    createPair(worldSilent, 1.0);
+
+    worldNormal.step();
+    worldSilent.step();
+
+    expect(worldNormal.killsTotal).toBe(1);
+    expect(worldSilent.killsTotal).toBe(1);
+
+    expect(worldNormal.deathPulses.length).toBe(1);
+    expect(worldNormal.deathPulses[0].power).toBeCloseTo(0.6, 2);
+
+    expect(worldSilent.deathPulses.length).toBe(0);
+  });
+
+  it('allows prey stealth to silence and negate its own death pulse upon death', () => {
+    const world = quietWorld({
+      predationDefenseEnabled: true,
+      predationEnabled: true,
+      stealthGeneEnabled: true,
+      metabolismGeneEnabled: true,
+    });
+
+    const attackerBrain = createHeadStartBrain(world.prng, world.config);
+    attackerBrain.skip[BRAIN_INPUTS.indexOf('isAttack')] = 100;
+
+    const attacker: Organism = {
+      id: 'pred',
+      x: 5,
+      y: 5,
+      energy: 80,
+      policy: {} as never,
+      brain: attackerBrain,
+      abilities: { diagonal: 0, squeeze: 0, leap: 0 },
+      carnivory: 1.0,
+      tag: 10,
+      carryCapacity: 0,
+      dispersal: 1,
+      memorySpan: 0,
+      memoryWeights: [],
+      memory: { home: null, rememberedFood: null, rememberedSignal: null, registers: [0, 0, 0] },
+      kills: 0,
+      lineage: { id: 'lin-pred', parentId: null, generation: 1, birthTick: 0 },
+      age: 0,
+      offspringCount: 0,
+      foodEatenCount: 0,
+      carriedFood: 0,
+      foodGiven: 0,
+      foodReceived: 0,
+      signalTick: -1,
+      recentHistory: [],
+      size: 1.0,
+      stealth: 0.0,
+    };
+
+    const preyBrain = createHeadStartBrain(world.prng, world.config);
+    preyBrain.skip[BRAIN_INPUTS.indexOf('isRest')] = 100;
+
+    const prey: Organism = {
+      id: 'prey',
+      x: 5,
+      y: 6,
+      energy: 10,
+      policy: {} as never,
+      brain: preyBrain,
+      abilities: { diagonal: 0, squeeze: 0, leap: 0 },
+      carnivory: 0,
+      tag: 200,
+      carryCapacity: 0,
+      dispersal: 1,
+      memorySpan: 0,
+      memoryWeights: [],
+      memory: { home: null, rememberedFood: null, rememberedSignal: null, registers: [0, 0, 0] },
+      kills: 0,
+      lineage: { id: 'lin-prey', parentId: null, generation: 1, birthTick: 0 },
+      age: 0,
+      offspringCount: 0,
+      foodEatenCount: 0,
+      carriedFood: 0,
+      foodGiven: 0,
+      foodReceived: 0,
+      signalTick: -1,
+      recentHistory: [],
+      size: 1.0,
+      metabolicRate: 1.0,
+      stealth: 1.0,
+    };
+
+    world.organisms.set(attacker.id, attacker);
+    world.organisms.set(prey.id, prey);
+
+    world.step();
+
+    expect(world.killsTotal).toBe(1);
+    expect(world.deathPulses.length).toBe(0);
   });
 });

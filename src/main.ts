@@ -435,6 +435,7 @@ const settingsView = new SettingsView(
     carrionEnabled: sim.config.carrionEnabled ?? true,
     predationEnabled: sim.config.predationEnabled ?? true,
     toughnessGeneEnabled: sim.config.toughnessGeneEnabled ?? true,
+    stealthGeneEnabled: sim.config.stealthGeneEnabled ?? true,
     sexEnabled: sim.config.sexEnabled ?? true,
     immigrationEnabled: sim.config.immigrationEnabled,
     plantsEnabled: sim.config.plantsEnabled,
@@ -477,6 +478,7 @@ const settingsView = new SettingsView(
     onCarrionChange: (enabled) => sim.setConfig({ carrionEnabled: enabled }),
     onPredationChange: (enabled) => sim.setConfig({ predationEnabled: enabled }),
     onToughnessChange: (enabled) => sim.setConfig({ toughnessGeneEnabled: enabled }),
+    onStealthChange: (enabled) => sim.setConfig({ stealthGeneEnabled: enabled }),
     onSexChange: (enabled) => sim.setConfig({ sexEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
@@ -859,6 +861,7 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     carrionEnabled: config.carrionEnabled ?? true,
     predationEnabled: config.predationEnabled ?? true,
     toughnessGeneEnabled: config.toughnessGeneEnabled ?? true,
+    stealthGeneEnabled: config.stealthGeneEnabled ?? true,
     sexEnabled: config.sexEnabled ?? true,
     immigrationEnabled: config.immigrationEnabled ?? false,
     plantsEnabled: config.plantsEnabled,

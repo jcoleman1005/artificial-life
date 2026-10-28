@@ -79,6 +79,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Ecological seasons, weather patterns, and versioning system: 4 ecological seasons and weather patterns replace binary plenty/lean; SemVer v0.2.0 ("Biosphere") displayed in UI (2026-10-28).
 - Predator–prey arms race & chemical defense (`predationDefenseEnabled`, `toughnessGeneEnabled`, `toxicityGeneEnabled`, on; traits 52 & 53, 2026-10-28): Prey armor blunts bites, adds move drag, mass upkeep, and slows contested agility; chemical toxicity inflicts acute malaise on attackers/scavengers; metabolic death pulse propagates downwind; zero scripted behavior.
 - Weather hues & storm cloud parallax: Weather front palettes harmonized with ecological seasons; high-altitude cloud billows with 3D camera parallax, wind drift, terrain overcast shadows, and rain streaks (2026-10-28).
+- Stealth & death pulse dampening (`stealthGeneEnabled`, on; trait 54, 2026-10-28): Ambush bonus, mass upkeep, and dampens/negates violent death pulses emitted by prey or silenced by attackers; zero scripted behavior.
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.

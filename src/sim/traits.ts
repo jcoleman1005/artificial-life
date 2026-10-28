@@ -179,6 +179,12 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.toxicityUpkeepRate * organism.toxicity * sizeFactor
       : 0;
 
+  // Stealth upkeep: maintaining silent stalking machinery and camouflage scaling with body size
+  const stealthUpkeep =
+    config.stealthGeneEnabled && organism.stealth !== undefined && organism.stealth > 0
+      ? config.stealthUpkeepRate * organism.stealth * sizeFactor
+      : 0;
+
   return (
     baseCost +
     sensoryUpkeep +
@@ -187,6 +193,7 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
     detoxUpkeep +
     toughnessUpkeep +
     toxicityUpkeep +
+    stealthUpkeep +
     config.carryUpkeep * organism.carryCapacity +
     (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
@@ -240,17 +247,20 @@ export function carrionFromBody(bodyEnergy: number, config: Readonly<SimulationC
  * meat eater). Prey that moves out of reach that tick escapes regardless.
  */
 export function killChance(
-  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory'>>,
+  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory' | 'stealth'>>,
   prey: Readonly<Pick<Organism, 'energy' | 'toughness'>>,
   config: Readonly<SimulationConfig>
 ): number {
   const total = attacker.energy + prey.energy;
   const share = total > 0 ? attacker.energy / total : 0;
   const bite = config.bitePowerMin + (1 - config.bitePowerMin) * attacker.carnivory;
-  const baseChance = share * bite;
+  let chance = share * bite;
+  if (config.stealthGeneEnabled && attacker.stealth !== undefined && attacker.stealth > 0) {
+    chance *= 1 + (config.stealthAmbushBonus ?? 0.3) * attacker.stealth;
+  }
   if (!config.toughnessGeneEnabled || prey.toughness === undefined || prey.toughness <= 0) {
-    return baseChance;
+    return Math.min(1, chance);
   }
   const armorEffectiveness = config.armorEffectiveness ?? 0.75;
-  return baseChance * (1 - armorEffectiveness * prey.toughness);
+  return Math.min(1, Math.max(0, chance * (1 - armorEffectiveness * prey.toughness)));
 }

@@ -73,6 +73,7 @@ import {
   sizeOf,
   toughnessOf,
   toxicityOf,
+  stealthOf,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
 import { capGenome, compileCircuit, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, growableBrain, internalUnits, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
@@ -1477,14 +1478,21 @@ export class World {
       if (roll >= attack.chance) continue;
       bodies.set(prey.id, prey.energy);
       if (this.config.predationDefenseEnabled !== false) {
-        this.deathPulses.push({
-          x: prey.x,
-          y: prey.y,
-          tag: prey.tag,
-          size: sizeOf(prey, this.config),
-          power: metabolicRateOf(prey, this.config),
-          tick: this.tick,
-        });
+        const attackerStealth = stealthOf(attacker, this.config);
+        const preyStealth = stealthOf(prey, this.config);
+        // Stealth dampens the shockwave; at high stealth it is completely silenced.
+        const muffling = Math.max(0, 1 - attackerStealth) * Math.max(0, 1 - preyStealth);
+        const power = metabolicRateOf(prey, this.config) * muffling;
+        if (power > 0.05) {
+          this.deathPulses.push({
+            x: prey.x,
+            y: prey.y,
+            tag: prey.tag,
+            size: sizeOf(prey, this.config),
+            power: Number(power.toFixed(3)),
+            tick: this.tick,
+          });
+        }
       }
       if (this.config.predationDefenseEnabled !== false && this.config.toxicityGeneEnabled) {
         const preyTox = toxicityOf(prey, this.config);
@@ -2227,6 +2235,7 @@ export class World {
       detox: mean(c.detoxGeneEnabled, (o) => o.detox ?? c.detoxFounder),
       toughness: mean(c.toughnessGeneEnabled, (o) => o.toughness ?? c.toughnessFounder),
       toxicity: mean(c.toxicityGeneEnabled, (o) => o.toxicity ?? c.toxicityFounder),
+      stealth: mean(c.stealthGeneEnabled, (o) => o.stealth ?? c.stealthFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

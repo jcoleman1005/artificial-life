@@ -49,6 +49,7 @@ describe('Default world', () => {
       detoxGeneEnabled: DEFAULT_CONFIG.detoxGeneEnabled,
       predationDefenseEnabled: DEFAULT_CONFIG.predationDefenseEnabled,
       toughnessGeneEnabled: DEFAULT_CONFIG.toughnessGeneEnabled,
+      stealthGeneEnabled: DEFAULT_CONFIG.stealthGeneEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -100,6 +101,7 @@ describe('Default world', () => {
       detoxGeneEnabled: true,
       predationDefenseEnabled: true,
       toughnessGeneEnabled: true,
+      stealthGeneEnabled: true,
     });
   });
 

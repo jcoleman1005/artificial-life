@@ -34,7 +34,8 @@ export type LifeField =
   | 'carnivoreEfficiency'
   | 'detox'
   | 'toughness'
-  | 'toxicity';
+  | 'toxicity'
+  | 'stealth';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -176,6 +177,15 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.toxicityMin,
     max: (c) => c.toxicityMax,
   },
+  {
+    field: 'stealth',
+    traitId: 54,
+    enabled: (c) => c.stealthGeneEnabled,
+    founder: (c) => c.stealthFounder,
+    step: (c) => c.stealthStep,
+    min: (c) => c.stealthMin,
+    max: (c) => c.stealthMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -265,6 +275,10 @@ export const toughnessOf = (o: Readonly<Pick<Organism, 'toughness'>>, c: Readonl
 /** Prey chemical defense / tissue toxicity (toxicityGeneEnabled); 0 without the gene. */
 export const toxicityOf = (o: Readonly<Pick<Organism, 'toxicity'>>, c: Readonly<SimulationConfig>): number =>
   c.toxicityGeneEnabled ? (o.toxicity ?? c.toxicityFounder) : 0;
+
+/** Ambush & cry suppression / stealth (stealthGeneEnabled); 0 without the gene. */
+export const stealthOf = (o: Readonly<Pick<Organism, 'stealth'>>, c: Readonly<SimulationConfig>): number =>
+  c.stealthGeneEnabled ? (o.stealth ?? c.stealthFounder) : 0;
 
 export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold' | 'size'>>, c: Readonly<SimulationConfig>): number =>
   (o.reproThreshold ?? c.reproductionThreshold) * sizeOf(o, c);

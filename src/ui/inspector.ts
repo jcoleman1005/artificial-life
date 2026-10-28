@@ -48,6 +48,9 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (c.toughnessGeneEnabled && o.toughness !== undefined) {
     out.push(pill('Armor', `${Math.round(o.toughness * 100)}%`));
   }
+  if (c.stealthGeneEnabled && o.stealth !== undefined) {
+    out.push(pill('Stealth', `${Math.round(o.stealth * 100)}%`));
+  }
   return out.join('');
 }
 

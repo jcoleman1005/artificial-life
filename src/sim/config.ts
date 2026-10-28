@@ -244,6 +244,13 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   toxicityMin: 0,
   toxicityMax: 1,
   toxicityUpkeepRate: 0.025,
+  stealthGeneEnabled: true,
+  stealthFounder: 0.1,
+  stealthStep: 0.05,
+  stealthMin: 0,
+  stealthMax: 1,
+  stealthUpkeepRate: 0.02,
+  stealthAmbushBonus: 0.3,
   seed: 42,
 };
 

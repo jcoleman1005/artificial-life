@@ -66,6 +66,7 @@ export const TraitId = {
   detox: 51,
   toughness: 52,
   toxicity: 53,
+  stealth: 54,
 } as const;
 
 /** The phenotype a genome decodes to: every inherited trait except the policy dials. */
@@ -100,6 +101,7 @@ export const ABSENT_DEFAULTS = {
   detox: 0.1,
   toughness: 0.1,
   toxicity: 0.05,
+  stealth: 0.1,
 } as const;
 
 const scratch = new DataView(new ArrayBuffer(8));

@@ -175,6 +175,15 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
       score: 59 + org.toughness! * 20,
     });
   }
+  if (config.stealthGeneEnabled && (org.stealth ?? 0) >= 0.15) {
+    standouts.push({
+      icon: '🥷',
+      label: 'Stealth',
+      value: `${Math.round(org.stealth! * 100)}%`,
+      category: 'defense',
+      score: 59 + org.stealth! * 20,
+    });
+  }
   const senseR = config.sensingGeneEnabled ? (org.sensingRadius ?? config.sensingRadius) : config.sensingRadius;
   if (senseR > 2.2) {
     standouts.push({
@@ -376,6 +385,18 @@ export function drawOrganismBlob(
     ctx.setLineDash([Math.max(2.5, r * 0.28), Math.max(1.5, r * 0.16)]);
     ctx.beginPath();
     ctx.ellipse(cx, cy, a + Math.max(1.2, r * 0.12), b + Math.max(1.2, r * 0.12), heading, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 7c. Stealth / camouflage cloaking rim
+  const stealth = config.stealthGeneEnabled ? (org.stealth ?? 0) : 0;
+  if (stealth > 0.1 && alive) {
+    ctx.strokeStyle = `hsla(160, 45%, 65%, ${(0.35 + 0.45 * stealth).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.2, r * (0.08 + 0.1 * stealth));
+    ctx.setLineDash([Math.max(1.5, r * 0.15), Math.max(2, r * 0.25)]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a + Math.max(0.8, r * 0.08), b + Math.max(0.8, r * 0.08), heading, 0, TAU);
     ctx.stroke();
     ctx.setLineDash([]);
   }

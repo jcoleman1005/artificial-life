@@ -30,6 +30,7 @@ export interface SettingsCallbacks {
   onOvergrazingChange: (enabled: boolean) => void;
   onPredationChange: (enabled: boolean) => void;
   onToughnessChange: (enabled: boolean) => void;
+  onStealthChange: (enabled: boolean) => void;
   onCarrionChange: (enabled: boolean) => void;
   onSexChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
@@ -56,6 +57,7 @@ export interface ExperimentToggles {
   carrionEnabled: boolean;
   predationEnabled: boolean;
   toughnessGeneEnabled: boolean;
+  stealthGeneEnabled: boolean;
   sexEnabled: boolean;
   immigrationEnabled: boolean;
   plantsEnabled: boolean;
@@ -199,6 +201,7 @@ export class SettingsView {
         ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
         ${segmented('Predation', 'predation', onOff, toggles.predationEnabled ? 'on' : 'off')}
         ${segmented('Prey armor', 'toughness', onOff, toggles.toughnessGeneEnabled ? 'on' : 'off')}
+        ${segmented('Stealth', 'stealth', onOff, toggles.stealthGeneEnabled ? 'on' : 'off')}
         ${segmented('Mating', 'mating', onOff, toggles.sexEnabled ? 'on' : 'off')}
         ${segmented('Carrion', 'carrion', onOff, toggles.carrionEnabled ? 'on' : 'off')}
         ${segmented('Sharing', 'sharing', onOff, toggles.sharingEnabled ? 'on' : 'off')}
@@ -273,6 +276,7 @@ export class SettingsView {
     set('controller', t.controller);
     set('predation', t.predationEnabled ? 'on' : 'off');
     set('toughness', t.toughnessGeneEnabled ? 'on' : 'off');
+    set('stealth', t.stealthGeneEnabled ? 'on' : 'off');
     set('mating', t.sexEnabled ? 'on' : 'off');
     set('carrion', t.carrionEnabled ? 'on' : 'off');
     set('sharing', t.sharingEnabled ? 'on' : 'off');
@@ -339,6 +343,7 @@ export class SettingsView {
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('predation', (v) => cb.onPredationChange(v === 'on'));
     this.bindSegment('toughness', (v) => cb.onToughnessChange(v === 'on'));
+    this.bindSegment('stealth', (v) => cb.onStealthChange(v === 'on'));
     this.bindSegment('mating', (v) => cb.onSexChange(v === 'on'));
     this.bindSegment('carrion', (v) => cb.onCarrionChange(v === 'on'));
     this.bindSegment('sharing', (v) => cb.onSharingChange(v === 'on'));

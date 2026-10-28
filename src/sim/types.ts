@@ -333,6 +333,8 @@ export interface Organism {
   readonly toughness?: number;
   /** Chemical defense / tissue toxicity (toxicityGeneEnabled), 0..1. Inflicts acute malaise on attacking predators and scavengers. */
   readonly toxicity?: number;
+  /** Ambush stealth & cry suppression (stealthGeneEnabled), 0..1. Muffles or negates death pulse upon kill/death; ambush surprise boost. */
+  readonly stealth?: number;
   /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
   lastBiteYield?: number;
   /** Fat held now (state; only with fatEnabled). */
@@ -736,6 +738,13 @@ export interface SimulationConfig {
   toxicityMin: number;
   toxicityMax: number;
   toxicityUpkeepRate: number; // Upkeep per tick per unit of (toxicity * sizeFactor)
+  stealthGeneEnabled: boolean; // Ambush stealth & cry suppression evolves (muffles or negates death pulses)
+  stealthFounder: number;
+  stealthStep: number;
+  stealthMin: number;
+  stealthMax: number;
+  stealthUpkeepRate: number; // Upkeep per tick per unit of (stealth * sizeFactor)
+  stealthAmbushBonus: number; // Attack kill chance multiplier bonus from stealth
   seed: number | string;
 }
 
@@ -865,6 +874,7 @@ export interface LifeMetrics {
   detox: number | null;
   toughness: number | null;
   toxicity: number | null;
+  stealth: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
