@@ -91,11 +91,19 @@ app.innerHTML = `
         <section class="tab-panel" data-panel="stats">
           <p id="stats-status" class="sim-status"></p>
           <section id="metrics-container" class="metrics-section" aria-label="Simulation metrics"></section>
-          <h3 class="panel-heading">Recent events</h3>
-          <div id="events-container"></div>
-          <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
-          <div id="groups-container"></div>
-          ${LEGEND_HTML}
+          <div class="stats-columns">
+            <div class="stats-col">
+              <h3 class="panel-heading">Recent events</h3>
+              <div id="events-container"></div>
+            </div>
+            <div class="stats-col">
+              <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
+              <div id="groups-container"></div>
+            </div>
+            <div class="stats-col stats-col-legend">
+              ${LEGEND_HTML}
+            </div>
+          </div>
         </section>
         <section class="tab-panel" data-panel="trends" id="history-container" aria-label="Trends over time"></section>
         <section class="tab-panel" data-panel="organism" id="inspector-container"></section>

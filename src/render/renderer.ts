@@ -420,10 +420,32 @@ export class CanvasRenderer {
     return [(gx + 0.5) * this.cellSize, (gy + 0.5) * this.cellSize];
   }
 
+  /** Visual altitude offset (CSS px, positive = elevated upwards in screen -Y) for leaping. */
+  private leapLiftOf(org: OrganismView): number {
+    const lastAction = org.recentHistory[0];
+    if (!lastAction || !isLeapAction(lastAction.chosenAction.type) || lastAction.outcome !== 'success') {
+      return 0;
+    }
+    const [hx, hy] = directionOf(lastAction.chosenAction.type);
+    const originPx = (org.x - 2 * hx + 0.5) * this.cellSize;
+    const originPy = (org.y - 2 * hy + 0.5) * this.cellSize;
+    const targetPx = (org.x + 0.5) * this.cellSize;
+    const targetPy = (org.y + 0.5) * this.cellSize;
+    const [gx, gy] = this.displayCentre(org);
+    const totalDist = Math.hypot(targetPx - originPx, targetPy - originPy) || (2 * this.cellSize);
+    const traveled = Math.hypot(gx - originPx, gy - originPy);
+    const u = Math.max(0, Math.min(1, traveled / totalDist));
+    const rem = Math.hypot(targetPx - gx, targetPy - gy);
+    if (rem <= 0.04 * this.cellSize || u >= 0.98) return 0;
+    const Hmax = this.cellSize * 0.85;
+    return 4 * Hmax * u * (1 - u);
+  }
+
   /** Screen position (CSS px, relative to the canvas) of an organism. */
   public screenPositionOf(org: OrganismView): { x: number; y: number } {
     const [x, y] = this.displayCentre(org);
-    return { x: x - this.viewX, y: y - this.viewY };
+    const lift = this.leapLiftOf(org);
+    return { x: x - this.viewX, y: (y - lift) - this.viewY };
   }
 
   /** Screen position (CSS px, relative to the canvas) of a grid cell center. */
@@ -1224,22 +1246,27 @@ export class CanvasRenderer {
   private drawSelection(org: OrganismView): void {
     const { ctx, cellSize } = this;
     const [cx, cy] = this.displayCentre(org);
+    const lift = this.leapLiftOf(org);
+    const selY = cy - lift;
     const r = Math.max(5, cellSize * 0.62);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.arc(cx, selY, r, 0, TAU);
     ctx.stroke();
     ctx.strokeStyle = `hsla(${this.hueOf(org)}, 90%, 72%, 0.45)`;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(cx, cy, r + 4, 0, TAU);
+    ctx.arc(cx, selY, r + 4, 0, TAU);
     ctx.stroke();
   }
 
   private drawOrganism(org: OrganismView, detail: number): void {
     const { ctx, cellSize } = this;
-    const [cx, cy] = this.displayCentre(org);
+    const [gx, gy] = this.displayCentre(org);
+    const lift = this.leapLiftOf(org);
+    const cx = gx;
+    const cy = gy - lift;
     const config = this.world.config;
     const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1);
     const energyRatio = Math.max(0, Math.min(1, org.energy / maxEnergy));
@@ -1247,6 +1274,18 @@ export class CanvasRenderer {
     const sizeScale = config.sizeGeneEnabled ? Math.sqrt(org.size ?? 1) : 1;
     // Size by energy and body size, so glyphs stay readable and mice vs elephants are visible.
     const r = Math.max(1.6, cellSize * 0.4 * (0.6 + 0.4 * energyRatio) * sizeScale);
+
+    // Airborne ground drop shadow (projected on the terrain floor beneath the leaping organism)
+    if (lift > 0.5) {
+      const Hmax = cellSize * 0.85;
+      const shadowFactor = Math.max(0, 1 - lift / Hmax);
+      const shadowScale = 0.75 + 0.25 * shadowFactor;
+      const shadowAlpha = 0.14 + 0.18 * shadowFactor;
+      ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha.toFixed(2)})`;
+      ctx.beginPath();
+      ctx.ellipse(gx, gy, Math.max(2, r * shadowScale * 1.15), Math.max(1.5, r * shadowScale * 0.6), 0, 0, TAU);
+      ctx.fill();
+    }
 
     // Phenotype traits (safe fallbacks when genes are switched off or absent)
     const squeeze = config.squeezeEnabled ? (org.abilities?.squeeze ?? 0) : 0;
@@ -1476,61 +1515,50 @@ export class CanvasRenderer {
     const moving = isMoveAction(type) || isLeapAction(type);
     if (moving && succeeded) {
       if (isLeapAction(type)) {
-        // Leaping: arched parabolic ballistic trajectory curve spanning 2 cells in directionOf(type)
+        // Stationary 2.5D ballistic trajectory guide anchored to fixed grid cells
         const [hx, hy] = directionOf(type);
-        const x0 = cx - hx * (cellSize * 2);
-        const y0 = cy - hy * (cellSize * 2);
-        const mx = cx - hx * cellSize;
-        const my = cy - hy * cellSize;
-
-        // Subtle ground shadow underneath at the intermediate cell to visually lift the leaping organism
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-        ctx.beginPath();
-        ctx.ellipse(mx, my, cellSize * 0.38, cellSize * 0.22, 0, 0, TAU);
-        ctx.fill();
+        const originPx = (org.x - 2 * hx + 0.5) * cellSize;
+        const originPy = (org.y - 2 * hy + 0.5) * cellSize;
+        const targetPx = (org.x + 0.5) * cellSize;
+        const targetPy = (org.y + 0.5) * cellSize;
+        const midPx = (originPx + targetPx) / 2;
+        const midPy = (originPy + targetPy) / 2;
+        const Hmax = cellSize * 0.85;
+        const cpx = midPx;
+        const cpy = midPy - 2 * Hmax;
 
         // Subtle ground track connecting origin to destination
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
         ctx.lineWidth = Math.max(0.9, stroke * 0.65);
-        ctx.setLineDash([cellSize * 0.15, cellSize * 0.15]);
+        ctx.setLineDash([cellSize * 0.12, cellSize * 0.12]);
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.lineTo(cx, cy);
+        ctx.moveTo(originPx, originPy);
+        ctx.lineTo(targetPx, targetPy);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Ballistic parabolic trajectory curve
-        let nx = -hy;
-        let ny = hx;
-        if (ny > 0 || (ny === 0 && nx < 0)) {
-          nx = -nx;
-          ny = -ny;
-        }
-        const arch = cellSize * 0.65;
-        const cpx = mx + nx * arch;
-        const cpy = my + ny * arch - cellSize * 0.35;
-
+        // Ballistic parabolic trajectory curve in 2.5D perspective
         ctx.strokeStyle = GLYPH;
         ctx.lineWidth = stroke;
         ctx.beginPath();
-        ctx.moveTo(x0, y0);
-        ctx.quadraticCurveTo(cpx, cpy, cx, cy);
+        ctx.moveTo(originPx, originPy);
+        ctx.quadraticCurveTo(cpx, cpy, targetPx, targetPy);
         ctx.stroke();
 
         // Arrowhead at landing
-        const tx = cx - cpx;
-        const ty = cy - cpy;
+        const tx = targetPx - cpx;
+        const ty = targetPy - cpy;
         const tLen = Math.hypot(tx, ty) || 1;
         const ux = tx / tLen;
         const uy = ty / tLen;
         const wing = r * 0.32;
-        const wingX = cx - ux * wing;
-        const wingY = cy - uy * wing;
-        const px = -uy * wing * 0.7;
-        const py = ux * wing * 0.7;
+        const wingX = targetPx - ux * wing;
+        const wingY = targetPy - uy * wing;
+        const px = -uy * wing * 0.65;
+        const py = ux * wing * 0.65;
         ctx.beginPath();
         ctx.moveTo(wingX + px, wingY + py);
-        ctx.lineTo(cx, cy);
+        ctx.lineTo(targetPx, targetPy);
         ctx.lineTo(wingX - px, wingY - py);
         ctx.stroke();
       } else {

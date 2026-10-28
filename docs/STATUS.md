@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Feature display audit & visual enhancements: World canvas plant defense spines, ballistic leaping trajectory arcs with intermediate drop shadows, downwind-deflected signal waves, 3-stage carrion decomposition, acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D ballistic leaping trajectory & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -27,6 +27,33 @@ _Last updated: 2026-10-28 (Feature display audit & visual enhancements: World ca
 ## What exists (summary)
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
+
+## Responsive Landscape Desktop Layout (built 2026-10-28)
+
+Stacked landscape desktop presentation on computer screens (`src/style.css`, `src/main.ts`):
+- **Landscape World Canvas on Top (~58vh)**: Full-width landscape stage at the top of the screen; the 60×60 simulation grid auto-centers with letterboxing and crisp cell resolution; playback pill and zoom controls remain anchored within the stage.
+- **Horizontal Stats Dashboard Below (~42vh)**: Expands across the full landscape display with smooth scrolling and responsive layout:
+  - *Header Bar*: Peek population badge, season state pill, group hue strip, settings trigger, and tab navigation arranged in a sleek single horizontal bar.
+  - *Metrics Section*: Multi-column responsive grid (`repeat(auto-fit, minmax(130px, 1fr))`) stretching across the screen.
+  - *Side-by-Side 3-Column Lower Dashboard*: Recent Events feed, Colour Groups list, and Symbol Legend placed into three parallel columns (`.stats-columns`), eliminating endless vertical scrolling.
+  - *Expanded Trends & Inspector*: Trends charts and Genome Lineage Map automatically utilize the wide horizontal landscape width.
+- **Mobile Landscape Phone Preservation**: Viewports with `max-height: 500px` (e.g. Samsung Galaxy S21 in landscape) retain the side-panel layout, ensuring mobile touch ergonomics and vertical visibility remain intact.
+
+## Organism Adaptation Card & 2.5D Ballistic Leap Overhaul (built 2026-10-28)
+
+Enhanced organism floating card and 2.5D leap physics rendering (`src/ui/organism-card.ts`, `src/style.css`, `src/render/renderer.ts`, tests `tests/organism-card.test.ts`):
+- **Evolutionary Trait Badges**: Replaced static dots (`diet`, `burn`, `breeding`) with category color-coded micro-pills with icons and quantitative values:
+  - *Diet*: `🌱 [X]% Herbivore`, `🥩 [X]% Carnivore`, or `🌾 [X]% Omnivore`.
+  - *Burn*: `⚡ [X.XX]× Burn` color-mapped to metabolic pace (cool cyan to hot orange).
+  - *Reproduction*: `🥚 Clutch [X.X]` or `🐣 Invest [X]%`.
+  - *Dynamic Standout Traits*: Prioritized badges sorted by divergence from baseline: `🦘 Leaper`, `〰️ Squeezer`, `↗️ Diagonal`, `🛡️ Detox [X]%`, `👁️ Vision [R]`, `🦣 Heavy / 🐁 Dwarf`, `🔋 Fat Cap`, `🦴 Scavenge`, `🍃 Gut`, and `🧠 +[N] Neural`.
+  - *Status Line*: Displays lineage depth, age, and activity (`Gen 14 · Age 320 · Grazing · carrying 2`).
+  - *Egg Badges*: Direct inspection shows `[🥚 Egg]`, `[🛡️ Shell X.XX]`, `[📏 Size X.X×]`, and `[⚡ Energy X]`.
+- **2.5D Ballistic Leap Trajectory & Drop Shadow**:
+  - *Airborne Lift*: Organism body elevates vertically (screen $-Y$) along a true parabolic arc $Z(u) = 4 H_{\max} u (1-u)$ over the intervening cell.
+  - *Terrain Drop Shadow*: An elliptical ground shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, scaling and softening with altitude.
+  - *Stationary Trajectory Guide*: Ground track and trajectory arc are anchored to fixed origin and target grid cells with a landing arrowhead, eliminating drifting, wobbling, and sideways bowing distortion.
+- **Zero Simulation Physics Drift**: Visual and UI presentation layer only; deterministic invariants preserved.
 
 ## World Canvas Visual Enhancements (built 2026-10-28)
 

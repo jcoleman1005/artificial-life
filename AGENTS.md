@@ -73,6 +73,8 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Nutrient cycle (`nutrientCycleEnabled`, on; 2026-10-27): Replaces clockwork calendar seasons with endogenous soil-plant-unit nutrient dynamics; switch off reproduces legacy clock seasons bit-identically.
 - Emergent migration (2026-10-27): Soil depletion and animal metabolic excretion drive migration endogenously; no artificial wandering region coordinates.
 - Plant defense & detox coevolution (`plantDefenseEnabled`, `detoxGeneEnabled`, on; `docs/specs/red_queen.md`, 2026-10-27): Plant defense trait vs. herbivore detox (trait 51); yield discount, acute malaise damage, and `lastBiteYield` brain sensory feedback; switch off reproduces baseline bit-identically.
+- Organism adaptation card & 2.5D ballistic leaping trajectory: Informative trait badges (diet %, burn rate, clutch/invest, leaper, squeezer, diagonal, detox, vision, size, fat, neural nodes) replace static dot chips; true 2.5D airborne jump with terrain drop shadow and fixed-grid trajectory arc (2026-10-28).
+- Responsive landscape desktop layout: Canvas on top (~58vh) adapting to landscape; horizontal multi-column stats dashboard below (~42vh) with side-by-side events, colour groups, and legend on computer screens (> 500px height); mobile landscape side-panel preserved (2026-10-28).
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.
