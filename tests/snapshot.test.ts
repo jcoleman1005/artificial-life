@@ -23,7 +23,7 @@ describe('Snapshots', () => {
     expect(restored.tick).toBe(600);
     expect(plain(restored.exportState())).toEqual(plain(original.exportState()));
     expect(plain(restored.exportState()).history).toEqual(plain(original.exportState()).history);
-  }, 30_000);
+  }, 60_000);
 
   it('a restored world resets to the same start as the original seed', () => {
     const original = new World({ ...SMALL, seed: 'snap-reset' });

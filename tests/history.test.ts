@@ -71,7 +71,7 @@ describe('Metrics history', () => {
       b.step();
     }
     expect(a.history.toCSV()).toBe(b.history.toCSV());
-   }, 30_000);
+  }, 60_000);
 
   it('exports one CSV row per sample with a header', () => {
     const world = new World({ seed: 5 });

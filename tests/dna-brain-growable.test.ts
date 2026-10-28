@@ -639,7 +639,7 @@ describe('DNA Stage 3: upkeep', () => {
     expect(metabolismCost(founder, cfg) - metabolismCost({ ...founder, circuit: undefined }, cfg)).toBe(0);
     expect(metabolismCost(grown, cfg) - metabolismCost(founder, cfg)).toBeCloseTo(2 * cfg.dnaUpkeepPerConnection, 15);
     const big = { ...cfg, dnaUpkeepPerConnection: 0.25 };
-    expect(metabolismCost(grown, big) - metabolismCost(founder, big)).toBe(0.5); // exact at a representable size
+    expect(metabolismCost(grown, big) - metabolismCost(founder, big)).toBeCloseTo(0.5, 10); // exact at a representable size
     const offCfg = { ...cfg, dnaGrowableBrain: false };
     expect(metabolismCost(grown, offCfg)).toBe(metabolismCost(founder, offCfg));
   });

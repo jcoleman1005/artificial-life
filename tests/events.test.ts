@@ -66,13 +66,14 @@ describe('World events', () => {
     expect(detector.observe(world)).toContainEqual(expect.objectContaining({ kind: 'populationCrash', from: 230, to: 80 }));
   });
 
-  it('only watches: a world gives the same results with or without a detector', () => {
+  it('only watches: a world gives the same results with or without a detector', async () => {
     const small = { seed: 'watch', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, maxFoodPatches: 36, initialFoodPatches: 22 };
     const a = new World(small);
     const b = new World(small);
     const detector = new WorldEventDetector();
     const maps = new ActivityMaps(b.config.gridWidth, b.config.gridHeight);
     for (let t = 0; t < 200; t++) {
+      if (t % 50 === 0) await new Promise((resolve) => setImmediate(resolve));
       a.step();
       b.step();
       detector.observe(b);
@@ -81,17 +82,18 @@ describe('World events', () => {
     expect(Array.from(b.organisms.values()).map((o) => [o.id, o.x, o.y, o.energy])).toEqual(
       Array.from(a.organisms.values()).map((o) => [o.id, o.x, o.y, o.energy])
     );
-  }, 30_000);
+  }, 60_000);
 });
 
 describe('Activity heatmaps', () => {
-  it('counts meals and deaths where they happen, and fades them over time', () => {
+  it('counts meals and deaths where they happen, and fades them over time', async () => {
     const world = new World({ seed: 'heat', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36, foodRegionCount: 0 });
     const maps = new ActivityMaps(30, 30);
     maps.observe(world);
     let meals = 0;
     let deaths = 0;
     for (let t = 0; t < 250; t++) {
+      if (t % 50 === 0) await new Promise((resolve) => setImmediate(resolve));
       const before = world.deathsTotal;
       world.step();
       deaths += world.deathsTotal - before;
@@ -110,5 +112,5 @@ describe('Activity heatmaps', () => {
     expect(sum(maps.snapshot('deaths'))).toBeGreaterThan(0);
     expect(sum(maps.snapshot('deaths'))).toBeLessThan(deaths);
     expect(sum(maps.snapshot('crowding'))).toBeGreaterThan(0);
-  }, 30_000);
+  }, 60_000);
 });

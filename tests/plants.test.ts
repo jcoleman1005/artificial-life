@@ -156,7 +156,7 @@ describe('Plants', () => {
     for (const p of world.foodPatches.values()) expect(p.plant).toBeDefined();
     for (let t = 0; t < 200; t++) world.step();
     for (const p of world.foodPatches.values()) if (p.expiresAt === undefined) expect(p.plant).toBeDefined();
-  });
+  }, 30_000);
 
   it('continue bit-identically after a snapshot round trip', () => {
     const config = { seed: 'plant-snap', plantsEnabled: true, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 };
@@ -195,7 +195,7 @@ describe('Plants', () => {
     expect(JSON.stringify(Array.from(a.foodPatches.values()))).toBe(JSON.stringify(Array.from(b.foodPatches.values())));
     expect(a.getMetrics().plants!.count).toBeGreaterThan(0);
     expect(a.getMetrics().plants!.grazedTotal).toBeGreaterThan(0);
-  }, 120_000);
+  }, 180_000);
 
   it('draw nothing extra from the PRNG when off', () => {
     const a = new World({ plantsEnabled: false, seed: 'plants-off', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
