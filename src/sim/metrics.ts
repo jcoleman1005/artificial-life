@@ -197,7 +197,8 @@ export type WorldCountedMetric =
   | 'plants'
   | 'overgrazing'
   | 'life'
-  | 'weather';
+  | 'weather'
+  | 'nutrients';
 
 export function computeWorldMetrics(
   tick: number,

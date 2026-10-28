@@ -200,6 +200,16 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   weatherSignalDrift: 2.0,
   weatherEvapRate: 0.005,
   weatherAbsorptionRate: 0.05,
+  // Nutrient cycle (soil-plant-unit biogeochemical loop)
+  nutrientCycleEnabled: true,
+  nutrientCapacity: 3.0,
+  nutrientRegenRate: 0.01,
+  nutrientDiffusionRate: 0.01,
+  nutrientPlantUptake: 0.2,
+  nutrientPlantDecomp: 0.8,
+  nutrientExcretion: 0.005,
+  nutrientCarrionDecomp: 0.01,
+  nutrientLeanThreshold: 0.4,
   seed: 42,
 };
 

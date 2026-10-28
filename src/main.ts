@@ -44,6 +44,7 @@ const OVERLAYS: readonly (readonly [OverlayMode, string, string])[] = [
   ['deaths', 'Deaths', 'where they die'],
   ['feeding', 'Feeding', 'where they eat'],
   ['health', 'Cell health', 'grazed-down ground'],
+  ['nutrients', 'Nutrients', 'soil nutrient levels'],
 ];
 
 app.innerHTML = `

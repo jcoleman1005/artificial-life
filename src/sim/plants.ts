@@ -59,6 +59,11 @@ export function inheritGenome(parent: PlantGenome, config: Readonly<SimulationCo
 export class SoilField {
   public readonly fertility: Float32Array;
   public readonly region: Int16Array;
+  public readonly nutrients: Float32Array;
+  private readonly diffBuffer: Float32Array;
+  public readonly regionCells: number[][];
+  public readonly regionNutrients: Float32Array;
+  public meanFertileNutrients: number = 1.0;
 
   constructor(
     config: Readonly<SimulationConfig>,
@@ -68,12 +73,18 @@ export class SoilField {
     const { gridWidth: w, gridHeight: h } = config;
     this.fertility = new Float32Array(w * h);
     this.region = new Int16Array(w * h).fill(-1);
+    this.nutrients = new Float32Array(w * h);
+    this.diffBuffer = new Float32Array(w * h);
+    this.regionCells = Array.from({ length: regions.length }, () => []);
+    this.regionNutrients = new Float32Array(Math.max(1, regions.length)).fill(1.0);
+
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
         if (obstacles.has(`${x},${y}`)) continue;
         if (regions.length === 0) {
           this.fertility[i] = 1;
+          this.nutrients[i] = 1;
           continue;
         }
         let nearest = 0;
@@ -81,14 +92,101 @@ export class SoilField {
         let inside = false;
         regions.forEach((r, k) => {
           const d = Math.hypot(r.x - x, r.y - y);
-          if (d <= r.radius) inside = true;
+          if (d <= r.radius) {
+            inside = true;
+            this.regionCells[k].push(i);
+          }
           if (d - r.radius < nearestGap) {
             nearestGap = d - r.radius;
             nearest = k;
           }
         });
-        this.fertility[i] = inside ? 1 : config.marginFertility;
+        const f = inside ? 1 : config.marginFertility;
+        this.fertility[i] = f;
+        this.nutrients[i] = f;
         this.region[i] = nearest;
+      }
+    }
+  }
+
+  public stepNutrients(config: Readonly<SimulationConfig>, fertileIndices: readonly number[]): void {
+    if (!config.nutrientCycleEnabled) return;
+    const { gridWidth: w, gridHeight: h, nutrientCapacity: cap, nutrientRegenRate: rRegen, nutrientDiffusionRate: dRate } = config;
+    const n = this.nutrients;
+
+    // 1. Abiotic equilibrium relaxation
+    if (rRegen > 0) {
+      for (let i = 0; i < n.length; i++) {
+        const target = this.fertility[i];
+        if (target <= 0) continue;
+        const diff = target - n[i];
+        n[i] = Math.min(cap, Math.max(0, n[i] + rRegen * diff));
+      }
+    }
+
+    // 2. Spatial diffusion (4-neighbor)
+    if (dRate > 0) {
+      this.diffBuffer.set(n);
+      const buf = this.diffBuffer;
+      const fert = this.fertility;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          if (fert[idx] <= 0) continue;
+          const curr = buf[idx];
+          let flux = 0;
+          let validNeighbors = 0;
+
+          if (x > 0 && fert[idx - 1] > 0) {
+            flux += buf[idx - 1] - curr;
+            validNeighbors++;
+          }
+          if (x < w - 1 && fert[idx + 1] > 0) {
+            flux += buf[idx + 1] - curr;
+            validNeighbors++;
+          }
+          if (y > 0 && fert[idx - w] > 0) {
+            flux += buf[idx - w] - curr;
+            validNeighbors++;
+          }
+          if (y < h - 1 && fert[idx + w] > 0) {
+            flux += buf[idx + w] - curr;
+            validNeighbors++;
+          }
+
+          if (validNeighbors > 0) {
+            n[idx] = Math.min(cap, Math.max(0, n[idx] + (dRate * flux) / 4));
+          }
+        }
+      }
+    }
+
+    // 3. Compute region aggregates
+    this.updateAggregates(fertileIndices);
+  }
+
+  public updateAggregates(fertileIndices: readonly number[]): void {
+    if (fertileIndices.length > 0) {
+      let sum = 0;
+      for (let k = 0; k < fertileIndices.length; k++) {
+        sum += this.nutrients[fertileIndices[k]];
+      }
+      this.meanFertileNutrients = sum / fertileIndices.length;
+    } else {
+      let sum = 0;
+      for (let i = 0; i < this.nutrients.length; i++) sum += this.nutrients[i];
+      this.meanFertileNutrients = sum / Math.max(1, this.nutrients.length);
+    }
+
+    if (this.regionCells && this.regionCells.length > 0) {
+      for (let r = 0; r < this.regionCells.length; r++) {
+        const cells = this.regionCells[r];
+        if (cells.length === 0) continue;
+        let rSum = 0;
+        for (let k = 0; k < cells.length; k++) {
+          rSum += this.nutrients[cells[k]];
+        }
+        this.regionNutrients[r] = rSum / cells.length;
       }
     }
   }
@@ -249,7 +347,9 @@ export function stepPlants(ctx: PlantStepContext): void {
     }
     const shade = neighbours / 8;
     const region = field.region[index];
-    const lean = region >= 0 ? (ctx.regionLean[region] ?? false) : ctx.worldLean;
+    const lean = config.nutrientCycleEnabled
+      ? (field.nutrients[index] < config.nutrientLeanThreshold)
+      : (region >= 0 ? (ctx.regionLean[region] ?? false) : ctx.worldLean);
     const dormancy = lean ? g.leanDormancy : 0;
     plant.dormant = lean && g.leanDormancy >= 0.5;
 
@@ -266,11 +366,16 @@ export function stepPlants(ctx: PlantStepContext): void {
     const vigour = size / (size + 1);
     const moisture = ctx.weather ? ctx.weather.getSoilMoisture(x, y) : 0.5;
     const moistureFactor = ctx.weather ? 0.8 + 0.4 * moisture : 1;
+    const nutrientFactor = config.nutrientCycleEnabled
+      ? Math.max(0.1, Math.min(1.5, field.nutrients[index]))
+      : 1;
+    const lightFactor = lean ? lightLean : 1;
     const growth =
       g.growthRate *
       vigour *
       field.fertility[index] *
-      (lean ? lightLean : 1) *
+      nutrientFactor *
+      lightFactor *
       Math.max(0, 1 - config.shadeStrength * shade) *
       (1 - dormancy) *
       moistureFactor *
@@ -278,6 +383,12 @@ export function stepPlants(ctx: PlantStepContext): void {
     const upkeep =
       (config.plantUpkeep * size + config.growthCostFactor * g.growthRate * vigour) *
       (1 - DORMANCY_SAVING * dormancy);
+
+    // If nutrient cycle is on, draw consumed nutrients from soil
+    if (config.nutrientCycleEnabled && growth > 0) {
+      const uptake = Math.min(field.nutrients[index], growth * config.nutrientPlantUptake);
+      field.nutrients[index] -= uptake;
+    }
 
     // Growth: a mature plant puts a share into seeds; growth past its maximum
     // size goes into seeds too.
@@ -297,11 +408,19 @@ export function stepPlants(ctx: PlantStepContext): void {
     const total = plant.biomass + plant.roots;
     if (total > 0) {
       const keep = Math.max(0, 1 - upkeep / total);
+      if (config.nutrientCycleEnabled && keep < 1) {
+        const shed = total * (1 - keep);
+        field.nutrients[index] = Math.min(config.nutrientCapacity, field.nutrients[index] + shed * config.nutrientPlantDecomp * 0.5);
+      }
       plant.biomass *= keep;
       plant.roots *= keep;
     }
 
     if (plant.biomass + plant.roots < MIN_PLANT_MASS) {
+      if (config.nutrientCycleEnabled) {
+        const returned = (plant.biomass + plant.roots) * config.nutrientPlantDecomp;
+        field.nutrients[index] = Math.min(config.nutrientCapacity, field.nutrients[index] + returned);
+      }
       const cause: PlantDeathCause =
         plant.lastGrazedTick >= 0 && tick - plant.lastGrazedTick <= GRAZED_WINDOW
           ? 'grazed'

@@ -39,6 +39,7 @@ describe('Default world', () => {
       carnivoreGeneEnabled: DEFAULT_CONFIG.carnivoreGeneEnabled,
       carnivoreFounder: DEFAULT_CONFIG.carnivoreFounder,
       weatherEnabled: DEFAULT_CONFIG.weatherEnabled,
+      nutrientCycleEnabled: DEFAULT_CONFIG.nutrientCycleEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -77,6 +78,8 @@ describe('Default world', () => {
       carnivoreFounder: 0.5,
       // Weather systems are a new feature, on by default.
       weatherEnabled: true,
+      // Nutrient cycle: on by default.
+      nutrientCycleEnabled: true,
     });
   });
 

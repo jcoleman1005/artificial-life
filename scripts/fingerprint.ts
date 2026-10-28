@@ -39,6 +39,7 @@ for (const [name, overrides] of Object.entries(worlds)) {
         }
         if (w.cellHealth) h.update(JSON.stringify(w.cellHealth.exportState())); // overgrazing state, only while it is on
         if (w.weather) h.update(JSON.stringify(w.weather.exportState())); // weather state, only while it is on
+        if (w.config.nutrientCycleEnabled) h.update(JSON.stringify(Array.from(w.soil().nutrients)));
       }
     }
     out.push(`${name} ${controller}: ${h.digest('hex').slice(0, 16)} pop ${w.organisms.size} births ${w.birthsTotal}`);

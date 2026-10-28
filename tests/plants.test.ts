@@ -133,8 +133,8 @@ describe('Plants', () => {
   });
 
   it('move biomass into roots only in lean seasons, if dormant', () => {
-    // Season cycle of 100 ticks, the last half lean.
-    const world = plantWorld({ seasonLength: 100, leanFraction: 0.5, growthCostFactor: 0, plantUpkeep: 0 });
+    // Season cycle of 100 ticks, the last half lean (nutrientCycle disabled to isolate clock season mechanism).
+    const world = plantWorld({ seasonLength: 100, leanFraction: 0.5, growthCostFactor: 0, plantUpkeep: 0, nutrientCycleEnabled: false });
     const sleeper = addPlant(world, 3, 3, 4, { leanDormancy: 1, growthRate: 0.01 });
     const awake = addPlant(world, 12, 12, 4, { leanDormancy: 0, growthRate: 0.01 });
     for (let t = 0; t < 40; t++) world.step();

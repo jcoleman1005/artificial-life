@@ -16,7 +16,8 @@ function run(world: World, ticks: number, detector = new WorldEventDetector()): 
 
 describe('World events', () => {
   it('reports each region turning lean and back when seasons are staggered', () => {
-    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 400, leanFraction: 0.5, staggeredSeasons: true });
+    // Isolates clock season events with nutrientCycle off
+    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 400, leanFraction: 0.5, staggeredSeasons: true, nutrientCycleEnabled: false });
     const seasons = run(world, 400).filter((e) => e.kind === 'season');
     // 4 regions × one change each way per cycle
     expect(seasons).toHaveLength(8);
@@ -24,7 +25,8 @@ describe('World events', () => {
   });
 
   it('reports the world season when seasons are in step', () => {
-    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 100, leanFraction: 0.5, staggeredSeasons: false });
+    // Isolates clock season events with nutrientCycle off
+    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 100, leanFraction: 0.5, staggeredSeasons: false, nutrientCycleEnabled: false });
     const seasons = run(world, 200).filter((e) => e.kind === 'season');
     expect(seasons.map((e) => (e.kind === 'season' ? [e.tick, e.region, e.season] : null))).toEqual([
       [50, null, 'lean'],

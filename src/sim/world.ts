@@ -12,6 +12,7 @@ import type {
   LegalAction,
   Organism,
   LifeMetrics,
+  NutrientMetrics,
   SimulationConfig,
   WorldMetrics,
   WorldSnapshot,
@@ -121,6 +122,8 @@ export interface WorldState {
   readonly lineage?: readonly AncestorNode[];
   /** Weather state (absent in saves from before weather, or with it off). */
   readonly weather?: WeatherExportState;
+  /** Soil nutrient state (absent in saves from before nutrient cycle, or with it off). */
+  readonly soilNutrients?: readonly number[];
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -432,7 +435,7 @@ export class World {
   }
 
   /** Soil fertility and season regions, built once the terrain and regions exist. */
-  private soil(): SoilField {
+  public soil(): SoilField {
     this.soilField ??= new SoilField(this.config, this.foodRegions, this.obstacles);
     return this.soilField;
   }
@@ -601,6 +604,7 @@ export class World {
       ...(this.cellHealth ? { cellHealth: this.cellHealth.exportState() } : {}),
       lineage: this.lineageTracker.exportState(),
       ...(this.weather && this.config.weatherEnabled ? { weather: this.weather.exportState() } : {}),
+      ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
     };
   }
 
@@ -657,6 +661,13 @@ export class World {
         : null;
     world.history.importState(state.history);
     if (state.lineage) world.lineageTracker = LineageTracker.fromState(state.lineage);
+    if (state.soilNutrients) {
+      const nutrients = world.soil().nutrients;
+      for (let i = 0; i < state.soilNutrients.length && i < nutrients.length; i++) {
+        nutrients[i] = state.soilNutrients[i];
+      }
+      world.soil().updateAggregates(world.fertile());
+    }
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
     return world;
@@ -1007,12 +1018,14 @@ export class World {
       // Resting saves upkeep in proportion to torpor depth.
       if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);
       let energyDelta = -metabolism;
+      let spentEnergy = metabolism;
       organism.energy -= metabolism;
       if (this.config.torporEnabled && organism.rested && chosenAction.type !== 'REST') {
         // Acting right after a rest costs energy to wake, more the deeper the rest.
         const wakeCost = this.config.torporWakeCost * (organism.torporDepth ?? 0);
         organism.energy -= wakeCost;
         energyDelta -= wakeCost;
+        spentEnergy += wakeCost;
       }
 
       switch (chosenAction.type) {
@@ -1090,6 +1103,7 @@ export class World {
           // within reach; the cost is paid either way.
           organism.energy -= this.config.attackCost;
           energyDelta -= this.config.attackCost;
+          spentEnergy += this.config.attackCost;
           if (chosenAction.preyId) {
             pendingAttacks.push({ attacker: organism, preyId: chosenAction.preyId, chance: chosenAction.preyKillChance ?? 0 });
           }
@@ -1146,6 +1160,7 @@ export class World {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
             energyDelta -= cost;
+            spentEnergy += cost;
             pendingSwaps.set([organism.id, item.swapWithId].sort().join('|'), {
               mover: organism,
               otherId: item.swapWithId,
@@ -1156,6 +1171,7 @@ export class World {
             organism.y = chosenAction.target.y;
             organism.energy -= cost;
             energyDelta -= cost;
+            spentEnergy += cost;
             outcome = 'success';
           }
           // If not approved, no move cost is paid.
@@ -1239,6 +1255,7 @@ export class World {
         case 'SIGNAL': {
           organism.energy -= this.config.signalCost;
           energyDelta -= this.config.signalCost;
+          spentEnergy += this.config.signalCost;
           organism.signalTick = this.tick;
           this.signalsTotal++;
           if (sensed.currentCellFood > 0) this.signalsOnFoodTotal++;
@@ -1250,6 +1267,10 @@ export class World {
           outcome = 'rested';
           break;
         }
+      }
+
+      if (spentEnergy > 0) {
+        this.depositNutrients(organism.x, organism.y, spentEnergy * this.config.nutrientExcretion);
       }
 
       if (this.config.torporEnabled) organism.rested = chosenAction.type === 'REST';
@@ -1378,6 +1399,9 @@ export class World {
         if (this.config.carrionEnabled) {
           const energy = carrionFromBody(bodies.get(id) ?? 0, this.config);
           if (energy > 0) this.addCarrion(org.x, org.y, energy);
+          else this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+        } else {
+          this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
         }
       }
     }
@@ -1582,6 +1606,7 @@ export class World {
         } else {
           this.eggs.delete(id);
           this.eggsDecayedTotal++;
+          this.depositNutrients(egg.x, egg.y, (egg.child.energy + (egg.shell ?? 0)) * this.config.nutrientCarrionDecomp);
           continue;
         }
       }
@@ -1613,8 +1638,21 @@ export class World {
     return undefined;
   }
 
+  /** Deposit nutrients into a soil cell (from metabolism, decay, or carrion rot). */
+  public depositNutrients(x: number, y: number, amount: number): void {
+    if (!this.config.nutrientCycleEnabled || amount <= 0) return;
+    const w = this.config.gridWidth;
+    const idx = y * w + x;
+    const field = this.soil();
+    field.nutrients[idx] = Math.min(this.config.nutrientCapacity, field.nutrients[idx] + amount);
+  }
+
   /** Whether the cell at (x, y) is currently in a lean season. */
-  private isCellLean(x: number, y: number): boolean {
+  public isCellLean(x: number, y: number): boolean {
+    if (this.config.nutrientCycleEnabled && this.config.plantsEnabled) {
+      const idx = y * this.config.gridWidth + x;
+      return this.soil().nutrients[idx] < this.config.nutrientLeanThreshold;
+    }
     if (this.config.seasonLength <= 0) return false;
     if (this.foodRegions.length === 0 || !this.config.staggeredSeasons) {
       return seasonAt(this.tick, this.config)?.season === 'lean';
@@ -1739,9 +1777,14 @@ export class World {
     // Lean times: food regrows more slowly and no new patches appear. With
     // regions, each region may be in its own season.
     const leanRegrowInterval = foodRegenInterval * Math.max(1, this.config.leanSlowdown);
-    const worldLean = seasonAt(this.tick, this.config)?.season === 'lean';
-    const regionLean = this.foodRegions.map(
-      (r) => regionSeasonAt(this.tick, r, this.config)?.season === 'lean'
+    const nutrientActive = this.config.nutrientCycleEnabled && this.config.plantsEnabled;
+    const worldLean = nutrientActive
+      ? this.soil().meanFertileNutrients < this.config.nutrientLeanThreshold
+      : seasonAt(this.tick, this.config)?.season === 'lean';
+    const regionLean = this.foodRegions.map((r, i) =>
+      nutrientActive
+        ? (this.soil().regionNutrients[i] ?? 1.0) < this.config.nutrientLeanThreshold
+        : regionSeasonAt(this.tick, r, this.config)?.season === 'lean'
     );
 
     // 0. Windfall leftovers rot away
@@ -1750,6 +1793,7 @@ export class World {
       if (patch.expiresAt === undefined) continue;
       if (patch.expiresAt <= this.tick) {
         this.windfallUnitsRotted += patch.stock;
+        this.depositNutrients(patch.x, patch.y, patch.stock * this.config.nutrientPlantDecomp);
         this.foodPatches.delete(key);
       } else {
         windfallPatchCount++;
@@ -1766,6 +1810,7 @@ export class World {
       }
       if (c.expiresAt <= this.tick) {
         this.carrionUnitsRotted += c.stock;
+        this.depositNutrients(c.x, c.y, c.stock * this.config.nutrientCarrionDecomp);
         this.carrion.delete(key);
       }
     }
@@ -1794,6 +1839,11 @@ export class World {
         ...(health ? { health: health.health } : {}),
         ...(this.weather && this.config.weatherEnabled ? { weather: this.weather } : {}),
       });
+    }
+
+    // Step nutrient cycle (abiotic replenishment and spatial diffusion)
+    if (this.config.nutrientCycleEnabled) {
+      this.soil().stepNutrients(this.config, this.fertile());
     }
 
     // 1b. Food patch stock regeneration (windfalls never regrow)
@@ -1923,6 +1973,58 @@ export class World {
       overgrazing: this.cellHealth ? this.cellHealth.metrics(this.soil(), this.foodRegions.length, this.fertile()) : null,
       life: this.lifeMetrics(organisms),
       weather: this.weather && this.config.weatherEnabled ? this.weather.getMetrics(seasonAt(this.tick, this.config)?.season ?? null) : null,
+      nutrients: this.computeNutrientMetrics(),
+    };
+  }
+
+  private computeNutrientMetrics(): NutrientMetrics | null {
+    if (!this.config.nutrientCycleEnabled) return null;
+    const field = this.soil();
+    const { gridWidth: w, gridHeight: h } = this.config;
+    const cellCount = w * h;
+
+    let totalSoilNutrients = 0;
+    for (let i = 0; i < cellCount; i++) {
+      totalSoilNutrients += field.nutrients[i];
+    }
+    const meanSoilNutrients = Number((totalSoilNutrients / cellCount).toFixed(3));
+    const meanSoilNutrientsFertile = Number(field.meanFertileNutrients.toFixed(3));
+
+    let totalPlantNutrients = 0;
+    for (const patch of this.foodPatches.values()) {
+      if (patch.plant) {
+        totalPlantNutrients += (patch.plant.biomass + patch.plant.roots) * this.config.nutrientPlantUptake;
+      }
+    }
+    totalPlantNutrients = Number(totalPlantNutrients.toFixed(3));
+
+    let totalOrganismNutrients = 0;
+    for (const org of this.organisms.values()) {
+      totalOrganismNutrients += (org.energy / 25) * this.config.nutrientPlantUptake;
+    }
+    totalOrganismNutrients = Number(totalOrganismNutrients.toFixed(3));
+
+    let totalCarrionNutrients = 0;
+    for (const c of this.carrion.values()) {
+      totalCarrionNutrients += (c.stock / 25) * this.config.nutrientPlantUptake;
+    }
+    totalCarrionNutrients = Number(totalCarrionNutrients.toFixed(3));
+
+    const totalBiosphereNutrients = Number(
+      (totalSoilNutrients + totalPlantNutrients + totalOrganismNutrients + totalCarrionNutrients).toFixed(3)
+    );
+
+    const regionalMean = Array.from(field.regionNutrients, (m) => Number(m.toFixed(3)));
+
+    return {
+      meanSoilNutrients,
+      meanSoilNutrientsFertile,
+      totalSoilNutrients: Number(totalSoilNutrients.toFixed(3)),
+      totalPlantNutrients,
+      totalOrganismNutrients,
+      totalCarrionNutrients,
+      totalBiosphereNutrients,
+      regionalMean,
     };
   }
 
@@ -1964,10 +2066,27 @@ export class World {
   }
 
   /**
+   * The season in a specific food region, or null.
+   */
+  public regionSeason(regionIndex: number): 'plenty' | 'lean' | null {
+    if (this.config.nutrientCycleEnabled && this.config.plantsEnabled) {
+      const field = this.soil();
+      const mean = field.regionNutrients[regionIndex] ?? 1.0;
+      return mean < this.config.nutrientLeanThreshold ? 'lean' : 'plenty';
+    }
+    const r = this.foodRegions[regionIndex];
+    return regionSeasonAt(this.tick, r, this.config)?.season ?? null;
+  }
+
+  /**
    * The season shared by the whole world, or null when seasons are off or
    * staggered by region (then each region has its own).
    */
   public worldSeason(): 'plenty' | 'lean' | null {
+    if (this.config.nutrientCycleEnabled && this.config.plantsEnabled) {
+      if (this.config.staggeredSeasons && this.foodRegions.length > 0) return null;
+      return this.soil().meanFertileNutrients < this.config.nutrientLeanThreshold ? 'lean' : 'plenty';
+    }
     if (this.config.staggeredSeasons && this.foodRegions.length > 0) return null;
     return seasonAt(this.tick, this.config)?.season ?? null;
   }

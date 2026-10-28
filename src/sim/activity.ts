@@ -1,9 +1,9 @@
 import type { World } from './world';
 
 type ObservedKind = 'crowding' | 'deaths' | 'feeding';
-/** Heatmap overlays: the three fading activity maps, and cell health (read from the world: it is a state, not an activity). */
-export type HeatmapKind = ObservedKind | 'health';
-export const HEATMAP_KINDS: readonly HeatmapKind[] = ['crowding', 'deaths', 'feeding', 'health'];
+/** Heatmap overlays: the three fading activity maps, and cell health / nutrients (read from the world: it is a state, not an activity). */
+export type HeatmapKind = ObservedKind | 'health' | 'nutrients';
+export const HEATMAP_KINDS: readonly HeatmapKind[] = ['crowding', 'deaths', 'feeding', 'health', 'nutrients'];
 
 /** Each tick old activity fades by this factor (half-life about 140 ticks). */
 export const HEAT_DECAY = 0.995;
@@ -54,6 +54,8 @@ export class ActivityMaps {
   public snapshot(kind: HeatmapKind, world: World): Float32Array {
     // Health overlay: how much of each cell's health is lost (0 healthy, 1 bare), zero everywhere when overgrazing is off.
     if (kind === 'health') return world.cellHealth ? world.cellHealth.health.map((h) => 1 - h) : new Float32Array(this.width * this.height);
+    // Nutrients overlay: soil nutrient levels.
+    if (kind === 'nutrients') return world.soil().nutrients.slice();
     return this.maps[kind].slice();
   }
 }

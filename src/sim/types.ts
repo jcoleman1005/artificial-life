@@ -679,6 +679,16 @@ export interface SimulationConfig {
   weatherSignalDrift: number;
   weatherEvapRate: number;
   weatherAbsorptionRate: number;
+  // Nutrient cycle (soil-plant-unit biogeochemical loop)
+  nutrientCycleEnabled: boolean;
+  nutrientCapacity: number;
+  nutrientRegenRate: number;
+  nutrientDiffusionRate: number;
+  nutrientPlantUptake: number;
+  nutrientPlantDecomp: number;
+  nutrientExcretion: number;
+  nutrientCarrionDecomp: number;
+  nutrientLeanThreshold: number;
   seed: number | string;
 }
 
@@ -765,6 +775,19 @@ export interface WorldMetrics {
   life: LifeMetrics | null;
   /** Weather conditions, or null when weather is off. */
   weather: WeatherMetrics | null;
+  /** Soil nutrient cycle metrics, or null when nutrient cycle is off. */
+  nutrients: NutrientMetrics | null;
+}
+
+export interface NutrientMetrics {
+  readonly meanSoilNutrients: number;
+  readonly meanSoilNutrientsFertile: number;
+  readonly totalSoilNutrients: number;
+  readonly totalPlantNutrients: number;
+  readonly totalOrganismNutrients: number;
+  readonly totalCarrionNutrients: number;
+  readonly totalBiosphereNutrients: number;
+  readonly regionalMean: readonly number[];
 }
 
 export interface WeatherMetrics {

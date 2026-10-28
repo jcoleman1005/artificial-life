@@ -57,6 +57,7 @@ const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
   deaths: '248, 113, 113',
   feeding: '134, 239, 172',
   health: '217, 119, 6',
+  nutrients: '34, 197, 94',
 };
 /** Trail points kept per organism (one per frame). */
 const TRAIL_LENGTH = 12;
@@ -572,7 +573,7 @@ export class CanvasRenderer {
 
     // Overlays drawn under the organisms
     if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
-      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView, this.overlay === 'health');
+      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView, this.overlay === 'health' || this.overlay === 'nutrients');
     }
     if (this.overlay === 'trails') this.drawTrails(selectedOrg);
     if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
@@ -621,6 +622,9 @@ export class CanvasRenderer {
     const { ctx, cellSize } = this;
     const { gridWidth } = this.world.config;
     let max = 1; // health is absolute: 1 means bare ground
+    if (this.overlay === 'nutrients') {
+      max = this.world.config.nutrientCapacity || 2.0;
+    }
     if (!absolute) {
       max = 0;
       for (let i = 0; i < cells.length; i++) if (cells[i] > max) max = cells[i];

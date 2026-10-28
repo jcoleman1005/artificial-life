@@ -70,6 +70,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Genome Lineage Map (`lineage.ts`, `lineage-view.ts`): Pedigree DAG in Inspector, crossover attribution, mutations, observer-only with deterministic `stateHash()` (2026-10-27).
 - Egg Selection & Inspection: Direct egg selection, floating card, incubation/shell metrics, unborn traits and pedigree in Inspector (2026-10-27).
 - Weather systems (`weatherEnabled`, on; `docs/specs/weather.md`): multi-front dynamic temperature, moisture, and wind; abiotic costs, plant drift, and downwind signal propagation (2026-10-27).
+- Nutrient cycle (`nutrientCycleEnabled`, on; 2026-10-27): Replaces clockwork calendar seasons with endogenous soil-plant-unit nutrient dynamics; switch off reproduces legacy clock seasons bit-identically.
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.

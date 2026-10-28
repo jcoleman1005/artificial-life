@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27 (Dynamic multi-front weather systems; Genome Lineage Map; Egg inspection; UI/UX mobile refactor; Genome trend dashboard; Tier 1 basic physical genes; DNA Stage 3 growable brain; and carnivore efficiency)._
+_Last updated: 2026-10-27 (Endogenous soil-plant-unit nutrient cycle; Dynamic multi-front weather systems; Genome Lineage Map; Egg inspection; UI/UX mobile refactor; Genome trend dashboard; Tier 1 basic physical genes; DNA Stage 3 growable brain; and carnivore efficiency)._
 
 ## Branches
 
@@ -63,6 +63,24 @@ Dynamic multi-front atmospheric simulation with 3 integrated dimensions (`weathe
 - **Fingerprint & bit-identity**:
   - Switch off (`--set weatherEnabled=false`): matches baseline fingerprint bit-identically (`large dials: f8b636a2088d6381 pop 588 births 3443 · large brain: a8e50b331bc9b2f2 pop 665 births 3816`).
   - Switch on (`weatherEnabled: true`, default): `large dials: 3ff6bca3cc5fdc6f pop 637 births 4678 · large brain: 99714e1c2c0624ed pop 595 births 4256`.
+
+## Nutrient cycle (built 2026-10-27)
+
+Reworks "lean" and "plenty" from an artificial clockwork calendar (`seasonLength`, `leanFraction`) into an endogenous biogeochemical nutrient cycle (`nutrientCycleEnabled`, on by default; tests `tests/nutrient_cycle.test.ts`):
+- **Closed/semi-open nutrient cycle**:
+  - **Soil**: Flat `Float32Array` in `SoilField` holding dynamic nutrient reserves per cell ($N_{\text{soil}} \in [0, 3.0]$). Zero-allocation 4-neighbor spatial diffusion (`nutrientDiffusionRate: 0.01`) and semi-open mineral equilibrium recovery towards baseline fertility (`rRegen: 0.01`).
+  - **Plants**: Draw nutrients during biomass/root growth (`nutrientPlantUptake: 0.2`). Dying plants and shed maintenance return organic nutrients back to the soil (`nutrientPlantDecomp: 0.8`).
+  - **Units**: Grazing absorbs nutrients; ongoing basal metabolism, locomotion, waking, and actions deposit excreted metabolic waste underfoot (`nutrientExcretion: 0.005`), forming fertile game trails. Rotting carrion decomposes into the soil (`nutrientCarrionDecomp: 0.01`).
+- **Emergent Lean and Plenty**:
+  - A cell is in a **Lean** state when its local soil nutrients drop below `nutrientLeanThreshold` (0.4). Depletion triggers 8× plant growth slowdown (`lightLean`) and plant dormancy (`leanDormancy >= 0.5` retreats biomass into roots).
+  - Regional seasons in the UI and detector reflect mean soil nutrient depletion in each fertile region.
+  - Switch off (`--set nutrientCycleEnabled=false`): reproduces legacy clockwork season behavior 100% bit-identically.
+- **UI & Metrics**:
+  - Nutrients heatmap overlay layer visualizing soil fertility/enrichment gradients.
+  - Real-time biosphere nutrient accounting: total soil stock, plant biomass stock, organism metabolic stock, carrion stock, and regional means.
+- **Fingerprint & bit-identity**:
+  - Switch off (`--set nutrientCycleEnabled=false`): matches baseline fingerprint bit-identically (`large dials: 3d37afc4c5e61b7a pop 231 births 2447 · large brain: 1bc7e138d3355fc6 pop 472 births 3711`).
+  - Switch on (`nutrientCycleEnabled: true`, default): `large dials: d580611f56565751 pop 840 births 4200 · large brain: 4bcd86eed3ba7d21 pop 855 births 3739`.
 
 ## In progress: DNA (2026-10-26)
 

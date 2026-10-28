@@ -57,7 +57,8 @@ describe('Seasons', () => {
   }, 30_000);
 
   it('reports the season in metrics and history', () => {
-    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: false });
+    // Isolates clock season mechanism with nutrientCycle off
+    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: false, nutrientCycleEnabled: false });
     for (let t = 0; t < 15; t++) world.step();
     expect(world.getMetrics().season).toBe('lean');
     const samples = world.history.getSamples();
@@ -65,7 +66,8 @@ describe('Seasons', () => {
   });
 
   it('has no world season when seasons are staggered by region', () => {
-    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: true });
+    // Isolates clock season mechanism with nutrientCycle off
+    const world = new World({ seed: 3, seasonLength: 20, leanFraction: 0.5, staggeredSeasons: true, nutrientCycleEnabled: false });
     for (let t = 0; t < 15; t++) world.step();
     expect(world.getMetrics().season).toBeNull();
   });
