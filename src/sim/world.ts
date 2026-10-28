@@ -1816,11 +1816,19 @@ export class World {
     }
 
     // 0c. Cells rest and recover (and the matched-random control spends its damage)
+    if (this.config.overgrazingEnabled && !this.cellHealth) {
+      this.cellHealth = new CellHealth(this.config.gridWidth * this.config.gridHeight);
+    }
     const health = this.cellHealth;
-    if (health) health.step(this.tick, this.config, this.prng, this.config.overgrazingMatchedRandom ? this.fertile() : []);
+    if (health && this.config.overgrazingEnabled) {
+      health.step(this.tick, this.config, this.prng, this.config.overgrazingMatchedRandom ? this.fertile() : []);
+    }
 
     // 0d. Dynamic weather fronts advance
-    if (this.config.weatherEnabled && this.weather) {
+    if (this.config.weatherEnabled) {
+      if (!this.weather) {
+        this.weather = new WeatherSimulation(this.config.gridWidth, this.config.gridHeight);
+      }
       this.weather.step(this.tick, this.prng, this.config, seasonAt(this.tick, this.config)?.season ?? null);
     }
 

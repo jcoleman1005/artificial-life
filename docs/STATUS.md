@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-27 (Endogenous soil-plant-unit nutrient cycle; Dynamic multi-front weather systems; Genome Lineage Map; Egg inspection; UI/UX mobile refactor; Genome trend dashboard; Tier 1 basic physical genes; DNA Stage 3 growable brain; and carnivore efficiency)._
+_Last updated: 2026-10-28 (Settings panel feature alignment: Weather, Nutrients, Predation, Mating, Carrion, Overgrazing, DNA toggles; Endogenous soil-plant-unit nutrient cycle; Dynamic multi-front weather systems; Genome Lineage Map; Egg inspection; UI/UX mobile refactor; Genome trend dashboard; Tier 1 basic physical genes; DNA Stage 3 growable brain; and carnivore efficiency)._
 
 ## Branches
 
@@ -175,5 +175,5 @@ There is no target outcome: new features go in on by default and the world is le
   - Overgrazing ships off. Its switch-on values (`large dials 265280e9ef82d016 · large brain 912f5781fb244660`, pop 400 / 289) were measured on main before mating merged; recheck them.
   The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds.
 - `npm run verify` on a 4-core container: Vitest now runs with `fileParallelism: false` in `vitest.config.ts` to prevent worker thread IPC starvation and `Timeout calling "onTaskUpdate"`. Long-running simulation tests yield to the event loop and have generous timeouts (60–180s) to run reliably under load.
-- UI toggles added (2026-10-27): Web app Settings panel now exposes toggles for Weather (`weatherEnabled`) under World, and Growable brain (`dnaGrowableBrain`), Continuous abilities (`dnaContinuousAbilities`), and Split diets (`dnaSplitDiets`) under Behaviour.
+- UI toggles aligned (2026-10-28): Web app Settings panel exposes toggles for Weather (`weatherEnabled`), Nutrients (`nutrientCycleEnabled`), and Overgrazing (`overgrazingEnabled`) under World & Climate; Predation (`predationEnabled`), Mating (`sexEnabled`), and Carrion (`carrionEnabled`) under Behaviour; and Growable brain (`dnaGrowableBrain`), Continuous abilities (`dnaContinuousAbilities`), and Split diets (`dnaSplitDiets`) under Genetics & DNA.
 - The S21 check (roadmap item 1) is still to do on the phone itself.

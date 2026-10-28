@@ -25,6 +25,11 @@ export interface SettingsCallbacks {
   onContinuousAbilitiesChange: (enabled: boolean) => void;
   onSplitDietsChange: (enabled: boolean) => void;
   onWeatherChange: (enabled: boolean) => void;
+  onNutrientCycleChange: (enabled: boolean) => void;
+  onOvergrazingChange: (enabled: boolean) => void;
+  onPredationChange: (enabled: boolean) => void;
+  onCarrionChange: (enabled: boolean) => void;
+  onSexChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
   onControllerChange: (controller: 'dials' | 'brain') => void;
   /** World size and food layout restart the run with the current seed. */
@@ -44,6 +49,11 @@ export interface ExperimentToggles {
   dispersalEnabled: boolean;
   windfallsEnabled: boolean;
   weatherEnabled: boolean;
+  nutrientCycleEnabled: boolean;
+  overgrazingEnabled: boolean;
+  carrionEnabled: boolean;
+  predationEnabled: boolean;
+  sexEnabled: boolean;
   immigrationEnabled: boolean;
   plantsEnabled: boolean;
   memoryEnabled: boolean;
@@ -170,22 +180,34 @@ export class SettingsView {
     ];
     container.innerHTML = `
       <section class="settings-group">
-        <h3>World <small>size, food and plants restart the run</small></h3>
+        <h3>World & Climate <small>terrain and plants restart the run</small></h3>
         ${segmented('Size', 'world', [['small', '30×30'], ['large', '60×60']], toggles.worldSize)}
         ${segmented('Food', 'food', [['anywhere', 'Anywhere'], ['regions', 'Regions'], ['shifting', 'Shifting']], toggles.foodLayout)}
-        ${segmented('Seasons', 'seasons', onOff, toggles.seasonsEnabled ? 'on' : 'off')}
-        ${segmented('Windfalls', 'windfalls', onOff, toggles.windfallsEnabled ? 'on' : 'off')}
-        ${segmented('Spontaneous generation', 'immigration', onOff, toggles.immigrationEnabled ? 'on' : 'off')}
         ${segmented('Plants', 'plants', [['off', 'Patches'], ['on', 'Evolving']], toggles.plantsEnabled ? 'on' : 'off')}
+        ${segmented('Seasons', 'seasons', onOff, toggles.seasonsEnabled ? 'on' : 'off')}
+        ${segmented('Weather', 'weather', onOff, toggles.weatherEnabled ? 'on' : 'off')}
+        ${segmented('Nutrients', 'nutrients', onOff, toggles.nutrientCycleEnabled ? 'on' : 'off')}
+        ${segmented('Windfalls', 'windfalls', onOff, toggles.windfallsEnabled ? 'on' : 'off')}
+        ${segmented('Overgrazing', 'overgrazing', onOff, toggles.overgrazingEnabled ? 'on' : 'off')}
+        ${segmented('Spontaneous generation', 'immigration', onOff, toggles.immigrationEnabled ? 'on' : 'off')}
       </section>
       <section class="settings-group">
         <h3>Behaviour <small>takes effect next tick</small></h3>
+        ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
+        ${segmented('Predation', 'predation', onOff, toggles.predationEnabled ? 'on' : 'off')}
+        ${segmented('Mating', 'mating', onOff, toggles.sexEnabled ? 'on' : 'off')}
+        ${segmented('Carrion', 'carrion', onOff, toggles.carrionEnabled ? 'on' : 'off')}
         ${segmented('Sharing', 'sharing', onOff, toggles.sharingEnabled ? 'on' : 'off')}
         ${segmented('Signals', 'signals', onOff, toggles.signalsEnabled ? 'on' : 'off')}
         ${segmented('Dispersal', 'dispersal', onOff, toggles.dispersalEnabled ? 'on' : 'off')}
         ${segmented('Memory', 'memory', onOff, toggles.memoryEnabled ? 'on' : 'off')}
+      </section>
+      <section class="settings-group">
+        <h3>Genetics & DNA <small>takes effect next tick</small></h3>
         ${segmented('Genome changes', 'genomeVariation', onOff, toggles.dnaVariationEnabled ? 'on' : 'off')}
-        ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
+        ${segmented('Growable brain', 'growableBrain', onOff, toggles.dnaGrowableBrain ? 'on' : 'off')}
+        ${segmented('Continuous abilities', 'continuousAbilities', onOff, toggles.dnaContinuousAbilities ? 'on' : 'off')}
+        ${segmented('Split diets', 'splitDiets', onOff, toggles.dnaSplitDiets ? 'on' : 'off')}
       </section>
       <section class="settings-group">
         <h3>Display</h3>
@@ -234,16 +256,25 @@ export class SettingsView {
     };
     set('world', t.worldSize);
     set('food', t.foodLayout);
+    set('plants', t.plantsEnabled ? 'on' : 'off');
     set('seasons', t.seasonsEnabled ? 'on' : 'off');
+    set('weather', t.weatherEnabled ? 'on' : 'off');
+    set('nutrients', t.nutrientCycleEnabled ? 'on' : 'off');
+    set('windfalls', t.windfallsEnabled ? 'on' : 'off');
+    set('overgrazing', t.overgrazingEnabled ? 'on' : 'off');
+    set('immigration', t.immigrationEnabled ? 'on' : 'off');
+    set('controller', t.controller);
+    set('predation', t.predationEnabled ? 'on' : 'off');
+    set('mating', t.sexEnabled ? 'on' : 'off');
+    set('carrion', t.carrionEnabled ? 'on' : 'off');
     set('sharing', t.sharingEnabled ? 'on' : 'off');
     set('signals', t.signalsEnabled ? 'on' : 'off');
     set('dispersal', t.dispersalEnabled ? 'on' : 'off');
-    set('windfalls', t.windfallsEnabled ? 'on' : 'off');
-    set('immigration', t.immigrationEnabled ? 'on' : 'off');
-    set('plants', t.plantsEnabled ? 'on' : 'off');
     set('memory', t.memoryEnabled ? 'on' : 'off');
     set('genomeVariation', t.dnaVariationEnabled ? 'on' : 'off');
-    set('controller', t.controller);
+    set('growableBrain', t.dnaGrowableBrain ? 'on' : 'off');
+    set('continuousAbilities', t.dnaContinuousAbilities ? 'on' : 'off');
+    set('splitDiets', t.dnaSplitDiets ? 'on' : 'off');
   }
 
   /** The list of branch points, newest first. */
@@ -290,16 +321,25 @@ export class SettingsView {
     const cb = this.callbacks;
     this.bindSegment('world', (v) => cb.onWorldSizeChange(v as WorldSize));
     this.bindSegment('food', (v) => cb.onFoodLayoutChange(v as FoodLayout));
+    this.bindSegment('plants', (v) => cb.onPlantsChange(v === 'on'));
     this.bindSegment('seasons', (v) => cb.onSeasonsChange(v === 'on'));
+    this.bindSegment('weather', (v) => cb.onWeatherChange(v === 'on'));
+    this.bindSegment('nutrients', (v) => cb.onNutrientCycleChange(v === 'on'));
+    this.bindSegment('windfalls', (v) => cb.onWindfallsChange(v === 'on'));
+    this.bindSegment('overgrazing', (v) => cb.onOvergrazingChange(v === 'on'));
+    this.bindSegment('immigration', (v) => cb.onImmigrationChange(v === 'on'));
+    this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
+    this.bindSegment('predation', (v) => cb.onPredationChange(v === 'on'));
+    this.bindSegment('mating', (v) => cb.onSexChange(v === 'on'));
+    this.bindSegment('carrion', (v) => cb.onCarrionChange(v === 'on'));
     this.bindSegment('sharing', (v) => cb.onSharingChange(v === 'on'));
     this.bindSegment('signals', (v) => cb.onSignalsChange(v === 'on'));
     this.bindSegment('dispersal', (v) => cb.onDispersalChange(v === 'on'));
-    this.bindSegment('windfalls', (v) => cb.onWindfallsChange(v === 'on'));
-    this.bindSegment('immigration', (v) => cb.onImmigrationChange(v === 'on'));
-    this.bindSegment('plants', (v) => cb.onPlantsChange(v === 'on'));
     this.bindSegment('memory', (v) => cb.onMemoryChange(v === 'on'));
     this.bindSegment('genomeVariation', (v) => cb.onGenomeVariationChange(v === 'on'));
-    this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
+    this.bindSegment('growableBrain', (v) => cb.onGrowableBrainChange(v === 'on'));
+    this.bindSegment('continuousAbilities', (v) => cb.onContinuousAbilitiesChange(v === 'on'));
+    this.bindSegment('splitDiets', (v) => cb.onSplitDietsChange(v === 'on'));
     this.bindSegment('color', (v) => cb.onColorModeChange(v as ColorMode));
     this.bindSegment('motion', (v) => cb.onMotionStyleChange(v as MotionStyle));
 
