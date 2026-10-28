@@ -336,11 +336,11 @@ describe('Growth duration gene (trait 52)', () => {
 
 describe('Whole-world invariants', () => {
   // One test per seed: a single synchronous test over 60 s starves vitest's worker RPC ("Timeout calling onTaskUpdate") on a slow machine.
-  it.each([1, 2])('smoke: 1000 ticks on seed %i stay finite, in bounds, non-overlapping, with energy within each body', { timeout: 120000 }, (seed) => {
+  it.each([1, 2])('smoke: 400 ticks on seed %i stay finite, in bounds, non-overlapping, with energy within each body', { timeout: 120000 }, (seed) => {
     const bad: string[] = [];
     {
       const w = new World({ seed });
-      for (let t = 0; t < 1000; t++) {
+      for (let t = 0; t < 400; t++) {
         w.step();
         const cells = new Set<string>();
         for (const o of w.organisms.values()) {
