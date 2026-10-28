@@ -1,6 +1,6 @@
 # Spec: Reproductive Isolation from Genome Distance (Hybrid Incompatibility)
 
-_Status: DRAFT for review (2026-10-28). Not built. Nothing here is a decision until agreed and recorded in `docs/decisions.md`. Follows [`WORLD_RULES.md`](../../WORLD_RULES.md) and [`AGENTS.md`](../../AGENTS.md). Serves the standing goal "colour groups becoming separate species" (`docs/STATUS.md`, Goals, step 3: "weaker or infertile offspring from parents too far apart genetically")._
+_Status: phase 0 and phase 1 BUILT (2026-10-28) after the user chose: hue input only, per-child cost, default on (recorded in `docs/decisions.md`, Hybrid incompatibility). Not built yet: the Trends histogram, inspector distance and cluster colour mode (§8), and the experiment (§5). Follows [`WORLD_RULES.md`](../../WORLD_RULES.md) and [`AGENTS.md`](../../AGENTS.md). Serves the standing goal "colour groups becoming separate species" (`docs/STATUS.md`, Goals, step 3: "weaker or infertile offspring from parents too far apart genetically")._
 
 ## 1. Summary
 
@@ -55,11 +55,11 @@ All new fields are top-level in `src/sim/config.ts` with the `hybrid` prefix, pe
 | Field | Default | Meaning |
 |---|---|---|
 | `hybridIncompatibilityEnabled` | `true` (subject to the ship-on gate; see §6) | Master switch; needs `dnaEnabled`. Off: bit-identical to the current world. |
-| `hybridTolerance` | set from the baseline diagnostic (§4), not guessed | Distance below which crosses are fully compatible. |
-| `hybridFull` | set from the diagnostic | Distance at which incompatibility is maximal. |
+| `hybridTolerance` | `0.15` (from the diagnostic; Parameter log in `docs/findings.md`) | Distance below which crosses are fully compatible. |
+| `hybridFull` | `0.35` (same) | Distance at which incompatibility is maximal. |
 | `hybridMaxInviability` | `0.8` (not 1: leave rare hybrid escapes) | Chance a child of a maximally incompatible cross fails. |
 | `genomeDistanceBrainScale` | `1.0` | Scale for brain weight genes. |
-| `hybridControlRandom` | `false` | Matched-control arm: apply the same *average* inviability regardless of distance (§5). |
+| `hybridControlInviability` | `0` | Matched-control arm: above 0, every cross loses children at this flat rate whatever the distance (`hybridMaxInviability` is then ignored). Set it from arm 2's measured loss rate. |
 
 **Parameter log:** `hybridTolerance`, `hybridFull` and `hybridMaxInviability` are tuned constants. Per `AGENTS.md`, log old and new values and why in the Parameter log in `docs/findings.md`, and pin them in `tests/defaults.test.ts`. Setting tolerance from the baseline distribution (e.g. just above the median pairwise distance within one lineage) is a calibration, not a way to force the outcome. State this in the log.
 
@@ -82,7 +82,7 @@ Per `WORLD_RULES.md` (8 seeds × 10k ticks, paired, immigration off, DNA Stage 1
 
 1. `hybridIncompatibilityEnabled=false` (baseline; must equal the pre-change fingerprint).
 2. `hybridIncompatibilityEnabled=true`.
-3. `hybridIncompatibilityEnabled=true, hybridControlRandom=true`: the same overall rate of inviable children, but independent of distance. This separates "isolation by distance" from "mating just got more expensive". It matters most, per the rules.
+3. `hybridIncompatibilityEnabled=true, hybridControlInviability=<arm 2's measured rate>`: the same overall rate of inviable children, but independent of distance. This separates "isolation by distance" from "mating just got more expensive". It matters most, per the rules.
 4. Optional: arm 2 on a long run (e.g. 50k ticks, or the always-on server), since speciation, if it comes, is slow.
 
 Report plainly, null results included, in `docs/findings.md`:
@@ -128,7 +128,7 @@ New features are on by default (`docs/decisions.md`, "No target outcome") with a
 - **Performance:** O(genes) per mating; with `dnaMaxGenes` 1500 this is small next to a tick, to be confirmed by the tick-time check.
 - **Asexual escape:** organisms can clone and avoid the cost altogether. That is the intended alternative and stays; compare the mating share across arms.
 
-## 10. Decisions needed from you
+## 10. Decisions (answered 2026-10-28: 1 hue input only, 2 per child, 3 default on; 4 and 5 as drafted)
 
 1. Phase 1 as drafted (cost plus diagnostic, hue input only), or build phase 2's `matePhenotypeAlike` input at the same time?
 2. Inviability applied per child (as drafted), or as reduced clutch size (fecundity)? Per child matches Dobzhansky–Muller; clutch reduction folds into the existing continuous fecundity partition.

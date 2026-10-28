@@ -28,6 +28,13 @@ _Last updated: 2026-10-28 (Feature display audit & visual enhancements: World ca
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
 
+## Hybrid incompatibility (built 2026-10-28)
+
+- Per-child inviability rising with genome distance between mating parents (hue gene excluded); preference stays on the existing hue input `mateAlike`. Decisions in `docs/decisions.md`; `hybridTolerance` 0.15 and `hybridFull` 0.35 come from `npm run genome-distance` (Parameter log).
+- **Fingerprint & bit-identity**: switch off (`--set hybridIncompatibilityEnabled=false`) or cost 0 (`--set hybridMaxInviability=0`) matches the previous baseline (`large dials: d78a433f62a2b403 pop 648 births 3472 · large brain: e753aec72830d61b pop 643 births 2833`). **New default**: `large dials: d78a433f62a2b403 pop 648 births 3472 · large brain: 1a424decaec1e130 pop 639 births 2815` (dials never mate).
+- Tests: `tests/speciation.test.ts` (distance, ramp, per-child loss with energy conserved, no extra draws for identical genomes, control arm, snapshot round trip, smoke).
+- **Not done**: the 8-seed experiment with the three arms (off, on, flat-rate control) and the ship-on gate (`npm run experiment -- --compare hybridIncompatibilityEnabled=false,true`), the Trends histogram, inspector distance, cluster colour mode (spec §8), species detection (spec §4 clusters). Default is on per the user's decision until the gate says otherwise.
+
 ## World Canvas Visual Enhancements (built 2026-10-28)
 
 High-fidelity canvas visual enhancements and secondary dashboard expansions (`src/render/renderer.ts`, `src/ui/inspector.ts`, `src/ui/metrics-view.ts`):
@@ -141,7 +148,7 @@ Not targets to hardcode: conditions to build so they *can* happen, then watch.
   3. Who mates with whom: an evolved preference for partners of similar colour, and/or weaker or infertile offspring from parents too far apart genetically. Mixed offspring that are bad at both foods would make choosy mating pay.
   4. Recognising species: group organisms by who can still interbreed (instead of fixed hue buckets), name them, colour by species, and log "a new species split off" events; later a family tree.
 
-  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection. Draft spec for the hybrid cost and detection (2026-10-28, awaiting review, not built): `docs/specs/speciation.md`.
+  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection. Hybrid cost built 2026-10-28 (`docs/specs/speciation.md`, `src/sim/speciation.ts`, `hybridIncompatibilityEnabled`, on; see 'Hybrid incompatibility' below). Species detection and the UI are still to do.
 
 ## Roadmap (agreed 2026-10-25; build in this order)
 
