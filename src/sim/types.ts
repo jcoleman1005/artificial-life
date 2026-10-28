@@ -654,6 +654,14 @@ export interface SimulationConfig {
   dnaGrowableBrain: boolean; // With DNA (Stage 3): the brain is compiled from the genome as a sparse circuit with up to dnaMaxInternal hidden units; every brain gene is expressed
   dnaMaxInternal: number; // Hidden units a genome can address with the growable brain (clamped to 6..256)
   dnaUpkeepPerConnection: number; // Energy per tick per expressed acquired connection (in hidden units past the founders' 6)
+  speciesEnabled: boolean; // Observer: detect and name species (clusters in genome); never changes the world
+  speciesInterval: number; // Ticks between species runs
+  speciesThreshold: number; // Distance (0..1) within which an organism belongs to a species representative
+  speciesMinSize: number; // Members a distinct cluster needs to become a species
+  speciesPersistTicks: number; // Ticks a cluster must stay distinct to become a species
+  speciesExtinctTicks: number; // Ticks with no members before a species is extinct
+  speciesBrainWeight: number; // Largest share of the distance the brain can contribute
+  speciesTagWeight: number; // Share of the distance from the hue tag
   seed: number | string;
 }
 

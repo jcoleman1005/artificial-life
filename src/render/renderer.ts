@@ -1,5 +1,6 @@
 import type { CarrionPatch, FoodPatch, Plant } from '../sim/types';
 import { plantHue } from '../sim/plants';
+import { speciesHue } from '../sim/species';
 import type { OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
@@ -14,7 +15,7 @@ import type { ActionType } from '../sim/types';
 export type MotionStyle = 'smooth' | 'fluid';
 
 /** What an organism's colour shows: its visible tag, its founding family, or its diet (green plants to red meat). */
-export type ColorMode = 'tag' | 'lineage' | 'diet';
+export type ColorMode = 'tag' | 'lineage' | 'diet' | 'species';
 
 /**
  * One optional layer over the world (one at a time):
@@ -98,6 +99,8 @@ export class CanvasRenderer {
   private baseCell = 6;
   private cellSize = 6;
   private colorMode: ColorMode = 'tag';
+  private speciesOf: ((organismId: string) => number) | null = null;
+  private highlightSpecies: number | null = null;
   // Smooth movement: where each organism was before the latest tick, and how
   // far (0..1) the current frame is through that tick.
   /** Where each organism's current glide starts, in cells (fractional when a glide was cut short). */
@@ -159,6 +162,16 @@ export class CanvasRenderer {
     this.colorMode = mode;
   }
 
+  /** Where to read an organism's species id from (the 'species' colour mode and the highlight). */
+  public setSpeciesLookup(lookup: ((organismId: string) => number) | null): void {
+    this.speciesOf = lookup;
+  }
+
+  /** Dims everyone outside this species (null: no highlight). */
+  public setHighlightSpecies(id: number | null): void {
+    this.highlightSpecies = id;
+  }
+
   public setSelectedPlant(id: string | null): void {
     this.selectedPlantId = id;
   }
@@ -176,6 +189,10 @@ export class CanvasRenderer {
 
   public hueOf(org: OrganismView): number {
     if (this.colorMode === 'diet') return 120 - 120 * org.carnivory;
+    if (this.colorMode === 'species') {
+      const id = this.speciesOf?.(org.id) ?? 0;
+      return id > 0 ? speciesHue(id) : org.tag; // no species yet: fall back to the tag
+    }
     return this.colorMode === 'tag' ? org.tag : lineageHue(org.lineage.id);
   }
 
@@ -537,6 +554,7 @@ export class CanvasRenderer {
     for (const org of this.world.organisms.values()) {
       if (!inView(org.x, org.y)) continue;
       if (family && org.lineage.id !== family) ctx.globalAlpha = 0.18;
+      else if (this.highlightSpecies !== null && this.speciesOf?.(org.id) !== this.highlightSpecies) ctx.globalAlpha = 0.18;
       this.drawOrganism(org, detail);
       ctx.globalAlpha = 1;
     }

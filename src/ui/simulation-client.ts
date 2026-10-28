@@ -10,6 +10,7 @@ import type {
   ToWorker,
   WorldView,
 } from '../sim/protocol';
+import type { SpeciesSnapshot } from '../sim/species';
 import type { CarrionPatch, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
 
 export interface ClientEvents {
@@ -93,6 +94,10 @@ export class SimulationClient implements WorldView {
   /** Resolves once the world's location is known and commands can flow. */
   public readonly ready: Promise<void>;
 
+  /** Species of each organism in the latest frame (organism id -> species id; 0 or absent: none). */
+  private speciesIds = new Map<string, number>();
+  private speciesSnapshot: SpeciesSnapshot | null = null;
+  private selectedSpeciesInfo: { speciesId: number; distance: number } | null = null;
   private selectedId: string | null = null;
   private metrics: WorldMetrics | null = null;
   private selectedDetail: Organism | null = null;
@@ -182,6 +187,8 @@ export class SimulationClient implements WorldView {
         this.foodRegions = message.foodRegions;
         this.worldEvents = [...message.events];
         this.heatmap = null;
+        this.speciesIds = new Map();
+        this.speciesSnapshot = null;
         this.events.reset();
         break;
       case 'frame': {
@@ -191,6 +198,7 @@ export class SimulationClient implements WorldView {
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));
         this.eggs = new Map((message.eggs ?? []).map((e, i) => [`${i}`, { x: e.x, y: e.y }]));
+        this.speciesIds = message.speciesIds ? new Map(message.organisms.map((o, i) => [o.id, message.speciesIds![i]])) : new Map();
         this.ticksPerSecond = message.ticksPerSecond;
         this.running = message.running;
         this.targetTicksPerSecond = message.targetTicksPerSecond;
@@ -226,6 +234,8 @@ export class SimulationClient implements WorldView {
     this.selectedDetail = panels.selected;
     if (panels.history) this.history = panels.history;
     this.heatmap = panels.heatmap ?? null;
+    if (panels.species) this.speciesSnapshot = panels.species;
+    this.selectedSpeciesInfo = panels.selectedSpecies ?? null;
   }
 
   // Commands
@@ -305,6 +315,18 @@ export class SimulationClient implements WorldView {
   }
   public getMetrics(): WorldMetrics | null {
     return this.metrics;
+  }
+  /** The species an organism belongs to in the latest frame (0: none or unknown). */
+  public speciesOf(organismId: string): number {
+    return this.speciesIds.get(organismId) ?? 0;
+  }
+  /** The latest species list (the count history only while the Trends tab is showing); null with species off. */
+  public getSpecies(): SpeciesSnapshot | null {
+    return this.speciesSnapshot;
+  }
+  /** The selected organism's species and its distance to that species' representative. */
+  public getSelectedSpecies(): { speciesId: number; distance: number } | null {
+    return this.selectedSpeciesInfo;
   }
   public getHistorySamples(): readonly HistorySample[] {
     return this.history;

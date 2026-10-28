@@ -183,6 +183,15 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dnaGrowableBrain: false, // Stage 3 (needs dnaEnabled): hidden units past the 6 founders are expressed; wrapped unit fields land on them, other wrapped brain keys stay silent (docs/specs/dna.md)
   dnaMaxInternal: 16, // hidden units a genome can address with the growable brain (clamped to 6..256)
   dnaUpkeepPerConnection: 0.00005, // an expressed acquired connection costs as much as a gene
+  // Species detection: an observer, so none of these can change a fingerprint (docs/specs/species.md).
+  speciesEnabled: true,
+  speciesInterval: 50,
+  speciesThreshold: 0.15,
+  speciesMinSize: 5,
+  speciesPersistTicks: 200,
+  speciesExtinctTicks: 100,
+  speciesBrainWeight: 0.3,
+  speciesTagWeight: 0.1,
   seed: 42,
 };
 
