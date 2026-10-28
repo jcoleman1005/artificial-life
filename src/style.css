@@ -683,52 +683,46 @@ button {
 .peek-season {
   flex: 1;
   min-width: 0;
-  font-size: var(--text-sm);
-  color: #bfe8cf;
+  font-size: 0.78rem;
+  letter-spacing: -0.01em;
+  color: #e2e8f0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .peek-season::before {
-  content: '';
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: #6ee7b7;
-  vertical-align: 1px;
+  display: none;
+}
+
+@media (max-width: 440px) {
+  .peek-row {
+    gap: 8px;
+  }
+  .peek-pop {
+    font-size: var(--text-base);
+  }
+  .peek-season {
+    font-size: 0.6875rem;
+    letter-spacing: -0.02em;
+  }
 }
 
 .peek-season.spring {
   color: #bfe8cf;
 }
-.peek-season.spring::before {
-  background: #6ee7b7;
-}
 
 .peek-season.summer {
   color: #fef08a;
-}
-.peek-season.summer::before {
-  background: #facc15;
 }
 
 .peek-season.autumn {
   color: #fed7aa;
 }
-.peek-season.autumn::before {
-  background: #fb923c;
-}
 
 .peek-season.winter,
 .peek-season.lean {
   color: #bae6fd;
-}
-.peek-season.winter::before,
-.peek-season.lean::before {
-  background: #38bdf8;
 }
 
 .group-strip {

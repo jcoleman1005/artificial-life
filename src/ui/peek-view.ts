@@ -57,6 +57,110 @@ export function weatherPatternDescription(weather?: WeatherInfo | null, config?:
   return '🌤️ Fair';
 }
 
+export type QuadrantId = 'NW' | 'NE' | 'SE' | 'SW';
+
+export interface QuadrantSeason {
+  readonly id: QuadrantId;
+  readonly season: EcologicalSeason;
+  readonly icon: string;
+  readonly phase: 'plenty' | 'lean';
+}
+
+const QUADRANT_CENTRES: readonly { readonly id: QuadrantId; readonly qx: number; readonly qy: number }[] = [
+  { id: 'NW', qx: 0.25, qy: 0.25 },
+  { id: 'NE', qx: 0.75, qy: 0.25 },
+  { id: 'SE', qx: 0.75, qy: 0.75 },
+  { id: 'SW', qx: 0.25, qy: 0.75 },
+];
+
+const QUADRANT_PERMUTATIONS: readonly (readonly number[])[] = [
+  [0, 1, 2, 3], [0, 1, 3, 2], [0, 2, 1, 3], [0, 2, 3, 1], [0, 3, 1, 2], [0, 3, 2, 1],
+  [1, 0, 2, 3], [1, 0, 3, 2], [1, 2, 0, 3], [1, 2, 3, 0], [1, 3, 0, 2], [1, 3, 2, 0],
+  [2, 0, 1, 3], [2, 0, 3, 1], [2, 1, 0, 3], [2, 1, 3, 0], [2, 3, 0, 1], [2, 3, 1, 0],
+  [3, 0, 1, 2], [3, 0, 2, 1], [3, 1, 0, 2], [3, 1, 2, 0], [3, 2, 0, 1], [3, 2, 1, 0],
+];
+
+/**
+ * Calculates the ecological season for each of the four quadrants (NW, NE, SE, SW).
+ * When staggered seasons are active, assigns regional clocks to their corresponding quadrant.
+ */
+export function quadrantSeasons(
+  tick: number,
+  regions: readonly FoodRegion[],
+  config: SimulationConfig
+): readonly QuadrantSeason[] {
+  const globalEco = ecologicalSeasonAt(tick, config);
+  if (!globalEco) {
+    return QUADRANT_CENTRES.map((q) => ({
+      id: q.id,
+      season: 'Spring' as EcologicalSeason,
+      icon: '🌱',
+      phase: 'plenty' as const,
+    }));
+  }
+
+  const isStaggered = config.staggeredSeasons && regions.length > 0;
+  if (!isStaggered) {
+    return QUADRANT_CENTRES.map((q) => ({
+      id: q.id,
+      season: globalEco.season,
+      icon: globalEco.icon,
+      phase: globalEco.phase,
+    }));
+  }
+
+  const w = config.gridWidth;
+  const h = config.gridHeight;
+
+  // 1-to-1 optimal bipartite matching when there are exactly 4 regions
+  if (regions.length === 4) {
+    let bestPerm = QUADRANT_PERMUTATIONS[0];
+    let bestDist = Infinity;
+    for (const p of QUADRANT_PERMUTATIONS) {
+      let dist = 0;
+      for (let i = 0; i < 4; i++) {
+        const reg = regions[p[i]];
+        const q = QUADRANT_CENTRES[i];
+        dist += Math.hypot(reg.x - q.qx * w, reg.y - q.qy * h);
+      }
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestPerm = p;
+      }
+    }
+    return QUADRANT_CENTRES.map((q, i) => {
+      const reg = regions[bestPerm[i]];
+      const eco = regionEcologicalSeasonAt(tick, reg, config) ?? globalEco;
+      return {
+        id: q.id,
+        season: eco.season,
+        icon: eco.icon,
+        phase: eco.phase,
+      };
+    });
+  }
+
+  // Fallback for non-4 region counts: match each quadrant to closest region
+  return QUADRANT_CENTRES.map((q) => {
+    let bestReg = regions[0];
+    let bestDist = Infinity;
+    for (const reg of regions) {
+      const d = Math.hypot(reg.x - q.qx * w, reg.y - q.qy * h);
+      if (d < bestDist) {
+        bestDist = d;
+        bestReg = reg;
+      }
+    }
+    const eco = regionEcologicalSeasonAt(tick, bestReg, config) ?? globalEco;
+    return {
+      id: q.id,
+      season: eco.season,
+      icon: eco.icon,
+      phase: eco.phase,
+    };
+  });
+}
+
 export interface SeasonSummary {
   readonly text: string;
   readonly lean: boolean;
@@ -64,9 +168,9 @@ export interface SeasonSummary {
 }
 
 /**
- * World ecological seasons (Spring, Summer, Autumn, Winter) coupled with dynamic
- * weather patterns (Rainstorm, Cold snap, Heatwave, Breezy, Fair), replacing binary
- * 'plenty' / 'lean' announcements with realistic environmental tracking.
+ * World ecological seasons formatted across the four map quadrants:
+ * NW:[season] NE:[season] SE:[season] SW:[season]
+ * coupled with dynamic atmospheric weather pattern summaries.
  */
 export function seasonSummary(
   tick: number,
@@ -84,39 +188,14 @@ export function seasonSummary(
     };
   }
 
-  const seasonText = `${eco.icon} ${eco.season}`;
-  const isStaggered = config.staggeredSeasons && regions.length > 0;
-
-  if (!isStaggered) {
-    const suffix = pattern ? ` · ${pattern}` : ` · ${eco.ticksLeft} left`;
-    return {
-      text: `${seasonText}${suffix}`,
-      lean: eco.phase === 'lean',
-      season: eco.season,
-    };
-  }
-
-  const winterRegions = regions.filter(
-    (r) => regionEcologicalSeasonAt(tick, r, config)?.season === 'Winter'
-  );
-
-  if (winterRegions.length === 0) {
-    const suffix = pattern ? ` · ${pattern}` : '';
-    return {
-      text: `${seasonText}${suffix}`,
-      lean: false,
-      season: eco.season,
-    };
-  }
-
-  const names = [...new Set(winterRegions.map((r) => compass(r, config)))];
-  const short = (n: string) => (n === 'centre' ? 'C' : n.split('-').map((w) => w[0].toUpperCase()).join(''));
-  const tag = names.length === 1 ? `❄️ Winter: ${names[0]}` : `❄️ Winter: ${names.map(short).join(',')}`;
-  const text = pattern ? `${seasonText} · ${pattern} (${tag})` : `${seasonText} (${tag})`;
+  const qs = quadrantSeasons(tick, regions, config);
+  const seasonsText = qs.map((q) => `${q.id}: ${q.season}`).join(' ');
+  const text = pattern ? `${seasonsText} · ${pattern}` : seasonsText;
+  const anyLean = qs.some((q) => q.phase === 'lean');
 
   return {
     text,
-    lean: true,
+    lean: anyLean,
     season: eco.season,
   };
 }
@@ -139,7 +218,10 @@ export class PeekView {
   public render(population: number, season: SeasonSummary, groups: readonly ColourGroup[]): void {
     const pop = population === 0 ? 'Extinct' : `${population} alive`;
     if (this.popEl.textContent !== pop) this.popEl.textContent = pop;
-    if (this.seasonEl.textContent !== season.text) this.seasonEl.textContent = season.text;
+    if (this.seasonEl.textContent !== season.text) {
+      this.seasonEl.textContent = season.text;
+      this.seasonEl.title = season.text;
+    }
     this.seasonEl.classList.toggle('lean', season.lean);
     this.seasonEl.classList.toggle('spring', season.season === 'Spring');
     this.seasonEl.classList.toggle('summer', season.season === 'Summer');

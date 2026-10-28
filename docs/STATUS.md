@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Predator–prey arms race & chemical defense; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -28,6 +28,28 @@ _Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscap
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
 
+## Predator–Prey Arms Race & Chemical Defense (built 2026-10-28)
+
+Antagonistic arms race between predators, prey, and scavengers operating purely via thermodynamic and kinetic constraints without behavioral scripting (`src/sim/traits.ts`, `src/sim/world.ts`, `src/sim/sensors.ts`, `src/sim/lifehistory.ts`, `src/sim/dna.ts`, tests `tests/red_queen.test.ts`):
+- **Prey Armor / Toughness (Trait 52, `toughnessGeneEnabled`, on)**:
+  - Evolving physical armor carapace ($T \in [0, 1]$) blunting predator bite kill chance: $\text{chance} = \text{baseChance} \times (1 - \text{armorEffectiveness} \times T)$.
+  - Kinetic drag: armor mass increases movement energy cost ($\text{cost} \times (1 + \text{armorDragCoeff} \times T)$).
+  - Metabolic upkeep: continuous maintenance scaling with structural body size (`toughnessUpkeepRate * toughness * sizeFactor`).
+  - Contested agility: slows priority in cell movement contention ($\text{priority} = \text{metabolicRate} / \text{drag}$).
+  - Segmented chitinous outer carapace border rendered on world canvas and organism preview card.
+- **Prey Chemical Defense & Tissue Toxicity (Trait 53, `toxicityGeneEnabled`, on)**:
+  - Evolving defensive toxins ($X \in [0, 1]$) with continuous synthesis upkeep (`toxicityUpkeepRate * toxicity * sizeFactor`).
+  - Acute malaise retaliation: predators biting toxic prey suffer unneutralized tissue damage if $T_{\text{eff}} = \max(0, X - \text{attacker.detox}) > 0.3$.
+  - Trophic feedback: blunts predator `lastBiteYield`, giving brain neural feedback on toxic prey.
+  - Toxic carrion and eggs: dead toxic organisms leave carrion retaining tissue toxicity; toxic parents lay toxic eggs. Scavengers and egg-eaters eating them suffer acute malaise and yield discounts unless detox neutralizes it.
+  - Aposematic warning venom rim and toxic carrion/egg auras rendered in UI.
+- **Involuntary Metabolic Death Pulse**:
+  - Violent kills broadcast an expanding acoustic/chemical shockwave pulse.
+  - Reach scales with victim body size and basal metabolic rate: $\text{reach} = \text{signalRadius} \times \max(0.4, \text{size} \times \text{power})$.
+  - Drifts downwind with atmospheric weather and is sensed as a directional signal by surrounding organisms.
+  - Uncoupled `moveCarrion` directional sensing from diet so herbivores and omnivores can navigate around carrion clusters and predator activity zones.
+- **Default Fingerprint**: `large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: d221240d829ed5c1 pop 741 births 2786`.
+
 ## Versioning System & Ecological Seasons & Weather (built 2026-10-28)
 
 Instituted formal Semantic Versioning and replaced binary plenty/lean announcements with natural seasons and atmospheric weather (`src/version.ts`, `src/sim/seasons.ts`, `src/ui/peek-view.ts`, `src/ui/events-view.ts`, `src/ui/controls.ts`, `src/style.css`, tests `tests/version_and_seasons.test.ts`):
@@ -37,7 +59,7 @@ Instituted formal Semantic Versioning and replaced binary plenty/lean announceme
 - **Four Ecological Seasons & Atmospheric Weather Patterns**:
   - Replaces binary "Plenty" / "Lean" announcements with four natural seasons: 🌱 Spring (renewal & regrowth), ☀️ Summer (peak fertility & warmth), 🍂 Autumn (seed maturation & cooling transition), and ❄️ Winter (lean period, frost, dormancy).
   - Dynamic weather patterns derived from atmospheric simulation: 🌧️ Rainstorm, ❄️ Cold snap, ☀️ Heatwave, 💨 Gale, 🍃 Breezy, and 🌤️ Fair.
-  - Peek pill displays living conditions: e.g. `🌱 Spring · 🌧️ Rainstorm`, `☀️ Summer · 🌤️ Fair`, `❄️ Winter · ❄️ Cold snap`, and staggered regional alerts (`🌱 Spring · 🌤️ Fair (❄️ Winter: NW)`).
+  - Peek pill displays living conditions across all four map quadrants: `NW: [season] NE: [season] SE: [season] SW: [season]` (e.g. `NW: Spring NE: Summer SE: Autumn SW: Winter`), coupled with active atmospheric weather alerts (` · 🌧️ Rainstorm`).
   - Event feed reports ecological milestones (`❄️ Winter begins in the north-west`, `🌱 Spring arrives`) and atmospheric arrivals (`🌧️ Rainstorm rolls in`, `❄️ Cold snap sweeps in`, `☀️ Heatwave builds`).
 - **2.5D Leap Hop & Parabola Guide Clean-Up**:
   - Removed the static trajectory parabola curve and ground dashed line across grid cells.

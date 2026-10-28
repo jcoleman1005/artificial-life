@@ -74,6 +74,23 @@ describe('Ecological seasons and weather patterns', () => {
     expect(winterSummary.text).not.toContain('Lean');
   });
 
+  it('formats seasons display as NW:[season] NE:[season] SE:[season] SW:[season]', () => {
+    const staggeredConfig = { ...DEFAULT_CONFIG, seasonLength: 800, leanFraction: 0.25, staggeredSeasons: true };
+    const regions: FoodRegion[] = [
+      { x: 15, y: 15, radius: 8, seasonPhase: 0 },    // NW -> Spring at tick 0
+      { x: 45, y: 15, radius: 8, seasonPhase: 0.25 }, // NE -> Summer at tick 0
+      { x: 45, y: 45, radius: 8, seasonPhase: 0.5 },  // SE -> Autumn at tick 0
+      { x: 15, y: 45, radius: 8, seasonPhase: 0.75 }, // SW -> Winter at tick 0
+    ];
+    const summary = seasonSummary(0, regions, staggeredConfig);
+    expect(summary.text).toBe('NW: Spring NE: Summer SE: Autumn SW: Winter');
+    expect(summary.lean).toBe(true);
+
+    // Advancing 200 ticks rotates all quadrants forward one quarter
+    const rotated = seasonSummary(200, regions, staggeredConfig);
+    expect(rotated.text).toBe('NW: Summer NE: Autumn SE: Winter SW: Spring');
+  });
+
   it('describes events using ecological seasons and weather front arrivals', () => {
     const winterEvent = describeEvent({ seq: 1, tick: 700, kind: 'season', region: null, season: 'lean' }, [], config);
     expect(winterEvent.text).toBe('❄️ Winter begins');
