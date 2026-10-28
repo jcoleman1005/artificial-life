@@ -37,7 +37,7 @@ describe('computeOrganismBadges', () => {
     const burn = badges.find((b) => b.category === 'metabolism');
     expect(burn).toBeDefined();
     expect(burn?.icon).toBe('⚡');
-    expect(burn?.label).toBe('Burn');
+    expect(burn?.label).toBe('Metabolism');
     expect(burn?.value).toBe('0.85×');
   });
 
@@ -90,6 +90,24 @@ describe('computeOrganismBadges', () => {
     const size = badges.find((b) => b.label === 'Heavy');
     expect(size).toBeDefined();
     expect(size?.value).toBe('1.5×');
+  });
+
+  it('computes Child Care and Brain badges cleanly', () => {
+    const org = baseOrgView({
+      carnivory: 0.1,
+      investment: 0.45,
+      acquiredBrainUnits: 4,
+    });
+    const badges = computeOrganismBadges(org, DEFAULT_CONFIG);
+    const care = badges.find((b) => b.label === 'Child Care');
+    expect(care).toBeDefined();
+    expect(care?.icon).toBe('🐣');
+    expect(care?.value).toBe('45%');
+
+    const brain = badges.find((b) => b.label === 'Brain');
+    expect(brain).toBeDefined();
+    expect(brain?.icon).toBe('🧠');
+    expect(brain?.value).toBe('+4');
   });
 
   it('caps total badges at 5 to prevent mobile card overflow', () => {

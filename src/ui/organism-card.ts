@@ -93,11 +93,11 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
     });
   }
 
-  // 2. Core: Metabolic Burn
+  // 2. Core: Metabolic Rate / Pace
   if (config.metabolismGeneEnabled && org.metabolicRate !== undefined) {
     core.push({
       icon: '⚡',
-      label: 'Burn',
+      label: 'Metabolism',
       value: `${org.metabolicRate.toFixed(2)}×`,
       category: 'metabolism',
       score: 90,
@@ -118,7 +118,7 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
   } else if (config.investmentGeneEnabled && org.investment !== undefined && Math.abs(org.investment - 0.25) > 0.05) {
     core.push({
       icon: '🐣',
-      label: 'Invest',
+      label: 'Child Care',
       value: `${Math.round(org.investment * 100)}%`,
       category: 'breeding',
       score: 75,
@@ -217,7 +217,7 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
   if ((org.acquiredBrainUnits ?? 0) > 0) {
     standouts.push({
       icon: '🧠',
-      label: 'Neural',
+      label: 'Brain',
       value: `+${org.acquiredBrainUnits}`,
       category: 'morphology',
       score: 46 + org.acquiredBrainUnits! * 5,
@@ -238,13 +238,243 @@ function renderBadgeHtml(b: TraitBadge): string {
 }
 
 /**
+ * Renders a high-fidelity visual miniature of an organism matching the world canvas renderer
+ * (including body size, squeeze elongation, fat plumpness, carnivore mandibles, leaper fin,
+ * diagonal setae, torpor frost rim, adipose ring, sensory aperture, and glowing brain nodes).
+ */
+export function drawOrganismBlob(
+  ctx: CanvasRenderingContext2D,
+  org: OrganismView,
+  hue: number,
+  config: SimulationConfig,
+  w: number,
+  h: number,
+  alive = true
+): void {
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const TAU = Math.PI * 2;
+
+  const maxEnergy = config.maxEnergy * (config.sizeGeneEnabled ? (org.size ?? 1) : 1);
+  const energyRatio = alive ? Math.max(0, Math.min(1, org.energy / maxEnergy)) : 0;
+  const sizeScale = config.sizeGeneEnabled ? Math.max(0.65, Math.min(1.35, Math.sqrt(org.size ?? 1))) : 1;
+  const r = Math.min(w, h) * 0.28 * (0.68 + 0.32 * energyRatio) * sizeScale;
+
+  // Phenotype traits
+  const squeeze = config.squeezeEnabled ? (org.abilities?.squeeze ?? 0) : 0;
+  const leap = config.leapEnabled ? (org.abilities?.leap ?? 0) : 0;
+  const diagonal = config.diagonalMoves ? (org.abilities?.diagonal ?? 0) : 0;
+  const fatCap = config.fatEnabled ? (org.fatCapacity ?? 0) : 0;
+  const fatHeld = config.fatEnabled ? (org.fat ?? 0) : 0;
+  const fatRatio = fatCap > 0 ? Math.min(1, fatHeld / Math.max(10, fatCap)) : 0;
+  const torpor = config.torporEnabled && org.rested ? (org.torporDepth ?? 0) : 0;
+  const carnivory = org.carnivory * (config.carnivoreGeneEnabled ? (org.carnivoreEfficiency ?? 1) : 1);
+
+  // Upright orientation (heading towards top of canvas)
+  const heading = -Math.PI / 2;
+  const fx = 0;
+  const fy = -1;
+  const rx = 1;
+  const ry = 0;
+  const a = r * (1 + 0.2 * squeeze - 0.05 * fatRatio);
+  const b = r * (1 - 0.13 * squeeze + 0.22 * fatRatio);
+
+  const sat = alive ? (torpor > 0.1 ? Math.round(82 - 35 * torpor) : 82) : 0;
+  const baseLight = alive ? Math.round(40 + 18 * energyRatio) : 32;
+
+  // 1. Ambient lineage aura
+  if (alive) {
+    ctx.fillStyle = `hsla(${hue}, 90%, 65%, 0.16)`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.55, 0, TAU);
+    ctx.fill();
+  }
+
+  // 2. Rear propulsion fin for leapers
+  if (leap > 0.05 && alive) {
+    const finLen = r * (0.32 + 0.22 * leap);
+    const finSpread = b * 0.52;
+    const bx = cx - fx * (a * 0.85);
+    const by = cy - fy * (a * 0.85);
+    ctx.strokeStyle = `hsla(${hue}, ${sat}%, 72%, 0.85)`;
+    ctx.lineWidth = Math.max(1.4, r * 0.16);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bx + rx * finSpread - fx * finLen, by + ry * finSpread - fy * finLen);
+    ctx.lineTo(bx - fx * (finLen * 0.25), by - fy * (finLen * 0.25));
+    ctx.lineTo(bx - rx * finSpread - fx * finLen, by - ry * finSpread - fy * finLen);
+    ctx.stroke();
+  }
+
+  // 3. Diagonal mover setae / notches
+  if (diagonal > 0.05 && alive) {
+    ctx.strokeStyle = `hsla(${hue}, ${sat}%, 76%, 0.75)`;
+    ctx.lineWidth = Math.max(1.2, r * 0.13);
+    ctx.beginPath();
+    const c45 = 0.7071;
+    for (const sx of [-1, 1] as const) {
+      for (const sy of [-1, 1] as const) {
+        const dx = (fx * sx * a + rx * sy * b) * c45;
+        const dy = (fy * sx * a + ry * sy * b) * c45;
+        ctx.moveTo(cx + dx * 0.88, cy + dy * 0.88);
+        ctx.lineTo(cx + dx * (1.18 + 0.12 * diagonal), cy + dy * (1.18 + 0.12 * diagonal));
+      }
+    }
+    ctx.stroke();
+  }
+
+  // 4. Layered pebble body fill
+  ctx.fillStyle = alive ? `hsl(${hue}, ${sat}%, ${baseLight}%)` : '#3a4454';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, a, b, heading, 0, TAU);
+  ctx.fill();
+
+  // 5. Specular top highlight + gut tint
+  if (alive) {
+    const gutBoost = config.digestiveGeneEnabled ? Math.max(0, Math.min(1, (org.digestiveEfficiency ?? 1) - 0.5)) : 0.5;
+    ctx.fillStyle = `hsla(${hue}, 90%, 78%, ${(0.32 + 0.22 * gutBoost).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx - r * 0.18, cy - r * 0.18, a * 0.62, b * 0.58, heading, 0, TAU);
+    ctx.fill();
+  }
+
+  // 6. Adipose fat reserve inner ring
+  if (fatHeld > 1 && alive) {
+    const fatAlpha = Math.min(0.9, 0.35 + 0.55 * fatRatio);
+    ctx.strokeStyle = `hsla(42, 95%, 62%, ${fatAlpha.toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.4, r * (0.12 + 0.18 * fatRatio));
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a * 0.84, b * 0.84, heading, 0, TAU);
+    ctx.stroke();
+  }
+
+  // 7. Torpor frosted outer rim
+  if (torpor > 0.1 && alive) {
+    ctx.strokeStyle = `hsla(200, 45%, 82%, ${(0.35 + 0.5 * torpor).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.4, r * 0.16);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a + 1.4, b + 1.4, heading, 0, TAU);
+    ctx.stroke();
+  }
+
+  // 8. Carnivore mandibles / predator teeth at forward leading edge
+  if (carnivory >= 0.22 && alive) {
+    const strength = Math.min(1, (carnivory - 0.2) / 0.65);
+    const tipX = cx + fx * (a * (1.02 + 0.18 * strength));
+    const tipY = cy + fy * (a * (1.02 + 0.18 * strength));
+    const baseX = cx + fx * (a * 0.68);
+    const baseY = cy + fy * (a * 0.68);
+    const jawSpread = b * (0.35 + 0.22 * strength);
+    ctx.strokeStyle = `hsla(${hue}, 95%, 88%, 0.95)`;
+    ctx.fillStyle = `hsl(${hue}, 80%, ${Math.min(90, baseLight + 25)}%)`;
+    ctx.lineWidth = Math.max(1.2, r * 0.14);
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX + rx * jawSpread, baseY + ry * jawSpread);
+    ctx.lineTo(baseX - rx * jawSpread, baseY - ry * jawSpread);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // 9. Sensory aperture crescent at the front
+  const senseR = config.sensingGeneEnabled ? (org.sensingRadius ?? config.sensingRadius) : config.sensingRadius;
+  if (senseR > 2.2 && alive) {
+    const span = (0.22 + 0.14 * Math.max(0, Math.min(1, (senseR - 2) / 4))) * Math.PI;
+    ctx.strokeStyle = `hsla(190, 90%, 82%, 0.7)`;
+    ctx.lineWidth = Math.max(1.2, r * 0.12);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a + Math.max(1.6, r * 0.22), b + Math.max(1.6, r * 0.22), heading, -span, span);
+    ctx.stroke();
+  }
+
+  // 10. Neural core nodes (brain nodes)
+  const memSpan = config.memoryEnabled ? (org.memorySpan ?? 0) : 0;
+  const brainExtra = org.acquiredBrainUnits ?? 0;
+  const nodeCount = Math.min(3, (memSpan >= 8 ? 1 : 0) + (memSpan >= 24 ? 1 : 0) + (brainExtra > 0 ? 1 : 0));
+  if (nodeCount > 0 && alive) {
+    const nodeR = Math.max(1.2, r * 0.11);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+    ctx.beginPath();
+    for (let i = 0; i < nodeCount; i++) {
+      const offsetLat = (i - (nodeCount - 1) / 2) * (b * 0.38);
+      const nx = cx + fx * (a * 0.45) + rx * offsetLat;
+      const ny = cy + fy * (a * 0.45) + ry * offsetLat;
+      ctx.moveTo(nx + nodeR, ny);
+      ctx.arc(nx, ny, nodeR, 0, TAU);
+    }
+    ctx.fill();
+  }
+}
+
+/**
+ * Renders an egg preview blob matching the canvas renderer.
+ */
+export function drawEggBlob(
+  ctx: CanvasRenderingContext2D,
+  egg: EggView,
+  w: number,
+  h: number,
+  alive = true
+): void {
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const TAU = Math.PI * 2;
+  const sizeScale = Math.max(0.7, Math.min(1.4, Math.sqrt(egg.size || 1)));
+  const rx = Math.min(w, h) * 0.28 * sizeScale;
+  const ry = Math.min(w, h) * 0.38 * sizeScale;
+  const tagHue = Math.round(egg.tag ?? 45);
+  const shellStrength = Math.max(0, Math.min(1, egg.shell ?? 0.5));
+
+  // Soft glow
+  if (alive) {
+    ctx.fillStyle = `hsla(${tagHue}, 90%, 65%, 0.18)`;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * 1.3, ry * 1.3, 0, 0, TAU);
+    ctx.fill();
+  }
+
+  // Shell body
+  ctx.fillStyle = alive ? `hsl(${tagHue}, 38%, 86%)` : '#5a6270';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
+  ctx.fill();
+
+  // Embryo yolk core
+  if (alive) {
+    const energyNorm = Math.max(0.3, Math.min(1, (egg.energy || 25) / 60));
+    ctx.fillStyle = `hsla(${tagHue}, 78%, 56%, 0.7)`;
+    ctx.beginPath();
+    ctx.arc(cx, cy + ry * 0.1, rx * 0.52 * energyNorm, 0, TAU);
+    ctx.fill();
+
+    // Specular highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(cx - rx * 0.25, cy - ry * 0.25, rx * 0.4, ry * 0.35, -Math.PI / 6, 0, TAU);
+    ctx.fill();
+  }
+
+  // Calcified shell rim
+  ctx.strokeStyle = alive ? `rgba(55, 42, 24, ${(0.4 + 0.55 * shellStrength).toFixed(2)})` : '#222832';
+  ctx.lineWidth = Math.max(1.2, Math.min(w, h) * (0.04 + 0.05 * shellStrength));
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, TAU);
+  ctx.stroke();
+}
+
+/**
  * The floating card for the selected organism. Tap it to open the
  * inspector. Built once and updated in place, so a tap is never lost to a
  * re-render mid-press.
  */
 export class OrganismCard {
   private readonly el: HTMLElement;
-  private readonly orb: HTMLElement;
+  private readonly orbCanvas: HTMLCanvasElement;
+  private readonly orbCtx: CanvasRenderingContext2D | null;
   private readonly given: HTMLElement;
   private readonly family: HTMLElement;
   private readonly doing: HTMLElement;
@@ -256,7 +486,7 @@ export class OrganismCard {
   constructor(el: HTMLElement, onOpen: () => void, onClose: () => void) {
     this.el = el;
     el.innerHTML = `
-      <span class="card-orb" aria-hidden="true"></span>
+      <canvas class="card-orb" width="72" height="72" aria-hidden="true"></canvas>
       <span class="card-text">
         <span class="card-name"><span class="card-given"></span> <span class="card-family"></span></span>
         <span class="card-doing"></span>
@@ -266,7 +496,8 @@ export class OrganismCard {
       <span class="card-more" aria-hidden="true">›</span>
       <button type="button" class="card-close" aria-label="Deselect">✕</button>
     `;
-    this.orb = el.querySelector('.card-orb')!;
+    this.orbCanvas = el.querySelector<HTMLCanvasElement>('.card-orb')!;
+    this.orbCtx = this.orbCanvas.getContext('2d');
     this.given = el.querySelector('.card-given')!;
     this.family = el.querySelector('.card-family')!;
     this.doing = el.querySelector('.card-doing')!;
@@ -314,7 +545,10 @@ export class OrganismCard {
     };
     this.el.hidden = false;
     this.el.classList.toggle('dead', !alive);
-    this.orb.style.setProperty('--hue', String(Math.round(hue)));
+    this.orbCanvas.style.setProperty('--hue', String(Math.round(hue)));
+    if (this.orbCtx) {
+      drawOrganismBlob(this.orbCtx, org, hue, config, this.orbCanvas.width, this.orbCanvas.height, alive);
+    }
     set(this.given, name.given);
     set(this.family, name.family);
 
@@ -347,7 +581,10 @@ export class OrganismCard {
     };
     this.el.hidden = false;
     this.el.classList.toggle('dead', !alive);
-    this.orb.style.setProperty('--hue', String(Math.round(egg.tag)));
+    this.orbCanvas.style.setProperty('--hue', String(Math.round(egg.tag)));
+    if (this.orbCtx) {
+      drawEggBlob(this.orbCtx, egg, this.orbCanvas.width, this.orbCanvas.height, alive);
+    }
     set(this.given, `Egg · ${given}`);
     set(this.family, `Gen ${egg.generation}`);
     set(

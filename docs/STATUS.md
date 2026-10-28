@@ -30,12 +30,15 @@ A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered
 
 ## Responsive Landscape Desktop Layout (built 2026-10-28)
 
-Stacked landscape desktop presentation on computer screens (`src/style.css`, `src/main.ts`):
-- **Landscape World Canvas on Top (~58vh)**: Full-width landscape stage at the top of the screen; the 60×60 simulation grid auto-centers with letterboxing and crisp cell resolution; playback pill and zoom controls remain anchored within the stage.
-- **Horizontal Stats Dashboard Below (~42vh)**: Expands across the full landscape display with smooth scrolling and responsive layout:
-  - *Header Bar*: Peek population badge, season state pill, group hue strip, settings trigger, and tab navigation arranged in a sleek single horizontal bar.
+Stacked landscape desktop presentation with collapsable dashboard on computer screens (`src/style.css`, `src/main.ts`, `src/ui/sheet.ts`):
+- **Full-Screen Canvas Real Estate**:
+  - *Collapsed State*: When collapsed, the bottom dashboard shrinks to an ultra-compact ~44px header bar. The world canvas expands to fill 100% of the available vertical screen real estate (`100dvh - 44px`), dynamically recalculating cell size and centering.
+  - *Expanded State*: Expands to `~42vh`, with the world canvas dynamically scaling to `58vh` to provide a clear view without being covered.
+  - *Interactive Collapse Controls*: Toggled smoothly by a dedicated collapse chevron button (`▾` / `▴`), by clicking the peek bar, or by clicking active tab buttons. Preference is persisted in `localStorage`.
+- **Horizontal Stats Dashboard**:
+  - *Header Bar*: Peek population badge, season state pill, group hue strip, settings trigger, tab navigation, and collapse toggle arranged in a single sleek bar.
   - *Metrics Section*: Multi-column responsive grid (`repeat(auto-fit, minmax(130px, 1fr))`) stretching across the screen.
-  - *Side-by-Side 3-Column Lower Dashboard*: Recent Events feed, Colour Groups list, and Symbol Legend placed into three parallel columns (`.stats-columns`), eliminating endless vertical scrolling.
+  - *Side-by-Side 3-Column Lower Dashboard*: Recent Events feed, Colour Groups list, and Symbol Legend placed into three parallel columns (`.stats-columns`).
   - *Expanded Trends & Inspector*: Trends charts and Genome Lineage Map automatically utilize the wide horizontal landscape width.
 - **Mobile Landscape Phone Preservation**: Viewports with `max-height: 500px` (e.g. Samsung Galaxy S21 in landscape) retain the side-panel layout, ensuring mobile touch ergonomics and vertical visibility remain intact.
 

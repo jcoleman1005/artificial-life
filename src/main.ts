@@ -86,6 +86,9 @@ app.innerHTML = `
           <button type="button" role="tab" data-tab="trends" aria-selected="false">Trends</button>
           <button type="button" role="tab" data-tab="organism" aria-selected="false">Organism</button>
         </nav>
+        <button type="button" class="round-btn btn-collapse-sheet" aria-label="Toggle details panel" title="Toggle details panel">
+          <span class="collapse-icon" aria-hidden="true">▾</span>
+        </button>
       </div>
       <div class="sheet-body">
         <section class="tab-panel" data-panel="stats">
@@ -785,18 +788,19 @@ document.addEventListener('keydown', (e) => {
 // peek strip and the playback pill) at zoom 1. Recomputed on resize,
 // rotation and when the sheet changes.
 function layout(): void {
+  const isFixed = getComputedStyle(sheetEl).position === 'fixed';
   const side = sheet.isSidePanel();
-  const peek = side ? 0 : sheet.peekHeight();
+  const peek = isFixed ? sheet.peekHeight() : 0;
   const safe = getComputedStyle(document.documentElement);
   const px = (name: string) => parseFloat(safe.getPropertyValue(name)) || 0;
   const safeTop = px('--safe-top');
-  const safeBottom = side ? px('--safe-bottom') : 0;
+  const safeBottom = side || !isFixed ? px('--safe-bottom') : 0;
   document.documentElement.style.setProperty('--peek-h', `${peek}px`);
-  sheetEl.style.setProperty('--closed-offset', `${side ? 0 : sheetEl.offsetHeight - peek - px('--safe-bottom')}px`);
+  sheetEl.style.setProperty('--closed-offset', `${isFixed ? sheetEl.offsetHeight - peek - px('--safe-bottom') : 0}px`);
   const pillSpace = 56 + 12 + 10;
   renderer.setInsets({
     top: safeTop + 8,
-    bottom: (side ? safeBottom : peek + px('--safe-bottom')) + pillSpace,
+    bottom: (isFixed ? peek + px('--safe-bottom') : safeBottom) + pillSpace,
     left: px('--safe-left'),
     right: side ? 0 : px('--safe-right'),
   });
