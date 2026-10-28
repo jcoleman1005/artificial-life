@@ -50,6 +50,7 @@ const PLANT_TRAIT_LABELS: Record<PlantTrait, string> = {
   dispersal: 'Seed dispersal',
   rootShare: 'Root share',
   leanDormancy: 'Lean dormancy',
+  defense: 'Plant defense',
 };
 
 const PLANT_SECTION = 'Plants (when Food = Plants)';

@@ -210,6 +210,17 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   nutrientExcretion: 0.005,
   nutrientCarrionDecomp: 0.01,
   nutrientLeanThreshold: 0.4,
+  // Red Queen: Trophic chemical coevolution
+  plantDefenseEnabled: true,
+  plantDefenseCostFactor: 0.5,
+  defenseYieldPenalty: 0.75,
+  toxinMalaiseCost: 8.0,
+  detoxGeneEnabled: true,
+  detoxFounder: 0.1,
+  detoxStep: 0.05,
+  detoxMin: 0,
+  detoxMax: 1,
+  detoxUpkeepRate: 0.03,
   seed: 42,
 };
 

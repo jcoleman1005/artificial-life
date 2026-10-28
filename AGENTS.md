@@ -71,6 +71,8 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Egg Selection & Inspection: Direct egg selection, floating card, incubation/shell metrics, unborn traits and pedigree in Inspector (2026-10-27).
 - Weather systems (`weatherEnabled`, on; `docs/specs/weather.md`): multi-front dynamic temperature, moisture, and wind; abiotic costs, plant drift, and downwind signal propagation (2026-10-27).
 - Nutrient cycle (`nutrientCycleEnabled`, on; 2026-10-27): Replaces clockwork calendar seasons with endogenous soil-plant-unit nutrient dynamics; switch off reproduces legacy clock seasons bit-identically.
+- Emergent migration (2026-10-27): Soil depletion and animal metabolic excretion drive migration endogenously; no artificial wandering region coordinates.
+- Plant defense & detox coevolution (`plantDefenseEnabled`, `detoxGeneEnabled`, on; `docs/specs/red_queen.md`, 2026-10-27): Plant defense trait vs. herbivore detox (trait 51); yield discount, acute malaise damage, and `lastBiteYield` brain sensory feedback; switch off reproduces baseline bit-identically.
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.

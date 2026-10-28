@@ -155,11 +155,18 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.carnivoreUpkeepRate * organism.carnivoreEfficiency * organism.carnivory
       : 0;
 
+  // Detoxification upkeep: maintaining liver and metabolic enzymes scaling with body size
+  const detoxUpkeep =
+    config.detoxGeneEnabled && organism.detox !== undefined && organism.detox > 0
+      ? config.detoxUpkeepRate * organism.detox * sizeFactor
+      : 0;
+
   return (
     baseCost +
     sensoryUpkeep +
     digestiveUpkeep +
     carnivoreUpkeep +
+    detoxUpkeep +
     config.carryUpkeep * organism.carryCapacity +
     (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +

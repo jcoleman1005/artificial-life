@@ -18,8 +18,9 @@ import type {
  * to selection. See docs/specs/plants.md.
  */
 
-/** Bounds of each trait, and the founder ranges (centred near the classic food supply). */
-export const PLANT_TRAITS: GeneTable<PlantTrait> = {
+export type BasePlantTrait = Exclude<PlantTrait, 'defense'>;
+
+export const BASE_PLANT_TRAITS: GeneTable<BasePlantTrait> = {
   growthRate: { min: 0.01, max: 1, founderMin: 0.1, founderMax: 0.35 },
   maxBiomass: { min: 1, max: 20, founderMin: 5, founderMax: 11 },
   seedSize: { min: 0.2, max: 4, founderMin: 0.5, founderMax: 2 },
@@ -27,6 +28,12 @@ export const PLANT_TRAITS: GeneTable<PlantTrait> = {
   dispersal: { min: 1, max: 10, founderMin: 1, founderMax: 5 },
   rootShare: { min: 0, max: 0.9, founderMin: 0, founderMax: 0.4 },
   leanDormancy: { min: 0, max: 1, founderMin: 0, founderMax: 0.5 },
+};
+
+/** Bounds of each trait, and the founder ranges (centred near the classic food supply). */
+export const PLANT_TRAITS: GeneTable<PlantTrait> = {
+  ...BASE_PLANT_TRAITS,
+  defense: { min: 0, max: 1, founderMin: 0.05, founderMax: 0.25, locked: 0.0 },
 };
 
 export const PLANT_TRAIT_KEYS = geneTableKeys(PLANT_TRAITS);
@@ -42,13 +49,28 @@ export const DORMANCY_SAVING = 0.8;
 /** A plant that dies within this many ticks of being eaten counts as grazed out. */
 const GRAZED_WINDOW = 2;
 
-export function founderGenome(prng: PRNG): PlantGenome {
-  return founderGenes(PLANT_TRAITS, prng);
+const round4 = (v: number) => Number(v.toFixed(4));
+
+export function founderGenome(prng: PRNG, config?: Readonly<SimulationConfig>): PlantGenome {
+  const base = founderGenes(BASE_PLANT_TRAITS, prng);
+  if (config?.plantDefenseEnabled !== false) {
+    const defense = round4(prng.nextFloat(0.05, 0.25));
+    return { ...base, defense };
+  }
+  return { ...base };
 }
 
 /** A seed's genome: the parent's, each trait shifted now and then and kept in range. */
 export function inheritGenome(parent: PlantGenome, config: Readonly<SimulationConfig>, prng: PRNG): PlantGenome {
-  return inheritGenes(PLANT_TRAITS, parent, prng, { rate: config.plantMutationRate, sd: config.plantMutationStdDev });
+  const base = inheritGenes(BASE_PLANT_TRAITS, parent, prng, { rate: config.plantMutationRate, sd: config.plantMutationStdDev });
+  if (config.plantDefenseEnabled && parent.defense !== undefined) {
+    let def = parent.defense;
+    if (prng.next() < config.plantMutationRate) {
+      def += prng.nextGaussian(0, config.plantMutationStdDev * 1.0);
+    }
+    return { ...base, defense: round4(Math.max(0, Math.min(1, def))) };
+  }
+  return { ...base };
 }
 
 /**
@@ -380,8 +402,12 @@ export function stepPlants(ctx: PlantStepContext): void {
       (1 - dormancy) *
       moistureFactor *
       (ctx.health ? ctx.health[index] : 1);
+    const defenseUpkeep =
+      config.plantDefenseEnabled && g.defense
+        ? config.plantUpkeep * size * (config.plantDefenseCostFactor ?? 0.5) * g.defense
+        : 0;
     const upkeep =
-      (config.plantUpkeep * size + config.growthCostFactor * g.growthRate * vigour) *
+      (config.plantUpkeep * size + defenseUpkeep + config.growthCostFactor * g.growthRate * vigour) *
       (1 - DORMANCY_SAVING * dormancy);
 
     // If nutrient cycle is on, draw consumed nutrients from soil
@@ -474,7 +500,7 @@ export function stepPlants(ctx: PlantStepContext): void {
         const x = prng.nextInt(0, w - 1);
         const y = prng.nextInt(0, h - 1);
         if (!canGerminate(ctx, x, y) || prng.next() >= field.fertility[y * w + x]) continue;
-        const genome = founderGenome(prng);
+        const genome = founderGenome(prng, config);
         plantAt(patches, field, w, x, y, createPlant(counters, genome, genome.seedSize, tick, null));
         counters.seedRainTotal++;
         break;
@@ -505,10 +531,10 @@ export function computePlantMetrics(patches: ReadonlyMap<string, FoodPatch>, cou
       continue;
     }
     let sum = 0;
-    for (const p of plants) sum += p.genome[key];
+    for (const p of plants) sum += p.genome[key] ?? 0;
     const mean = sum / n;
     let sq = 0;
-    for (const p of plants) sq += (p.genome[key] - mean) ** 2;
+    for (const p of plants) sq += ((p.genome[key] ?? 0) - mean) ** 2;
     traits[key] = { mean, sd: Math.sqrt(sq / n) };
   }
   return {

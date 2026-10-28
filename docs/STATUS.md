@@ -82,6 +82,17 @@ Reworks "lean" and "plenty" from an artificial clockwork calendar (`seasonLength
   - Switch off (`--set nutrientCycleEnabled=false`): matches baseline fingerprint bit-identically (`large dials: 3d37afc4c5e61b7a pop 231 births 2447 · large brain: 1bc7e138d3355fc6 pop 472 births 3711`).
   - Switch on (`nutrientCycleEnabled: true`, default): `large dials: d580611f56565751 pop 840 births 4200 · large brain: 4bcd86eed3ba7d21 pop 855 births 3739`.
 
+## Red Queen: Trophic chemical coevolution (built 2026-10-27)
+
+Antagonistic coevolution between plant chemical defense and herbivore detoxification (`plantDefenseEnabled`, `detoxGeneEnabled`, on by default; spec `docs/specs/red_queen.md`, tests `tests/red_queen.test.ts`):
+- **Plant Defense (`defense` trait)**: Evolving chemical and structural defense ($D \in [0, 1]$). Defended plants pay continuous biomass synthesis upkeep (`plantDefenseCostFactor: 0.5`).
+- **Herbivore Detox (`detox` gene, Trait 51)**: Evolving metabolic enzymatic clearance ($X \in [0, 1]$). Herbivores pay continuous enzymatic liver maintenance (`detoxUpkeepRate: 0.03 * detox * size`).
+- **Grazing & Acute Malaise**: Effective toxicity $T_{\text{eff}} = \max(0, D - X)$. Unneutralized toxins reduce edible yield (`defenseYieldPenalty: 0.75`), and acute toxicity ($T_{\text{eff}} > 0.3$) inflicts direct gut tissue damage (`toxinMalaiseCost * (T_{\text{eff}} - 0.3)`).
+- **Sensory Discrimination**: Append-only brain input `lastBiteYield` ($[0, 1]$) gives brains sensory feedback on bite nutritional efficiency.
+- **Fingerprint & bit-identity**:
+  - Switch off (`--set plantDefenseEnabled=false --set detoxGeneEnabled=false`): matches baseline fingerprint bit-identically (`large dials: d580611f56565751 pop 840 births 4200 · large brain: 4bcd86eed3ba7d21 pop 855 births 3739`).
+  - Switch on (defaults): `large dials: d78a433f62a2b403 pop 648 births 3472 · large brain: e753aec72830d61b pop 643 births 2833`.
+
 ## In progress: DNA (2026-10-26)
 
 Stage 1 of genome-encoded organisms is signed off and on by default (`dnaEnabled`; spec `docs/specs/dna.md`, code `src/sim/dna.ts`): body and brain (not the dials) are decoded from a genome, bit-identical to a legacy world. Stage 1b is built as two toggles, off by default, with gates in `docs/experiments/dna-1b*.txt` (continuous abilities: met; split diets: plant eaters met, meat eaters not yet seen in 3,000 ticks). Both await the user's review of their gates; meanwhile Stage 2 was built on top (below).

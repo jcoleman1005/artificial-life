@@ -40,6 +40,8 @@ describe('Default world', () => {
       carnivoreFounder: DEFAULT_CONFIG.carnivoreFounder,
       weatherEnabled: DEFAULT_CONFIG.weatherEnabled,
       nutrientCycleEnabled: DEFAULT_CONFIG.nutrientCycleEnabled,
+      plantDefenseEnabled: DEFAULT_CONFIG.plantDefenseEnabled,
+      detoxGeneEnabled: DEFAULT_CONFIG.detoxGeneEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -80,6 +82,9 @@ describe('Default world', () => {
       weatherEnabled: true,
       // Nutrient cycle: on by default.
       nutrientCycleEnabled: true,
+      // Red Queen: Trophic plant defense and herbivore detox on by default.
+      plantDefenseEnabled: true,
+      detoxGeneEnabled: true,
     });
   });
 

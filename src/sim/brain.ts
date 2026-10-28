@@ -83,6 +83,8 @@ export const BRAIN_INPUTS = [
   'weatherTemp',
   'weatherRain',
   'moveWindAlignment',
+  // Red Queen: Trophic feedback (append-only)
+  'lastBiteYield',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -110,6 +112,7 @@ export const ACTION_INVARIANT_INPUTS: readonly BrainInput[] = [
   'register2',
   'weatherTemp',
   'weatherRain',
+  'lastBiteYield',
 ];
 
 /** 1 at the BRAIN_INPUTS index of each ACTION_INVARIANT_INPUTS entry. */
@@ -166,13 +169,17 @@ export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEA
 export function createHeadStartBrain(prng: PRNG, config?: Readonly<SimulationConfig>): Brain {
   const small = () => Number(prng.nextGaussian(0, 0.1).toFixed(4));
   const weatherOn = config?.weatherEnabled !== false;
+  const plantDefenseOn = config?.plantDefenseEnabled !== false;
   const hidden: number[] = [];
   for (let h = 0; h < BRAIN_HIDDEN; h++) {
     for (let i = 0; i < BASE_BRAIN_INPUT_COUNT; i++) {
       hidden.push(small());
     }
-    for (let i = BASE_BRAIN_INPUT_COUNT; i < BRAIN_INPUT_COUNT; i++) {
+    for (let i = BASE_BRAIN_INPUT_COUNT; i < 55; i++) {
       hidden.push(weatherOn ? small() : 0);
+    }
+    for (let i = 55; i < BRAIN_INPUT_COUNT; i++) {
+      hidden.push(plantDefenseOn ? small() : 0);
     }
   }
   return {
@@ -363,6 +370,7 @@ function fillBrainFeatures(
     isMove && sensed.weatherWind
       ? (dx * sensed.weatherWind.wx + dy * sensed.weatherWind.wy) / Math.max(1, Math.hypot(dx, dy))
       : 0; // moveWindAlignment
+  out[o++] = organism.lastBiteYield ?? 1; // lastBiteYield
 }
 
 /** Score for one feature vector, with the per-input direct contributions. */

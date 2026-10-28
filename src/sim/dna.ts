@@ -63,6 +63,7 @@ export const TraitId = {
   sensingRadius: 48,
   digestiveEfficiency: 49,
   carnivoreEfficiency: 50,
+  detox: 51,
 } as const;
 
 /** The phenotype a genome decodes to: every inherited trait except the policy dials. */
@@ -94,6 +95,7 @@ export const ABSENT_DEFAULTS = {
   sensingRadius: 3.0,
   digestiveEfficiency: 1.0,
   carnivoreEfficiency: 0.5,
+  detox: 0.1,
 } as const;
 
 const scratch = new DataView(new ArrayBuffer(8));
@@ -130,14 +132,17 @@ export function encodeOrganismDNA(p: Readonly<Phenotype>, config?: Readonly<Simu
   add(GeneClass.trait, TraitId.tag, p.tag);
   add(GeneClass.trait, TraitId.carryCapacity, p.carryCapacity);
   const weatherOn = config?.weatherEnabled !== false;
+  const plantDefenseOn = config?.plantDefenseEnabled !== false;
   p.brain.skip.forEach((w, i) => {
-    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return;
+    if (i >= 52 && i < 55 && !weatherOn) return;
+    if (i >= 55 && !plantDefenseOn) return;
     add(GeneClass.brainSkip, i, w);
   });
   const inputs = p.brain.skip.length;
   p.brain.hidden.forEach((w, k) => {
     const i = k % inputs;
-    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return;
+    if (i >= 52 && i < 55 && !weatherOn) return;
+    if (i >= 55 && !plantDefenseOn) return;
     add(GeneClass.brainHidden, (Math.floor(k / inputs) << 8) | i, w);
   });
   p.brain.hiddenBias.forEach((w, h) => add(GeneClass.brainHiddenBias, h, w));
@@ -798,7 +803,11 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
     if (g.enabled(config)) keys.push(geneKey(GeneClass.trait, g.traitId));
   }
   for (let i = 0; i < MEMORY_WEIGHT_COUNT; i++) keys.push(geneKey(GeneClass.trait, TraitId.memoryWeight0 + i));
-  const inputCount = config.weatherEnabled ? BRAIN_INPUT_COUNT : BASE_BRAIN_INPUT_COUNT;
+  const inputCount = config.plantDefenseEnabled
+    ? BRAIN_INPUT_COUNT
+    : config.weatherEnabled
+      ? 55
+      : BASE_BRAIN_INPUT_COUNT;
   for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainSkip, i));
   for (let h = 0; h < units; h++) {
     for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
@@ -807,13 +816,14 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
   keys.push(geneKey(GeneClass.brainOutBias, 0));
   return keys;
 }
-let slotCache: { split: boolean; weather: boolean; units: number; keys: number[] } | null = null;
+let slotCache: { split: boolean; weather: boolean; plantDefense: boolean; units: number; keys: number[] } | null = null;
 function slotsFor(config: Readonly<SimulationConfig>): number[] {
   const split = splitDiets(config);
   const weather = config.weatherEnabled;
+  const plantDefense = config.plantDefenseEnabled;
   const units = growableBrain(config) ? internalUnits(config) : BRAIN_HIDDEN;
-  if (slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.units !== units) {
-    slotCache = { split, weather, units, keys: slotKeys(config, units) };
+  if (slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.plantDefense !== plantDefense || slotCache?.units !== units) {
+    slotCache = { split, weather, plantDefense, units, keys: slotKeys(config, units) };
   }
   return slotCache.keys;
 }

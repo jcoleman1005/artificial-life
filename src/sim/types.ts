@@ -327,6 +327,10 @@ export interface Organism {
   readonly digestiveEfficiency?: number;
   /** Protein digestion (carnivoreGeneEnabled), 0..1. Scales energy gained from carrion bites, which is where a kill's energy ends up. */
   readonly carnivoreEfficiency?: number;
+  /** Toxin detoxification efficiency (detoxGeneEnabled), 0..1. Neutralizes plant chemical defenses; charges metabolic upkeep. */
+  readonly detox?: number;
+  /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
+  lastBiteYield?: number;
   /** Fat held now (state; only with fatEnabled). */
   fat?: number;
   /** Chose REST last tick, so acting now pays the wake cost (state; only with torporEnabled). */
@@ -418,6 +422,8 @@ export interface PlantGenome {
   readonly rootShare: number;
   /** In a lean season: how much growth stops, how much biomass moves into roots, and how much upkeep falls (0..1). */
   readonly leanDormancy: number;
+  /** Chemical/structural defense against grazers 0..1 (plantDefenseEnabled). Reduces edible yield and inflicts gut damage. */
+  readonly defense?: number;
 }
 
 export type PlantTrait = keyof PlantGenome;
@@ -689,6 +695,17 @@ export interface SimulationConfig {
   nutrientExcretion: number;
   nutrientCarrionDecomp: number;
   nutrientLeanThreshold: number;
+  // Red Queen: Trophic chemical coevolution
+  plantDefenseEnabled: boolean;
+  plantDefenseCostFactor: number;
+  defenseYieldPenalty: number;
+  toxinMalaiseCost: number;
+  detoxGeneEnabled: boolean;
+  detoxFounder: number;
+  detoxStep: number;
+  detoxMin: number;
+  detoxMax: number;
+  detoxUpkeepRate: number;
   seed: number | string;
 }
 
@@ -811,6 +828,7 @@ export interface LifeMetrics {
   sensingRadius: number | null;
   digestiveEfficiency: number | null;
   carnivoreEfficiency: number | null;
+  detox: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
