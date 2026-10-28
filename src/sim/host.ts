@@ -4,6 +4,7 @@ import { WorldEventDetector, type WorldEvent } from './events';
 import { ActivityMaps, type HeatmapKind } from './activity';
 import { toOrganismView, type EggView, type FromWorker, type PanelData, type ToWorker } from './protocol';
 import type { Egg, Organism, SimulationConfig } from './types';
+import { traceBrain } from './brain-trace';
 
 /** How often panel data (metrics, history, the selected organism) is sent while running. */
 export const PANEL_INTERVAL_MS = 200;
@@ -177,6 +178,15 @@ export class SimulationHost {
         break;
       case 'load':
         this.load(message.saved, viewer);
+        break;
+      case 'inspectBrain':
+        // Observer: reads the world, changes nothing (traceBrain draws from its own PRNG).
+        viewer?.post({
+          kind: 'brainTrace',
+          requestId: message.requestId,
+          organismId: message.organismId,
+          trace: traceBrain(this.world, message.organismId),
+        });
         break;
     }
   }

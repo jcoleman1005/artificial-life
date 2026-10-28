@@ -6,6 +6,7 @@ import { CanvasRenderer } from './render/renderer';
 import { MetricsView } from './ui/metrics-view';
 import { PlaybackPill, SettingsView } from './ui/controls';
 import { InspectorView } from './ui/inspector';
+import { BrainView } from './ui/brain-view';
 import { HistoryView } from './ui/history-view';
 import { BottomSheet } from './ui/sheet';
 import { OrganismCard } from './ui/organism-card';
@@ -196,6 +197,8 @@ function findPlant(id: string): FoodPatch | undefined {
 const nameOf = (id: string): string | null => (sim.organisms.has(id) ? givenName(id) : null);
 
 const inspectorView = new InspectorView($('#inspector-container'), () => deselect());
+const brainView = new BrainView(sim);
+inspectorView.setBrainElement(brainView.element);
 const historyView = new HistoryView($('#history-container'), () => {
   const name = `alife-seed-${sim.config.seed}-tick-${sim.tick}.csv`;
   void sim.requestCSV().then((csv) => {
@@ -361,6 +364,7 @@ function refreshPanels(): void {
       const plantPatch = selectedPlantId ? findPlant(selectedPlantId) : undefined;
       if (plantPatch) lastPlantPatch = plantPatch;
       if (selectedPlantId && lastPlantPatch) {
+        brainView.update(null, sim.tick);
         inspectorView.renderPlant(lastPlantPatch, sim.tick, plantPatch !== undefined);
         lastPanelRefresh = performance.now();
         return;
@@ -391,6 +395,7 @@ function refreshPanels(): void {
         nameOf,
         lastSelectedAncestry,
       );
+      brainView.update(detail && shown.alive ? detail.id : null, sim.tick);
     }
   }
   lastPanelRefresh = performance.now();

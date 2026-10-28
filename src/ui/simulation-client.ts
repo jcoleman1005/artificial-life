@@ -2,6 +2,7 @@ import { DEFAULT_CONFIG } from '../sim/config';
 import type { HistorySample } from '../sim/history';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
+import type { BrainTrace } from '../sim/brain-trace';
 import type {
   AncestorNode,
   EggView,
@@ -109,6 +110,7 @@ export class SimulationClient implements WorldView {
   private nextRequestId = 1;
   private readonly pendingCsv = new Map<number, (csv: string) => void>();
   private readonly pendingSaves = new Map<number, (saved: SavedWorld) => void>();
+  private readonly pendingTraces = new Map<number, (trace: BrainTrace | null) => void>();
   private transport: ((message: ToWorker) => void) | null = null;
   /** Commands sent before the transport is up. */
   private readonly queue: ToWorker[] = [];
@@ -250,6 +252,10 @@ export class SimulationClient implements WorldView {
         this.pendingSaves.get(message.requestId)?.(message.saved);
         this.pendingSaves.delete(message.requestId);
         break;
+      case 'brainTrace':
+        this.pendingTraces.get(message.requestId)?.(message.trace);
+        this.pendingTraces.delete(message.requestId);
+        break;
       case 'error':
         this.events.error(message.message);
         break;
@@ -324,6 +330,14 @@ export class SimulationClient implements WorldView {
     return new Promise((resolve) => {
       this.pendingSaves.set(requestId, resolve);
       this.send({ kind: 'save', requestId });
+    });
+  }
+  /** How an organism would decide right now (read-only; null if it is gone). Works in the worker and on the server. */
+  public inspectBrain(organismId: string): Promise<BrainTrace | null> {
+    const requestId = this.nextRequestId++;
+    return new Promise((resolve) => {
+      this.pendingTraces.set(requestId, resolve);
+      this.send({ kind: 'inspectBrain', requestId, organismId });
     });
   }
   /** Replace the world with a saved one; it arrives paused. */

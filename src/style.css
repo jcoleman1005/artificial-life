@@ -2400,3 +2400,19 @@ button {
   opacity: 0.5;
   margin: -2px 0;
 }
+
+/* Live brain viewer (src/ui/brain-view.ts) */
+.brain-view { padding: 8px 10px; border-top: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 8px; }
+.brain-view svg { width: 100%; height: auto; display: block; }
+.brain-view text { fill: var(--text-main); font-size: 11px; }
+.brain-view .bv-muted { fill: var(--text-muted); }
+.brain-view .bv-chosen { font-weight: 700; }
+.brain-families { display: flex; flex-wrap: wrap; gap: 6px; }
+.brain-families button {
+  min-height: 44px; min-width: 44px; padding: 6px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color); background: transparent; color: var(--text-main); font-size: 0.8rem; cursor: pointer;
+}
+.brain-families button[aria-pressed="true"] { border-color: #60a5fa; color: #93c5fd; }
+.brain-ribbon { display: flex; gap: 1px; height: 14px; }
+.brain-ribbon span { flex: 1; min-width: 2px; }
+.brain-dials .weight-row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; }
