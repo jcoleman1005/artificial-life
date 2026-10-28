@@ -2,7 +2,7 @@ import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/ty
 import { plantHue } from '../sim/plants';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
-import { regionSeasonAt, seasonAt } from '../sim/seasons';
+import { ecologicalSeasonAt, regionEcologicalSeasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
 
@@ -507,13 +507,30 @@ export class CanvasRenderer {
     const { gridWidth, gridHeight } = config;
     const selectedOrg = this.world.getSelectedOrganism();
 
-    // Background: a dark radial gradient, warmer while the world is lean.
-    // With staggered regions there is no world season: each region glows instead.
+    // Background: a dark radial gradient harmonized with the world season and atmosphere.
+    // With staggered regions, each region glows with its specific seasonal hue instead.
     const regionSeasons = config.staggeredSeasons && this.world.foodRegions.length > 0;
-    const lean = !regionSeasons && seasonAt(this.world.tick, config)?.season === 'lean';
+    const ecoSeason = ecologicalSeasonAt(this.world.tick, config);
     const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) * 0.75);
-    bg.addColorStop(0, lean ? '#2a2418' : '#1c2430');
-    bg.addColorStop(1, lean ? '#130f0a' : '#0b1017');
+    if (!regionSeasons && ecoSeason) {
+      if (ecoSeason.season === 'Spring') {
+        bg.addColorStop(0, '#152424');
+        bg.addColorStop(1, '#091314');
+      } else if (ecoSeason.season === 'Summer') {
+        bg.addColorStop(0, '#1c2533');
+        bg.addColorStop(1, '#0b1119');
+      } else if (ecoSeason.season === 'Autumn') {
+        bg.addColorStop(0, '#261e18');
+        bg.addColorStop(1, '#130e0a');
+      } else {
+        // Winter
+        bg.addColorStop(0, '#16202e');
+        bg.addColorStop(1, '#090e17');
+      }
+    } else {
+      bg.addColorStop(0, '#1c2430');
+      bg.addColorStop(1, '#0b1017');
+    }
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
@@ -560,20 +577,34 @@ export class CanvasRenderer {
     // in as cells grow (about 2× zoom on a phone).
     const detail = Math.max(0, Math.min(1, (cellSize - 8) / 4));
 
-    // Fertile regions: soft glows, amber while that region is lean
+    // Fertile regions: soft glows matching each region's ecological season
     for (const region of this.world.foodRegions) {
-      const regionLean = regionSeasonAt(this.world.tick, region, config)?.season === 'lean';
+      const eco = regionEcologicalSeasonAt(this.world.tick, region, config);
       const rx = (region.x + 0.5) * cellSize;
       const ry = (region.y + 0.5) * cellSize;
       const r = (region.radius + 1) * cellSize;
       const glow = ctx.createRadialGradient(rx, ry, 0, rx, ry, r);
-      glow.addColorStop(0, regionLean ? 'rgba(217, 160, 80, 0.22)' : 'rgba(110, 231, 183, 0.13)');
-      glow.addColorStop(0.6, regionLean ? 'rgba(217, 160, 80, 0.10)' : 'rgba(110, 231, 183, 0.06)');
+      const s = eco?.season ?? 'Spring';
+      const c =
+        s === 'Winter'
+          ? '56, 189, 248' // crisp frost blue (Winter)
+          : s === 'Autumn'
+            ? '251, 146, 60' // rich bronze amber (Autumn)
+            : s === 'Summer'
+              ? '250, 204, 21' // radiant sunlight gold (Summer)
+              : '110, 231, 183'; // fresh mint emerald (Spring)
+      glow.addColorStop(0, `rgba(${c}, 0.20)`);
+      glow.addColorStop(0.6, `rgba(${c}, 0.08)`);
       glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(rx, ry, r, 0, TAU);
       ctx.fill();
+    }
+
+    // Terrain cloud overcast shadows for active storm regions
+    if (this.world.weather && config.weatherEnabled) {
+      this.drawStormGroundShadows(inView);
     }
 
     // Rocks: rounded grey blocks, filled as one path
@@ -652,6 +683,11 @@ export class CanvasRenderer {
       this.drawInteractions();
       ctx.globalAlpha = 1;
     }
+
+    // High-altitude atmospheric storm clouds with 3D camera parallax & rain streaks
+    if (this.world.weather && config.weatherEnabled) {
+      this.drawStormCloudParallax(detail);
+    }
     ctx.restore();
   }
 
@@ -694,14 +730,14 @@ export class CanvasRenderer {
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
 
       if (front.type === 'cold_front') {
-        grad.addColorStop(0, `rgba(59, 130, 246, ${0.3 * front.intensity})`);
-        grad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+        grad.addColorStop(0, `rgba(56, 189, 248, ${0.32 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
       } else if (front.type === 'rain_storm') {
-        grad.addColorStop(0, `rgba(16, 185, 129, ${0.28 * front.intensity})`);
-        grad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+        grad.addColorStop(0, `rgba(99, 102, 241, ${0.30 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(99, 102, 241, 0)');
       } else if (front.type === 'heat_wave') {
-        grad.addColorStop(0, `rgba(245, 158, 11, ${0.28 * front.intensity})`);
-        grad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+        grad.addColorStop(0, `rgba(251, 191, 36, ${0.30 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
       }
 
       ctx.fillStyle = grad;
@@ -740,6 +776,139 @@ export class CanvasRenderer {
         ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
         ctx.moveTo(x1, y1);
         ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+      }
+    }
+  }
+
+  /**
+   * Casts soft terrain overcast shadows beneath active storm regions.
+   * Rendered on the ground layer before plants and organisms.
+   */
+  private drawStormGroundShadows(inView: (x: number, y: number) => boolean): void {
+    if (!this.world.weather) return;
+    const { ctx, cellSize } = this;
+    for (const front of this.world.weather.fronts) {
+      if (front.type !== 'rain_storm') continue;
+      const r = front.radius * cellSize;
+      const gx = (front.x + 0.5) * cellSize;
+      const gy = (front.y + 0.5) * cellSize;
+      if (!inView(Math.round(front.x), Math.round(front.y))) continue;
+
+      const shadow = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
+      shadow.addColorStop(0, `rgba(15, 23, 42, ${0.30 * front.intensity})`);
+      shadow.addColorStop(0.6, `rgba(15, 23, 42, ${0.15 * front.intensity})`);
+      shadow.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = shadow;
+      ctx.beginPath();
+      ctx.arc(gx, gy, r, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  /**
+   * Floating atmospheric storm clouds with 3D camera parallax, procedural
+   * cumulus billows, and falling rain streaks. Rendered at high elevation above organisms.
+   */
+  private drawStormCloudParallax(detail: number): void {
+    if (!this.world.weather) return;
+    const { ctx, cellSize } = this;
+    const weather = this.world.weather;
+    const animTime = performance.now() * 0.001;
+
+    // Camera center in world space
+    const camX = this.viewX + this.width * 0.5;
+    const camY = this.viewY + this.height * 0.5;
+    const PARALLAX_FACTOR = 0.12;
+
+    for (const front of weather.fronts) {
+      if (front.type !== 'rain_storm') continue;
+      const r = front.radius * cellSize;
+      const gx = (front.x + 0.5) * cellSize;
+      const gy = (front.y + 0.5) * cellSize;
+
+      // Parallax displacement from camera line-of-sight
+      const plx = (gx - camX) * PARALLAX_FACTOR;
+      const ply = (gy - camY) * PARALLAX_FACTOR;
+
+      // Wind animation drift
+      const wind = weather.getWind(front.x, front.y);
+      const windSpeed = Math.hypot(wind.wx, wind.wy);
+      const driftLen = cellSize * 2.0;
+      const driftPhase = (animTime * 0.3 * Math.max(0.15, windSpeed)) % 1;
+      const dirX = windSpeed > 0.02 ? wind.wx / windSpeed : 1;
+      const dirY = windSpeed > 0.02 ? wind.wy / windSpeed : 0.2;
+      const driftX = dirX * driftPhase * driftLen;
+      const driftY = dirY * driftPhase * driftLen;
+
+      const cloudX = gx + plx + driftX;
+      const cloudY = gy + ply + driftY;
+
+      // Skip drawing if completely off-screen
+      const margin = r * 1.5;
+      if (
+        cloudX + margin < this.viewX ||
+        cloudX - margin > this.viewX + this.width ||
+        cloudY + margin < this.viewY ||
+        cloudY - margin > this.viewY + this.height
+      ) {
+        continue;
+      }
+
+      // 1. Broad atmospheric overcast mist envelope
+      const mistGrad = ctx.createRadialGradient(cloudX, cloudY, 0, cloudX, cloudY, r * 1.15);
+      mistGrad.addColorStop(0, `rgba(71, 85, 105, ${0.40 * front.intensity})`);
+      mistGrad.addColorStop(0.55, `rgba(100, 116, 139, ${0.24 * front.intensity})`);
+      mistGrad.addColorStop(0.85, `rgba(148, 163, 184, ${0.10 * front.intensity})`);
+      mistGrad.addColorStop(1, 'rgba(148, 163, 184, 0)');
+      ctx.fillStyle = mistGrad;
+      ctx.beginPath();
+      ctx.arc(cloudX, cloudY, r * 1.15, 0, TAU);
+      ctx.fill();
+
+      // 2. Overlapping cumulus billow puffs
+      const lobeCount = 7;
+      for (let i = 0; i < lobeCount; i++) {
+        const lobeAngle = (i / lobeCount) * TAU + (((front.id * 17 + i * 23) % 100) / 100) * 0.5;
+        const lobeDist = r * (0.32 + 0.38 * (((front.id * 31 + i * 47) % 100) / 100));
+        const lobeR = r * (0.38 + 0.22 * (((front.id * 43 + i * 59) % 100) / 100));
+        const lx = cloudX + Math.cos(lobeAngle) * lobeDist;
+        const ly = cloudY + Math.sin(lobeAngle) * lobeDist;
+
+        const puffGrad = ctx.createRadialGradient(lx - lobeR * 0.15, ly - lobeR * 0.15, 0, lx, ly, lobeR);
+        puffGrad.addColorStop(0, `rgba(226, 232, 240, ${0.35 * front.intensity})`);
+        puffGrad.addColorStop(0.45, `rgba(148, 163, 184, ${0.25 * front.intensity})`);
+        puffGrad.addColorStop(0.8, `rgba(71, 85, 105, ${0.12 * front.intensity})`);
+        puffGrad.addColorStop(1, 'rgba(71, 85, 105, 0)');
+        ctx.fillStyle = puffGrad;
+        ctx.beginPath();
+        ctx.arc(lx, ly, lobeR, 0, TAU);
+        ctx.fill();
+      }
+
+      // 3. Falling rain streaks within the storm radius at LOD >= 0.15
+      if (detail >= 0.15 && cellSize >= 5) {
+        const rainDrops = Math.min(28, Math.round(14 + front.radius * 1.1));
+        const rainAngle = Math.atan2(wind.wy + 0.75, wind.wx);
+        const rainLen = Math.max(3.5, cellSize * 0.45);
+        const cosA = Math.cos(rainAngle);
+        const sinA = Math.sin(rainAngle);
+
+        ctx.strokeStyle = `rgba(199, 210, 254, ${0.32 * front.intensity})`;
+        ctx.lineWidth = Math.max(0.65, cellSize * 0.03);
+        ctx.beginPath();
+        for (let i = 0; i < rainDrops; i++) {
+          const dropSeed = front.id * 97 + i * 131;
+          const baseR = Math.sqrt(((dropSeed * 17) % 100) / 100) * r * 0.85;
+          const baseAngle = (((dropSeed * 29) % 100) / 100) * TAU;
+          const fallOffset = (animTime * 160 + dropSeed * 13) % (r * 1.4);
+          const dx0 = gx + Math.cos(baseAngle) * baseR + cosA * (fallOffset - r * 0.7);
+          const dy0 = gy + Math.sin(baseAngle) * baseR + sinA * (fallOffset - r * 0.7);
+          if (Math.hypot(dx0 - gx, dy0 - gy) <= r * 0.92) {
+            ctx.moveTo(dx0, dy0);
+            ctx.lineTo(dx0 + cosA * rainLen, dy0 + sinA * rainLen);
+          }
+        }
         ctx.stroke();
       }
     }

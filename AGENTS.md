@@ -78,6 +78,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Responsive landscape desktop layout: Canvas on top adapting to landscape; collapsable horizontal multi-column stats dashboard below with chevron toggle, expanding canvas to 100% available screen real estate when collapsed on computer screens (> 500px height); mobile landscape side-panel preserved (2026-10-28).
 - Ecological seasons, weather patterns, and versioning system: 4 ecological seasons and weather patterns replace binary plenty/lean; SemVer v0.2.0 ("Biosphere") displayed in UI (2026-10-28).
 - Predator–prey arms race & chemical defense (`predationDefenseEnabled`, `toughnessGeneEnabled`, `toxicityGeneEnabled`, on; traits 52 & 53, 2026-10-28): Prey armor blunts bites, adds move drag, mass upkeep, and slows contested agility; chemical toxicity inflicts acute malaise on attackers/scavengers; metabolic death pulse propagates downwind; zero scripted behavior.
+- Weather hues & storm cloud parallax: Weather front palettes harmonized with ecological seasons; high-altitude cloud billows with 3D camera parallax, wind drift, terrain overcast shadows, and rain streaks (2026-10-28).
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.

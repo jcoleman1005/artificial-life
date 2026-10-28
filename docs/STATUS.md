@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Predator–prey arms race & chemical defense; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Seasonal weather hue harmonization & storm cloud parallax; 4-quadrant season display; Predator–prey arms race & chemical defense; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -71,6 +71,11 @@ Instituted formal Semantic Versioning and replaced binary plenty/lean announceme
 - **2.5D Leap Hop & Parabola Guide Clean-Up**:
   - Removed the static trajectory parabola curve and ground dashed line across grid cells.
   - Retained the complete 2.5D airborne jump physics ($Z(u) = 4 H_{\max} u (1-u)$): the organism body lifts upwards in screen $-Y$, an altitude-softened ground drop shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, and selection indicators elevate with the jumping unit.
+- **Seasonal Weather Hues & Cloud Parallax for Storm Regions**:
+  - Weather front rendering harmonized with ecological seasons: Rainstorms rendered in deep atmospheric storm slate/indigo (`rgba(99, 102, 241, ...)` / `rgba(71, 85, 105, ...)`) replacing conflicting green hues; Cold snaps rendered in crisp glacial frost cyan (`rgba(56, 189, 248, ...)`); Heatwaves rendered in radiant golden amber (`rgba(251, 191, 36, ...)`).
+  - Fertile food regions glow in their respective quarter season colors (Spring: fresh mint emerald, Summer: radiant golden sunlight, Autumn: rich bronze amber, Winter: crisp frost blue).
+  - World canvas background radial gradient harmonized with seasonal ambient lighting.
+  - Dual-layer atmospheric storm cloud rendering: Ground overcast shadows darken terrain cells directly under the storm; high-altitude procedural cumulus billow puffs float above organisms with 3D camera line-of-sight parallax displacement, animated wind drift, and falling rain streaks at LOD >= 0.15.
 
 ## Responsive Landscape Desktop Layout (built 2026-10-28)
 
