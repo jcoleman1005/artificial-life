@@ -30,6 +30,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Mating (`sexEnabled`, on; brain only): MATE needs mutual consent the same tick; genes come whole from one parent or the other, then mutate as for clones.
 - Mating rule (2026-10-27; refactored to continuous fecundity and sequential viable allocation): both at own threshold and cost; carrier's continuous clutch partitions viable children sequentially with sub-viable remainder dissipated as metabolic heat, eliminating the catastrophic cliff; no eggs.
 - Clutch gene (`clutchGeneEnabled`, on; trait 46): continuous fecundity partition slider ($f \in [1.0, 6.0]$), founders 1, steps smoothly by `clutchStep` 0.2; matings only.
+- Hybrid incompatibility (`hybridIncompatibilityEnabled`, on; `docs/specs/speciation.md`, 2026-10-28): per-child inviability rising with genome distance between mating parents (hue excluded); preference stays on the hue input; control arm `hybridControlInviability`.
 - Tier 1 physical & energetic basic genes (2026-10-27; size, sensingRadius, metabolicRate, digestiveEfficiency, energyReserveCap with fat drag; traits 47–49 in lifehistory.ts, switches on by default).
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.

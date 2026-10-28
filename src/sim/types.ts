@@ -673,6 +673,12 @@ export interface SimulationConfig {
   dnaMaxGenes: number; // Insertions and duplications stop at this genome length (a safety rail for tick cost)
   dnaGrowableBrain: boolean; // With DNA (Stage 3): the brain is compiled from the genome as a sparse circuit with up to dnaMaxInternal hidden units; every brain gene is expressed
   dnaMaxInternal: number; // Hidden units a genome can address with the growable brain (clamped to 6..256)
+  hybridIncompatibilityEnabled: boolean; // With DNA and mating: children of crosses between far-apart genomes may be inviable (docs/specs/speciation.md); off reproduces the old world bit-identically
+  hybridTolerance: number; // Genome distance (0..1) at or below which a cross is fully compatible
+  hybridFull: number; // Genome distance at or above which a cross is maximally incompatible
+  hybridMaxInviability: number; // Chance a child of a maximally incompatible cross is inviable (its share of the clutch is lost as heat)
+  hybridControlInviability: number; // Matched-random control: above 0, every cross loses children at this flat rate whatever the distance (hybridMaxInviability is ignored)
+  genomeDistanceBrainScale: number; // Dose difference counted as 1 for brain and register weight genes
   dnaUpkeepPerConnection: number; // Energy per tick per expressed acquired connection (in hidden units past the founders' 6)
   // Weather systems
   weatherEnabled: boolean;
@@ -774,6 +780,10 @@ export interface WorldMetrics {
   clutchesFailedTotal: number;
   matingChildrenLostTotal: number;
   matingEnergyLostTotal: number;
+  /** Matings that risked inviable children (genome distance above hybridTolerance), children lost to incompatibility, and the summed genome distance of the matings measured (mean = sum / matingsTotal while the switch has been on). */
+  hybridCrossesTotal: number;
+  hybridChildrenLostTotal: number;
+  matingGenomeDistanceSum: number;
   /** Carrion meals eaten so far, and carrion energy lying in the world now. */
   carrionEatenTotal: number;
   carrionStock: number;

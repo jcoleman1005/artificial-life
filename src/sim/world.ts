@@ -31,6 +31,7 @@ import {
 import { computeWorldMetrics } from './metrics';
 import { MetricsHistory, type HistorySample, type SlowStats } from './history';
 import { inheritTag, tagSimilarity } from './tags';
+import { genomeDistance, hybridInviableChance } from './speciation';
 import { regionSeasonAt, seasonAt } from './seasons';
 import { CellHealth, fertileCells, type CellHealthState } from './grazing';
 import { WeatherSimulation, type WeatherExportState } from './weather';
@@ -159,6 +160,9 @@ const WORLD_COUNTERS = [
   'clutchesFailedTotal',
   'matingChildrenLostTotal',
   'matingEnergyLostTotal',
+  'hybridCrossesTotal',
+  'hybridChildrenLostTotal',
+  'matingGenomeDistanceSum',
   'carrionEatenTotal',
   'carrionUnitsRotted',
   'eggsLaidTotal',
@@ -218,6 +222,10 @@ export class World {
   public clutchesFailedTotal = 0;
   public matingChildrenLostTotal = 0;
   public matingEnergyLostTotal = 0;
+  /** Matings whose genomes were far enough apart to risk inviable children, children lost to incompatibility, and the summed genome distance of matings measured (with hybridIncompatibilityEnabled). */
+  public hybridCrossesTotal = 0;
+  public hybridChildrenLostTotal = 0;
+  public matingGenomeDistanceSum = 0;
   public carrionEatenTotal = 0;
   public carrionUnitsRotted = 0;
   /** Eggs laid, hatched and failed so far. */
@@ -280,6 +288,9 @@ export class World {
     this.clutchesFailedTotal = 0;
     this.matingChildrenLostTotal = 0;
     this.matingEnergyLostTotal = 0;
+    this.hybridCrossesTotal = 0;
+    this.hybridChildrenLostTotal = 0;
+    this.matingGenomeDistanceSum = 0;
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
     this.eggsLaidTotal = 0;
@@ -1549,6 +1560,15 @@ export class World {
     if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
     this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
 
+    // Reproductive isolation: how far apart the genomes are sets the chance each child is inviable (draws nothing when that is 0).
+    let inviableChance = 0;
+    if (config.hybridIncompatibilityEnabled && a.genome && b.genome) {
+      const distance = genomeDistance(a.genome, b.genome, config);
+      this.matingGenomeDistanceSum += distance;
+      inviableChance = hybridInviableChance(distance, config);
+      if (inviableChance > 0) this.hybridCrossesTotal++;
+    }
+
     const f = clutchSizeOf(carrier, config);
     const N = Math.floor(f);
     const remainder = f - N;
@@ -1569,9 +1589,16 @@ export class World {
       this.matingEnergyLostTotal += heatSurplus;
 
       for (let k = 0; k < viableCount; k++) {
+        if (inviableChance > 0 && this.prng.next() < inviableChance) {
+          // An incompatible child never forms; its share of the pool is lost as heat.
+          this.hybridChildrenLostTotal++;
+          this.matingChildrenLostTotal++;
+          this.matingEnergyLostTotal += perChild;
+          continue;
+        }
         if (k > 0) cells = free(carrier);
         if (cells.length === 0) {
-          const unplaced = viableCount - born;
+          const unplaced = viableCount - k;
           this.matingChildrenLostTotal += unplaced;
           this.matingEnergyLostTotal += perChild * unplaced;
           break; // no room for the rest
@@ -1992,6 +2019,9 @@ export class World {
       clutchesFailedTotal: this.clutchesFailedTotal,
       matingChildrenLostTotal: this.matingChildrenLostTotal,
       matingEnergyLostTotal: Number(this.matingEnergyLostTotal.toFixed(2)),
+      hybridCrossesTotal: this.hybridCrossesTotal,
+      hybridChildrenLostTotal: this.hybridChildrenLostTotal,
+      matingGenomeDistanceSum: Number(this.matingGenomeDistanceSum.toFixed(4)),
       carrionEatenTotal: this.carrionEatenTotal,
       carrionStock: Math.round(Array.from(this.carrion.values()).reduce((a, c) => a + c.stock, 0)),
       averageCarnivory:
