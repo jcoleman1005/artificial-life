@@ -329,6 +329,10 @@ export interface Organism {
   readonly carnivoreEfficiency?: number;
   /** Toxin detoxification efficiency (detoxGeneEnabled), 0..1. Neutralizes plant chemical defenses; charges metabolic upkeep. */
   readonly detox?: number;
+  /** Prey body armor / toughness (toughnessGeneEnabled), 0..1. Reduces attacker bite kill chance; charges mass upkeep. */
+  readonly toughness?: number;
+  /** Chemical defense / tissue toxicity (toxicityGeneEnabled), 0..1. Inflicts acute malaise on attacking predators and scavengers. */
+  readonly toxicity?: number;
   /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
   lastBiteYield?: number;
   /** Fat held now (state; only with fatEnabled). */
@@ -476,6 +480,8 @@ export interface CarrionPatch {
   stock: number;
   /** The tick it rots away (renewed when another body lands on it). */
   expiresAt: number;
+  /** Chemical defense / toxicity sequestered or inherited from the body (0..1). */
+  toxicity?: number;
 }
 
 /** An egg: a child waiting inert, in a cell, until conditions are favorable. */
@@ -487,6 +493,8 @@ export interface Egg {
   shell: number;
   /** The child it will hatch into (its energy is what the egg holds). */
   readonly child: Organism;
+  /** Chemical defense / toxicity inherited from the parent (0..1). */
+  toxicity?: number;
 }
 
 /** A fertile disc where food patches grow. Each may run its own season clock. */
@@ -706,6 +714,22 @@ export interface SimulationConfig {
   detoxMin: number;
   detoxMax: number;
   detoxUpkeepRate: number;
+  // Red Queen Phase 2: Predator–Prey Arms Race
+  predationDefenseEnabled: boolean; // Master switch for involuntary death cries and uncoupled carrion scent
+  toughnessGeneEnabled: boolean; // Prey armor evolves (reduces bite kill chance, charges mass upkeep)
+  toughnessFounder: number;
+  toughnessStep: number;
+  toughnessMin: number;
+  toughnessMax: number;
+  toughnessUpkeepRate: number; // Upkeep per tick per unit of (toughness * sizeFactor)
+  armorEffectiveness: number; // Max lethality reduction at toughness 1.0 (default 0.75)
+  armorDragCoeff: number; // Mechanical drag multiplier on movement from carrying armor
+  toxicityGeneEnabled: boolean; // Prey chemical defense evolves (inflicts acute malaise on attacking predators and scavengers)
+  toxicityFounder: number;
+  toxicityStep: number;
+  toxicityMin: number;
+  toxicityMax: number;
+  toxicityUpkeepRate: number; // Upkeep per tick per unit of (toxicity * sizeFactor)
   seed: number | string;
 }
 
@@ -829,6 +853,8 @@ export interface LifeMetrics {
   digestiveEfficiency: number | null;
   carnivoreEfficiency: number | null;
   detox: number | null;
+  toughness: number | null;
+  toxicity: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
@@ -861,8 +887,20 @@ export interface WorldSnapshot {
   readonly organismGrid: Int32Array;
   /** Indices into `organisms` of those that signalled last tick. */
   readonly signallers: readonly number[];
+  /** Active involuntary death pulses emitted last tick, or undefined when none. */
+  readonly deathPulses?: readonly DeathPulse[];
   /** Active weather state snapshot, or null when weather is off. */
   readonly weather?: WeatherSnapshot | null;
+}
+
+/** Involuntary acoustic/chemical shockwave broadcast when an organism is violently killed. */
+export interface DeathPulse {
+  readonly x: number;
+  readonly y: number;
+  readonly tag: number;
+  readonly size: number;
+  readonly power?: number;
+  readonly tick: number;
 }
 
 export type WeatherFrontType = 'rain_storm' | 'cold_front' | 'heat_wave';

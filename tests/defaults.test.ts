@@ -42,6 +42,8 @@ describe('Default world', () => {
       nutrientCycleEnabled: DEFAULT_CONFIG.nutrientCycleEnabled,
       plantDefenseEnabled: DEFAULT_CONFIG.plantDefenseEnabled,
       detoxGeneEnabled: DEFAULT_CONFIG.detoxGeneEnabled,
+      predationDefenseEnabled: DEFAULT_CONFIG.predationDefenseEnabled,
+      toughnessGeneEnabled: DEFAULT_CONFIG.toughnessGeneEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -82,9 +84,11 @@ describe('Default world', () => {
       weatherEnabled: true,
       // Nutrient cycle: on by default.
       nutrientCycleEnabled: true,
-      // Red Queen: Trophic plant defense and herbivore detox on by default.
+      // Red Queen: Trophic plant defense, herbivore detox, predation defense, and prey armor on by default.
       plantDefenseEnabled: true,
       detoxGeneEnabled: true,
+      predationDefenseEnabled: true,
+      toughnessGeneEnabled: true,
     });
   });
 

@@ -15,6 +15,7 @@ export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
   Abilities,
   CarrionPatch,
+  DeathPulse,
   DecisionOutcome,
   FoodPatch,
   FoodRegion,
@@ -56,6 +57,8 @@ export interface OrganismView {
   readonly digestiveEfficiency?: number;
   readonly carnivoreEfficiency?: number;
   readonly detox?: number;
+  readonly toughness?: number;
+  readonly toxicity?: number;
   readonly lastBiteYield?: number;
   /** Life-history genes the colour modes and card read (absent while their switch is off). */
   readonly metabolicRate?: number;
@@ -79,6 +82,7 @@ export interface EggView {
   readonly size: number;
   readonly parentId: string | null;
   readonly generation: number;
+  readonly toxicity?: number;
 }
 
 /** What the renderer reads from a world. Both World and the page's mirror satisfy it. */
@@ -92,6 +96,7 @@ export interface WorldView {
   readonly eggs: ReadonlyMap<string, EggView>;
   readonly foodRegions: readonly FoodRegion[];
   readonly obstacles: ReadonlySet<string>;
+  readonly deathPulses?: readonly DeathPulse[];
   readonly weather?: {
     readonly fronts: readonly WeatherFront[];
     getWind(x: number, y: number): { wx: number; wy: number };
@@ -123,6 +128,8 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.digestiveEfficiency !== undefined ? { digestiveEfficiency: org.digestiveEfficiency } : {}),
     ...(org.carnivoreEfficiency !== undefined ? { carnivoreEfficiency: org.carnivoreEfficiency } : {}),
     ...(org.detox !== undefined ? { detox: org.detox } : {}),
+    ...(org.toughness !== undefined ? { toughness: org.toughness } : {}),
+    ...(org.toxicity !== undefined ? { toxicity: org.toxicity } : {}),
     ...(org.lastBiteYield !== undefined ? { lastBiteYield: org.lastBiteYield } : {}),
     ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0
       ? { acquiredBrainUnits: org.circuit.effectiveAcquiredUnits }
@@ -205,6 +212,8 @@ export type FromWorker =
       readonly carrion: readonly CarrionPatch[];
       /** Eggs waiting for food (absent from older servers). */
       readonly eggs?: readonly EggView[];
+      /** Active involuntary death pulses emitted on violent kills. */
+      readonly deathPulses?: readonly DeathPulse[];
       /** Weather state for the overlay (absent when weather is off). */
       readonly weather?: {
         readonly fronts: readonly WeatherFront[];

@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D ballistic leaping trajectory & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D leaping hop & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -28,6 +28,21 @@ _Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscap
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
 
+## Versioning System & Ecological Seasons & Weather (built 2026-10-28)
+
+Instituted formal Semantic Versioning and replaced binary plenty/lean announcements with natural seasons and atmospheric weather (`src/version.ts`, `src/sim/seasons.ts`, `src/ui/peek-view.ts`, `src/ui/events-view.ts`, `src/ui/controls.ts`, `src/style.css`, tests `tests/version_and_seasons.test.ts`):
+- **Semantic Versioning System (v0.2.0 "Biosphere")**:
+  - Defined in `src/version.ts` and pinned in `package.json`.
+  - Prominently displayed in the Settings panel header (`<span class="settings-version-tag">v0.2.0</span>`) and modal footer, the bottom Stats panel column, and the HTML document title.
+- **Four Ecological Seasons & Atmospheric Weather Patterns**:
+  - Replaces binary "Plenty" / "Lean" announcements with four natural seasons: 🌱 Spring (renewal & regrowth), ☀️ Summer (peak fertility & warmth), 🍂 Autumn (seed maturation & cooling transition), and ❄️ Winter (lean period, frost, dormancy).
+  - Dynamic weather patterns derived from atmospheric simulation: 🌧️ Rainstorm, ❄️ Cold snap, ☀️ Heatwave, 💨 Gale, 🍃 Breezy, and 🌤️ Fair.
+  - Peek pill displays living conditions: e.g. `🌱 Spring · 🌧️ Rainstorm`, `☀️ Summer · 🌤️ Fair`, `❄️ Winter · ❄️ Cold snap`, and staggered regional alerts (`🌱 Spring · 🌤️ Fair (❄️ Winter: NW)`).
+  - Event feed reports ecological milestones (`❄️ Winter begins in the north-west`, `🌱 Spring arrives`) and atmospheric arrivals (`🌧️ Rainstorm rolls in`, `❄️ Cold snap sweeps in`, `☀️ Heatwave builds`).
+- **2.5D Leap Hop & Parabola Guide Clean-Up**:
+  - Removed the static trajectory parabola curve and ground dashed line across grid cells.
+  - Retained the complete 2.5D airborne jump physics ($Z(u) = 4 H_{\max} u (1-u)$): the organism body lifts upwards in screen $-Y$, an altitude-softened ground drop shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, and selection indicators elevate with the jumping unit.
+
 ## Responsive Landscape Desktop Layout (built 2026-10-28)
 
 Stacked landscape desktop presentation with collapsable dashboard on computer screens (`src/style.css`, `src/main.ts`, `src/ui/sheet.ts`):
@@ -42,7 +57,7 @@ Stacked landscape desktop presentation with collapsable dashboard on computer sc
   - *Expanded Trends & Inspector*: Trends charts and Genome Lineage Map automatically utilize the wide horizontal landscape width.
 - **Mobile Landscape Phone Preservation**: Viewports with `max-height: 500px` (e.g. Samsung Galaxy S21 in landscape) retain the side-panel layout, ensuring mobile touch ergonomics and vertical visibility remain intact.
 
-## Organism Adaptation Card & 2.5D Ballistic Leap Overhaul (built 2026-10-28)
+## Organism Adaptation Card & 2.5D Leap Overhaul (built 2026-10-28)
 
 Enhanced organism floating card and 2.5D leap physics rendering (`src/ui/organism-card.ts`, `src/style.css`, `src/render/renderer.ts`, tests `tests/organism-card.test.ts`):
 - **Evolutionary Trait Badges**: Replaced static dots (`diet`, `burn`, `breeding`) with category color-coded micro-pills with icons and quantitative values:
@@ -52,17 +67,17 @@ Enhanced organism floating card and 2.5D leap physics rendering (`src/ui/organis
   - *Dynamic Standout Traits*: Prioritized badges sorted by divergence from baseline: `🦘 Leaper`, `〰️ Squeezer`, `↗️ Diagonal`, `🛡️ Detox [X]%`, `👁️ Vision [R]`, `🦣 Heavy / 🐁 Dwarf`, `🔋 Fat Cap`, `🦴 Scavenge`, `🍃 Gut`, and `🧠 +[N] Neural`.
   - *Status Line*: Displays lineage depth, age, and activity (`Gen 14 · Age 320 · Grazing · carrying 2`).
   - *Egg Badges*: Direct inspection shows `[🥚 Egg]`, `[🛡️ Shell X.XX]`, `[📏 Size X.X×]`, and `[⚡ Energy X]`.
-- **2.5D Ballistic Leap Trajectory & Drop Shadow**:
-  - *Airborne Lift*: Organism body elevates vertically (screen $-Y$) along a true parabolic arc $Z(u) = 4 H_{\max} u (1-u)$ over the intervening cell.
+- **2.5D Leap Hop & Drop Shadow**:
+  - *Airborne Lift*: Organism body elevates vertically (screen $-Y$) along a true 2.5D hop arc $Z(u) = 4 H_{\max} u (1-u)$ over the intervening cell.
   - *Terrain Drop Shadow*: An elliptical ground shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, scaling and softening with altitude.
-  - *Stationary Trajectory Guide*: Ground track and trajectory arc are anchored to fixed origin and target grid cells with a landing arrowhead, eliminating drifting, wobbling, and sideways bowing distortion.
+  - *Clean Action Glyphs*: Trajectory guide parabola line removed per user request, drawing standard action indicators on the airborne organism body while preserving the 2.5D jump physics.
 - **Zero Simulation Physics Drift**: Visual and UI presentation layer only; deterministic invariants preserved.
 
 ## World Canvas Visual Enhancements (built 2026-10-28)
 
 High-fidelity canvas visual enhancements and secondary dashboard expansions (`src/render/renderer.ts`, `src/ui/inspector.ts`, `src/ui/metrics-view.ts`):
 - **Plant Chemical Defense Spines**: Radiates defensive thorn needles from leaf axils at LOD 1+ (`cellSize >= 5.5`) scaling with `plant.genome.defense`.
-- **Parabolic Leaping Arc & Drop Shadow**: Leaping over an adjacent organism draws a 2-cell ballistic quadratic trajectory curve with an intermediate cell ground shadow ellipse, visually lifting the leaper above intermediate terrain.
+- **2.5D Leaping Hop & Drop Shadow**: Leaping over an adjacent organism lifts the leaper vertically along a 2.5D arc above intermediate terrain with an altitude-softened ground drop shadow ellipse tracking underneath on the terrain floor.
 - **Downwind Signal Lobes**: Skews expanding signal diamond ripples along local atmospheric wind vectors ($(w_x, w_y)$), visually showing `weatherSignalDrift`.
 - **Carrion Decomposition Stages**: 3 distinct visual degradation states (fresh crimson carcass with pink fleshy core, rotting brown-red puddle with exposed bone, and weathered bleached bone fragments).
 - **Acute Toxin Malaise Spasm Glyph**: Grazing toxic plants without adequate detox ($T_{\text{eff}} > 0.3$) triggers a vibrating amber-magenta jagged distress ring surrounding the organism.

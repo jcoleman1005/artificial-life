@@ -166,6 +166,15 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
       score: 58 + org.detox! * 20,
     });
   }
+  if (config.toughnessGeneEnabled && (org.toughness ?? 0) >= 0.15) {
+    standouts.push({
+      icon: '🥋',
+      label: 'Armor',
+      value: `${Math.round(org.toughness! * 100)}%`,
+      category: 'defense',
+      score: 59 + org.toughness! * 20,
+    });
+  }
   const senseR = config.sensingGeneEnabled ? (org.sensingRadius ?? config.sensingRadius) : config.sensingRadius;
   if (senseR > 2.2) {
     standouts.push({
@@ -357,6 +366,18 @@ export function drawOrganismBlob(
     ctx.beginPath();
     ctx.ellipse(cx, cy, a + 1.4, b + 1.4, heading, 0, TAU);
     ctx.stroke();
+  }
+
+  // 7b. Toughness / armor carapace outer rim
+  const toughness = config.toughnessGeneEnabled ? (org.toughness ?? 0) : 0;
+  if (toughness > 0.1 && alive) {
+    ctx.strokeStyle = `hsla(38, 70%, 75%, ${(0.4 + 0.45 * toughness).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.4, r * (0.12 + 0.14 * toughness));
+    ctx.setLineDash([Math.max(2.5, r * 0.28), Math.max(1.5, r * 0.16)]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a + Math.max(1.2, r * 0.12), b + Math.max(1.2, r * 0.12), heading, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // 8. Carnivore mandibles / predator teeth at forward leading edge
@@ -600,6 +621,9 @@ export class OrganismCard {
     const badges: TraitBadge[] = [
       { icon: '🥚', label: 'Egg', value: '', category: 'breeding', score: 100 },
       { icon: '🛡️', label: 'Shell', value: egg.shell.toFixed(2), category: 'defense', score: 90 },
+      ...(egg.toxicity && egg.toxicity > 0
+        ? [{ icon: '☠️', label: 'Toxic', value: `${(egg.toxicity * 100).toFixed(0)}%`, category: 'defense' as const, score: 85 }]
+        : []),
       { icon: '📏', label: 'Size', value: `${(egg.size || 1).toFixed(1)}×`, category: 'morphology', score: 80 },
       { icon: '⚡', label: 'Energy', value: `${Math.round(egg.energy)}`, category: 'metabolism', score: 70 },
     ];

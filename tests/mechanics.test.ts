@@ -54,6 +54,8 @@ describe('Artificial Life Core Mechanics', () => {
       digestiveGeneEnabled: false,
       carnivoreGeneEnabled: false,
       detoxGeneEnabled: false,
+      toughnessGeneEnabled: false,
+      toxicityGeneEnabled: false,
       moveCost: 2.0,
       maxEnergy: 50,
       initialEnergy: 10,

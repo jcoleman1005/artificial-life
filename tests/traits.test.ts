@@ -51,6 +51,9 @@ describe('Carry capacity trait', () => {
       fatEnabled: false,
       sensingGeneEnabled: false,
       digestiveGeneEnabled: false,
+      detoxGeneEnabled: false,
+      toughnessGeneEnabled: false,
+      toxicityGeneEnabled: false,
       moveCost: 0,
     });
     const org = Array.from(world.organisms.values())[0];

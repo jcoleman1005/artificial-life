@@ -1,6 +1,7 @@
 import type { ColorMode, MotionStyle } from '../render/renderer';
 import type { FoodLayout, WorldSize } from '../sim/config';
 import type { SavedWorldInfo } from './saved-worlds';
+import { APP_VERSION, APP_CODENAME, APP_RELEASE_DATE } from '../version';
 
 export interface PlaybackCallbacks {
   onPlayPause: () => void;
@@ -28,6 +29,7 @@ export interface SettingsCallbacks {
   onNutrientCycleChange: (enabled: boolean) => void;
   onOvergrazingChange: (enabled: boolean) => void;
   onPredationChange: (enabled: boolean) => void;
+  onToughnessChange: (enabled: boolean) => void;
   onCarrionChange: (enabled: boolean) => void;
   onSexChange: (enabled: boolean) => void;
   onSeasonsChange: (enabled: boolean) => void;
@@ -53,6 +55,7 @@ export interface ExperimentToggles {
   overgrazingEnabled: boolean;
   carrionEnabled: boolean;
   predationEnabled: boolean;
+  toughnessGeneEnabled: boolean;
   sexEnabled: boolean;
   immigrationEnabled: boolean;
   plantsEnabled: boolean;
@@ -195,6 +198,7 @@ export class SettingsView {
         <h3>Behaviour <small>takes effect next tick</small></h3>
         ${segmented('Controller', 'controller', [['dials', 'Dials'], ['brain', 'Brain']], toggles.controller)}
         ${segmented('Predation', 'predation', onOff, toggles.predationEnabled ? 'on' : 'off')}
+        ${segmented('Prey armor', 'toughness', onOff, toggles.toughnessGeneEnabled ? 'on' : 'off')}
         ${segmented('Mating', 'mating', onOff, toggles.sexEnabled ? 'on' : 'off')}
         ${segmented('Carrion', 'carrion', onOff, toggles.carrionEnabled ? 'on' : 'off')}
         ${segmented('Sharing', 'sharing', onOff, toggles.sharingEnabled ? 'on' : 'off')}
@@ -236,6 +240,9 @@ export class SettingsView {
         <p class="setting-hint">A branch point saves this moment so you can come back and try something different.</p>
         <ul id="branch-list" class="branch-list"></ul>
       </section>
+      <footer class="settings-version-footer">
+        <span>Artificial Life Lab <strong>v${APP_VERSION}</strong> (${APP_CODENAME}) · ${APP_RELEASE_DATE}</span>
+      </footer>
     `;
     this.attachEvents();
   }
@@ -265,6 +272,7 @@ export class SettingsView {
     set('immigration', t.immigrationEnabled ? 'on' : 'off');
     set('controller', t.controller);
     set('predation', t.predationEnabled ? 'on' : 'off');
+    set('toughness', t.toughnessGeneEnabled ? 'on' : 'off');
     set('mating', t.sexEnabled ? 'on' : 'off');
     set('carrion', t.carrionEnabled ? 'on' : 'off');
     set('sharing', t.sharingEnabled ? 'on' : 'off');
@@ -330,6 +338,7 @@ export class SettingsView {
     this.bindSegment('immigration', (v) => cb.onImmigrationChange(v === 'on'));
     this.bindSegment('controller', (v) => cb.onControllerChange(v === 'brain' ? 'brain' : 'dials'));
     this.bindSegment('predation', (v) => cb.onPredationChange(v === 'on'));
+    this.bindSegment('toughness', (v) => cb.onToughnessChange(v === 'on'));
     this.bindSegment('mating', (v) => cb.onSexChange(v === 'on'));
     this.bindSegment('carrion', (v) => cb.onCarrionChange(v === 'on'));
     this.bindSegment('sharing', (v) => cb.onSharingChange(v === 'on'));

@@ -30,7 +30,9 @@ export type WorldEventBody =
   /** The first child of mating (the two parents' colour groups). */
   | { readonly kind: 'firstMating'; readonly groups: readonly [number, number] | null }
   /** An established colour group now eats mostly meat (mean carnivory >= MEAT_GROUP), or went back to plants. */
-  | { readonly kind: 'groupDiet'; readonly group: number; readonly diet: 'meat' | 'plants' };
+  | { readonly kind: 'groupDiet'; readonly group: number; readonly diet: 'meat' | 'plants' }
+  /** A new dynamic weather front rolled in across the world. */
+  | { readonly kind: 'weather'; readonly frontType: string; readonly intensity: number; readonly x: number; readonly y: number };
 
 export type WorldEvent = WorldEventBody & { readonly seq: number; readonly tick: number };
 
@@ -62,6 +64,7 @@ export class WorldEventDetector {
   private sawKill = false;
   private sawMating = false;
   private readonly meatGroups = new Set<number>();
+  private readonly seenFronts = new Set<number>();
 
   /**
    * Starts watching a world mid-run (e.g. a resumed save) without
@@ -92,6 +95,22 @@ export class WorldEventDetector {
       });
     }
     this.seasons = now;
+
+    // Weather: detect incoming atmospheric fronts (cold fronts, rain storms, heat waves)
+    if (world.weather && world.config.weatherEnabled) {
+      for (const f of world.weather.fronts) {
+        if (!this.seenFronts.has(f.id)) {
+          this.seenFronts.add(f.id);
+          found.push({ kind: 'weather', frontType: f.type, intensity: f.intensity, x: f.x, y: f.y });
+        }
+      }
+      if (this.seenFronts.size > 40) {
+        const live = new Set(world.weather.fronts.map((f) => f.id));
+        for (const id of this.seenFronts) {
+          if (!live.has(id)) this.seenFronts.delete(id);
+        }
+      }
+    }
 
     // Colour groups
     const counts = new Array<number>(GROUP_NAMES.length).fill(0);
