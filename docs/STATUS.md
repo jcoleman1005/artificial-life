@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D ballistic leaping trajectory & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-28 (Species detection; live brain viewer; growth, ageing and evolvable growth duration; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D ballistic leaping trajectory & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -27,6 +27,13 @@ _Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscap
 ## What exists (summary)
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
+
+## Species, brain viewer, growth (built 2026-10-28)
+
+- **Species detection** (observer; `src/sim/species.ts`, `docs/specs/species.md`): genome-distance clusters, stable ids, events, Species colour mode, Stats list, Trends chart. `speciesThreshold` 0.15 gave 13-53 short-lived ids in 2-3k ticks on seed 2; 0.2-0.25 gave 4-8. Decide the default.
+- **Live brain viewer** (observer; `src/sim/brain-trace.ts`, `src/ui/brain-view.ts`): Brain section in the Inspector. Neither it nor the species UI has been checked on the S21 / a 390px screen.
+- **Growth and ageing** (`growthEnabled`, `ageingEnabled`, on; `src/sim/growth.ts`, `docs/specs/growth.md`) with the `growthDuration` gene (trait 52). Brain input `maturity` is index 56 (57 inputs). Both switches off: fingerprint equals the pre-change one (`large dials d78a433f62a2b403 · large brain e753aec72830d61b`). Defaults on: `large dials 7cd20dc39ba2533a (pop 700, births 2423) · large brain 17a3d1f6dafd71ed (pop 692, births 2497)`. Quick look (2 seeds x 3000 ticks): fixed 100 = 1.20x, gene on = 1.06x of growth off; no extinctions. The 8-seed gate has NOT been run. The gene stayed at ~100 over 3000 ticks (null at that length). Ageing (4000/8000) is inert: lifespans are 65-250 ticks; rescale after a long-run age histogram.
+- **In progress**: inherited hatch maturity (`docs/specs/hatch-maturity.md`). Next: 8-seed growth gate, long run for `growthDuration` drift (server), threshold decision for species, phone check.
 
 ## Responsive Landscape Desktop Layout (built 2026-10-28)
 
