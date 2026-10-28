@@ -246,7 +246,8 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
   }, 30_000);
 
   it('switching DNA on mid-run encodes parents at their next birth and changes nothing', () => {
-    const legacy = new World({ ...SMALL, seed: 'dna-switch', dnaEnabled: false });
+    // The hybrid cost needs genomes, so it is off here: this test isolates DNA's own Stage 1 neutrality.
+    const legacy = new World({ ...SMALL, seed: 'dna-switch', dnaEnabled: false, hybridIncompatibilityEnabled: false });
     for (let t = 0; t < 60; t++) legacy.step();
     const dna = World.fromState({ ...legacy.exportState(), config: { ...legacy.config, dnaEnabled: true } });
     for (let t = 0; t < 140; t++) {
