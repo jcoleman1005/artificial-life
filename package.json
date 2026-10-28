@@ -21,11 +21,11 @@
     "server": "npm run build && npm run build:server && node dist-server/main.js",
     "server:start": "node dist-server/main.js"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.15.0",
     "typescript": "~5.8.3",
     "vite": "^6.3.5",
+    "vite-node": "^6.0.0",
     "vitest": "^3.1.3"
   }
 }

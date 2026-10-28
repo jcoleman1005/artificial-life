@@ -51,7 +51,7 @@ export function senseEnvironment(
   const nearbyIndices = NEARBY;
   nearbyIndices.length = 0;
 
-  const { gridHeight, organismGrid, obstacleGrid, foodGrid, carrionGrid } = snapshot;
+  const { gridHeight, organismGrid, obstacleGrid, foodGrid, carrionGrid, eggGrid } = snapshot;
 
   // Nearest of each kind, kept as numbers and turned into entities once at the end. Ties
   // go to the first cell in scan order (rows top to bottom, left to right), as strict `<` did.
@@ -109,7 +109,7 @@ export function senseEnvironment(
         foodValue = stock;
       }
 
-      const carrion = carrionGrid[cell];
+      const carrion = carrionGrid[cell] + (eggGrid ? eggGrid[cell] : 0);
       if (carrion > 0 && manhattanDist < minCarrionDist) {
         minCarrionDist = manhattanDist;
         carrDx = dx;

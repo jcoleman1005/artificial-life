@@ -740,6 +740,8 @@ const REGISTER_END = TraitId.memoryWeight0 + MEMORY_WEIGHT_COUNT;
 export function pointMutationRate(key: number, config: Readonly<SimulationConfig>): number {
   if (geneClassOf(key) !== GeneClass.trait) return config.brainMutationRate;
   const id = geneIndexOf(key);
+  const life = geneForTrait(id);
+  if (life) return life.enabled(config) ? config.traitMutationRate : 0;
   if (id >= TraitId.memoryWeight0) return id < REGISTER_END ? config.brainMutationRate : 0;
   switch (id) {
     case TraitId.tag:
@@ -792,6 +794,9 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
   const keys: number[] = [];
   for (let t = 0; t <= LAST_BODY_TRAIT; t++) keys.push(geneKey(GeneClass.trait, t));
   if (splitDiets(config)) keys.push(geneKey(GeneClass.trait, TraitId.herbivory));
+  for (const g of LIFE_GENES) {
+    if (g.enabled(config)) keys.push(geneKey(GeneClass.trait, g.traitId));
+  }
   for (let i = 0; i < MEMORY_WEIGHT_COUNT; i++) keys.push(geneKey(GeneClass.trait, TraitId.memoryWeight0 + i));
   const inputCount = config.weatherEnabled ? BRAIN_INPUT_COUNT : BASE_BRAIN_INPUT_COUNT;
   for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainSkip, i));
@@ -816,7 +821,13 @@ function slotsFor(config: Readonly<SimulationConfig>): number[] {
 /** The dose of a freshly inserted gene: small for summed traits and weights (so it nudges its slot), a random hue for a tag. */
 function randomDose(key: number, config: Readonly<SimulationConfig>, prng: PRNG): number {
   if (geneClassOf(key) === GeneClass.trait) {
-    switch (geneIndexOf(key)) {
+    const id = geneIndexOf(key);
+    const life = geneForTrait(id);
+    if (life) {
+      const step = life.step(config);
+      return Number(prng.nextGaussian(0, step).toFixed(3));
+    }
+    switch (id) {
       case TraitId.tag:
         return Number(prng.nextFloat(0, 360).toFixed(2));
       case TraitId.carryCapacity:
@@ -834,6 +845,10 @@ function randomDose(key: number, config: Readonly<SimulationConfig>, prng: PRNG)
         break;
     }
   }
+  if (geneClassOf(key) === GeneClass.brainOut) {
+    // Neutral inception: newly inserted output connections start small so they don't disrupt balanced policies
+    return Number(prng.nextGaussian(0, 0.05).toFixed(4));
+  }
   return Number(prng.nextGaussian(0, config.brainMutationStdDev).toFixed(4));
 }
 
@@ -845,7 +860,9 @@ function stepDose(key: number, dose: number, config: Readonly<SimulationConfig>,
   };
   if (geneClassOf(key) !== GeneClass.trait) return weight();
   const id = geneIndexOf(key);
-  if (id >= TraitId.memoryWeight0) return weight();
+  const life = geneForTrait(id);
+  if (life) return inheritLifeValue(dose, life, config, prng);
+  if (id >= TraitId.memoryWeight0) return id < REGISTER_END ? weight() : dose;
   const sign = () => (prng.next() < 0.5 ? -1 : 1);
   switch (id) {
     case TraitId.tag:
