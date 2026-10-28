@@ -34,6 +34,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Size physics (2026-10-28): fixed allometric exponents; energy cap is `maxEnergyOf` everywhere; corpse energy scales with size.
 - Tempo (2026-10-28, decided, not built): sub-step clock from metabolic rate and size, capped at 2 actions per tick, `tempoEnabled` switch; combat deferred until tempo and health are settled.
 - Wound load (2026-10-28, decided, not built): injury is one scalar per body (upkeep, impairment, energy-paid healing, size-scaled lethal ceiling); no hit-point pool.
+- Footprint space rule (2026-10-28, decided, not built): one body per cell; derived footprint radius draws large bodies overlapping and drives crowding pressure; squeeze and leap are size-gated.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
