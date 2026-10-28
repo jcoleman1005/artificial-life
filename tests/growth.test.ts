@@ -81,7 +81,8 @@ describe('Growth', () => {
   });
 
   it('newborns hatch at hatchMaturity, founders are grown, and a hatchling cannot hold more energy than its body', { timeout: 60000 }, () => {
-    const w = new World({ seed: 3, ageingEnabled: false });
+    // Hatch maturity gene off (stated): this checks the fixed hatchMaturity; the gene's own newborns are in tests/hatch-maturity.test.ts.
+    const w = new World({ seed: 3, ageingEnabled: false, hatchMaturityGeneEnabled: false });
     expect([...w.organisms.values()].every((o) => o.maturity === 1)).toBe(true);
     let sawBaby = false;
     const bad: string[] = [];
@@ -213,8 +214,9 @@ describe('Growth duration gene (trait 52)', () => {
 
   it('a faster grower matures sooner and has paid more heat in all; a slower one matures later and pays less', () => {
     // Isolated: alone, no food needed (energy topped up each tick), breeding impossible (huge threshold), ageing off.
+    // The hatch maturity gene is off here (stated): a grown subject can still breed late in the run, and its newborns' heat would depend on the gene's extra draws.
     const run = (duration: number) => {
-      const { world, org } = lone({ ...base, reproductionThreshold: 1e6, seasonLength: 0, windfallsEnabled: false }, { maturity: 0.35, growthDuration: duration });
+      const { world, org } = lone({ ...base, reproductionThreshold: 1e6, seasonLength: 0, windfallsEnabled: false, hatchMaturityGeneEnabled: false }, { maturity: 0.35, growthDuration: duration });
       let matureTick = -1;
       let t = 0;
       while ((world.organisms.get('solo')?.maturity ?? 1) < 1 && t < 5000) {

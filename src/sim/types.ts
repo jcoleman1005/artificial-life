@@ -331,6 +331,8 @@ export interface Organism {
   readonly detox?: number;
   /** Fed ticks to grow from maturity 0 to 1 (growthGeneEnabled with growthEnabled). Faster growth pays more heat in total; slower leaves the body small and unable to breed for longer. */
   readonly growthDuration?: number;
+  /** Maturity this organism's own newborns would start at (hatchMaturityGeneEnabled with growthEnabled), 0..1. A more developed newborn costs more of the parent's pool to launch. */
+  readonly hatchMaturity?: number;
   /** How grown the body is, 0..1 (state; only with growthEnabled; absent means grown, as in saves from before growth). */
   maturity?: number;
   /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
@@ -723,6 +725,10 @@ export interface SimulationConfig {
   growthDurationMax: number;
   growthDurationStep: number; // Size of one mutation step
   growthDurationCostExponent: number; // Heat per growing tick = growthCostPerTick × (growthTicks / duration)^exponent; above 1, faster growth costs more in total
+  hatchMaturityGeneEnabled: boolean; // With growth: newborn maturity is an inherited gene (trait 53) instead of the fixed hatchMaturity; launch cost scales with it
+  hatchMaturityMin: number;
+  hatchMaturityMax: number;
+  hatchMaturityStep: number; // Size of one mutation step; founders start at hatchMaturity
   ageingEnabled: boolean; // Upkeep rises with age past senescenceAge, and organisms die of old age at maxAge
   senescenceAge: number; // Age (ticks) at which upkeep starts to rise
   senescenceRate: number; // Upkeep multiplier added per tick past senescenceAge
@@ -877,6 +883,7 @@ export interface LifeMetrics {
   carnivoreEfficiency: number | null;
   detox: number | null;
   growthDuration: number | null;
+  hatchMaturity: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;

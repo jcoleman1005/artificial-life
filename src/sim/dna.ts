@@ -46,7 +46,7 @@ export const GeneClass = {
 } as const;
 export type GeneClass = (typeof GeneClass)[keyof typeof GeneClass];
 
-/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–52 are the life-history genes (lifehistory.ts). */
+/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–53 are the life-history genes (lifehistory.ts). */
 export const TraitId = {
   tag: 0,
   carryCapacity: 1,
@@ -65,6 +65,7 @@ export const TraitId = {
   carnivoreEfficiency: 50,
   detox: 51,
   growthDuration: 52,
+  hatchMaturity: 53,
 } as const;
 
 /** The phenotype a genome decodes to: every inherited trait except the policy dials. */
@@ -98,6 +99,7 @@ export const ABSENT_DEFAULTS = {
   carnivoreEfficiency: 0.5,
   detox: 0.1,
   growthDuration: 100,
+  hatchMaturity: 0.35,
 } as const;
 
 const scratch = new DataView(new ArrayBuffer(8));

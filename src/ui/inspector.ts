@@ -53,6 +53,7 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
     out.push(pill('Age', c.ageingEnabled ? `${o.age} of ${c.maxAge} ticks` : `${o.age} ticks`));
   }
   if (o.growthDuration !== undefined) out.push(pill('Growth', `${o.growthDuration.toFixed(0)} fed ticks to adult`));
+  if (o.hatchMaturity !== undefined) out.push(pill('Born at', `${Math.round(o.hatchMaturity * 100)}% grown`));
   return out.join('');
 }
 
@@ -127,6 +128,7 @@ export function genomeTraitRows(o: Readonly<Organism>, c: Readonly<SimulationCon
     carnivoreEfficiency: 'Meat digestion',
     detox: 'Detoxification',
     growthDuration: 'Growth duration',
+    hatchMaturity: 'Hatch maturity',
   };
   for (const g of LIFE_GENES) {
     add(lifeLabels[g.field] ?? g.field, g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);

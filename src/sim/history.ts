@@ -124,7 +124,7 @@ export interface GenomeSample {
 }
 
 /** Traits whose population distribution is kept as a five-bin histogram in each sample. */
-export const DIST_TRAITS = ['carnivory', 'reproThreshold', 'clutchSize', 'metabolicRate', 'growthDuration'] as const;
+export const DIST_TRAITS = ['carnivory', 'reproThreshold', 'clutchSize', 'metabolicRate', 'growthDuration', 'hatchMaturity'] as const;
 export type DistTrait = (typeof DIST_TRAITS)[number];
 export const DIST_BIN_COUNT = 5;
 /** Ticks between fresh brain-wiring and genome measurements; samples in between repeat the last (they move slowly). */

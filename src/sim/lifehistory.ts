@@ -34,7 +34,8 @@ export type LifeField =
   | 'digestiveEfficiency'
   | 'carnivoreEfficiency'
   | 'detox'
-  | 'growthDuration';
+  | 'growthDuration'
+  | 'hatchMaturity';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -167,6 +168,16 @@ export const LIFE_GENES: readonly LifeGene[] = [
     step: (c) => c.growthDurationStep,
     min: (c) => c.growthDurationMin,
     max: (c) => c.growthDurationMax,
+  },
+  {
+    // Maturity a newborn starts at (docs/specs/hatch-maturity.md). Founders carry the world's hatchMaturity.
+    field: 'hatchMaturity',
+    traitId: 53,
+    enabled: (c) => c.growthEnabled && c.hatchMaturityGeneEnabled,
+    founder: (c) => c.hatchMaturity,
+    step: (c) => c.hatchMaturityStep,
+    min: (c) => c.hatchMaturityMin,
+    max: (c) => c.hatchMaturityMax,
   },
 ];
 

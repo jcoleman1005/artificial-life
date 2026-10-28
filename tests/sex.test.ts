@@ -503,7 +503,8 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   });
 
   it('allocates viable children sequentially and dissipates sub-viable remainder without catastrophic cliff', () => {
-    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10 });
+    // Hatch maturity gene off: with it on, a mutated child's minimum differs from 10 (docs/specs/hatch-maturity.md), so this exact-arithmetic check isolates the fixed-minimum rule.
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10, hatchMaturityGeneEnabled: false });
     const [a, b] = pair(world, { energy: 50, investment: 0.2, clutchSize: 6 }, { energy: 50, investment: 0.2, clutchSize: 6 });
     world.step();
     expect(children(world)).toHaveLength(2); // pool 20 / minViable 10 = 2 viable children
