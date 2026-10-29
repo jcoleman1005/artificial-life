@@ -237,6 +237,24 @@ describe('No free energy from bodies', () => {
   });
 });
 
+describe('No free energy from bodies at any size', () => {
+  it('eating a newborn of a larger or smaller parent still returns less than making it', () => {
+    const c = DEFAULT_CONFIG;
+    for (const size of [c.sizeMin, 0.7, 1, 1.5, 2, c.sizeMax]) {
+      for (let e = c.reproductionThreshold * size; e <= c.maxEnergy * size; e++) {
+        const child = Math.floor(e * c.reproductionEnergyFraction);
+        expect(carrionFromBody(child, c, size)).toBeLessThan(child + c.reproductionMetabolismTax);
+      }
+    }
+  });
+
+  it('leaves more carrion from a bigger body, starved or killed', () => {
+    const c = DEFAULT_CONFIG;
+    expect(carrionFromBody(0, c, 2)).toBeCloseTo(2 * carrionFromBody(0, c, 1), 9);
+    expect(carrionFromBody(40, c, 2)).toBeGreaterThan(carrionFromBody(40, c, 1));
+  });
+});
+
 describe('Attacks', () => {
   it('kill adjacent prey that stays put, leaving carrion worth less than the prey held', () => {
     const world = quietWorld({ bitePowerMin: 0.2, attackCost: 2, carrionBodyEnergy: 10, carrionEfficiency: 0.7 });

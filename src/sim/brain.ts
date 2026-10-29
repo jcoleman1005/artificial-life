@@ -1,7 +1,7 @@
 import type { PRNG } from './prng';
 import { isDiagonalMove, isLeapAction, isMoveAction, unitDirectionOf } from './directions';
 import { carrionYield } from './traits';
-import { thresholdOf } from './lifehistory';
+import { maxEnergyOf, thresholdOf } from './lifehistory';
 import { carryCapacityOf, maturityOf } from './growth';
 import type {
   ActionScore,
@@ -316,7 +316,7 @@ function fillBrainFeatures(
     moveKin = (dx * px + dy * py) / Math.max(1, Math.sqrt(px * px + py * py));
   }
   const threshold = thresholdOf(organism, config);
-  const headroom = Math.max(1, config.maxEnergy - threshold);
+  const headroom = Math.max(1, maxEnergyOf(organism, config) - threshold);
 
   // Order must match BRAIN_INPUTS (checked by a test).
   let o = offset;

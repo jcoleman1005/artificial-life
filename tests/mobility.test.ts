@@ -1,3 +1,4 @@
+import { maxEnergyOf } from '../src/sim/lifehistory';
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
@@ -90,6 +91,7 @@ function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
     foodRegionCount: 0,
     controller: 'dials', // these tests exercise the dial policy
     weatherEnabled: false,
+    terrainEnabled: false, // exact move costs: rough ground would add to them (terrain has its own tests)
     ...overrides,
   });
 }
@@ -331,7 +333,7 @@ describe('All mobility options together', () => {
             const key = `${o.x},${o.y}`;
             if (cells.has(key)) violations.push(`overlap ${key}`);
             cells.add(key);
-            if (!(o.energy > 0 && o.energy <= w.config.maxEnergy)) violations.push(`energy ${o.energy}`);
+            if (!(o.energy > 0 && o.energy <= maxEnergyOf(o, w.config))) violations.push(`energy ${o.energy}`);
             if (w.obstacles.has(key)) violations.push(`on obstacle ${key}`);
             const d = o.recentHistory[0];
             if (d?.outcome === 'success') {

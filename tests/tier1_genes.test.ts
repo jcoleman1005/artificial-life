@@ -328,3 +328,18 @@ describe('Gene 5: carnivoreEfficiency (carrion and meat digestion)', () => {
     for (const o of world.organisms.values()) expect(o.carnivoreEfficiency).toBe(world.config.carnivoreFounder);
   });
 });
+
+describe('Energy cap scales with body size', () => {
+  it('does not clamp a large body to the unscaled maxEnergy at the end of a tick', () => {
+    const world = new World({ seed: 3, sizeGeneEnabled: true, initialOrganisms: 1 });
+    const org = [...world.organisms.values()][0];
+    org.size = 2;
+    org.reproThreshold = 95; // size 2 threshold 190: no birth this tick
+    org.energy = 180; // above config.maxEnergy (100), below the size-2 cap (200)
+    world.step();
+    const after = world.organisms.get(org.id);
+    expect(after).toBeDefined();
+    expect(after!.energy).toBeGreaterThan(150);
+    expect(after!.energy).toBeLessThanOrEqual(maxEnergyOf(after!, world.config));
+  });
+});
