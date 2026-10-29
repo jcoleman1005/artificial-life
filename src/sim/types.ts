@@ -588,6 +588,23 @@ export interface SimulationConfig {
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
   sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
+  elevationEnabled: boolean; // Plates, continents, sea, rivers and lakes (docs/decisions.md, Elevation and water); off draws nothing and changes nothing
+  elevationPlateCount: number; // Tectonic plates (about half continental)
+  elevationContinentalShare: number; // Share of the plates that are continental (high)
+  elevationSeaFraction: number; // Share of the map that is below sea level
+  elevationMinContinent: number; // Land fragments smaller than this many cells are flooded (the largest is always kept)
+  elevationNoise: number; // Amplitude of the height noise (0..1 of the height range)
+  elevationRidge: number; // Height of mountains where two continental plates meet (a coastal range is 40% of it)
+  elevationDeepThreshold: number; // Water this deep (0..1) cannot be crossed; shallower can be waded
+  elevationRiverFraction: number; // Share of land cells that carry a river (the strongest flows)
+  elevationSlopeUp: number; // Extra move cost per unit of height climbed (0..1 of the height range)
+  elevationSlopeDown: number; // Move cost saved per unit of height descended (at least 25% off)
+  elevationLapse: number; // Temperature lost at the highest peak (temperature runs -1..1)
+  elevationWadeDrag: number; // Extra move cost wading into the deepest shallow water, × √size
+  elevationWaterChill: number; // Temperature lost standing in water
+  elevationRiparianReach: number; // Cells from water over which the shore's wetness fades to nothing
+  elevationFertilityMean: number; // Average fertility of dry land (the soil map is scaled to this); the old disc world averaged about 0.6
+  elevationFertilityMin: number; // The poorest ground (bare rock, steep slopes), 0..1
   terrainEnabled: boolean; // Per-cell roughness and cover from seeded noise (docs/decisions.md, Terrain fields); off draws nothing and changes nothing
   terrainScale: number; // Cells per noise lattice step: larger gives broader patches
   terrainThreshold: number; // Noise below this is open ground (0..1); higher means less rough and sheltered ground

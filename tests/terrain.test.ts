@@ -55,8 +55,8 @@ describe('Terrain generation', () => {
 
   it('draws nothing from the simulation random stream, and is independent of the food regions', () => {
     // The same world with terrain off and on makes the same walls, food regions and founders.
-    const off = new World({ seed: 9, terrainEnabled: false });
-    const on = new World({ seed: 9, terrainEnabled: true });
+    const off = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 9, terrainEnabled: false });
+    const on = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 9, terrainEnabled: true });
     expect(Array.from(on.obstacles)).toEqual(Array.from(off.obstacles));
     expect(on.foodRegions).toEqual(off.foodRegions);
     expect(Array.from(on.organisms.keys())).toEqual(Array.from(off.organisms.keys()));
@@ -92,7 +92,7 @@ describe('Terrain physics', () => {
     // Two worlds from the same seed, one with a field of all-rough ground and one with all-open ground;
     // a single organism that is made to move pays the extra. Weather off so only terrain differs.
     const run = (rough: number) => {
-      const world = new World({
+      const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
         seed: 4, gridWidth: 12, gridHeight: 12, weatherEnabled: false, terrainEnabled: true, terrainWearEnabled: false, obstacleDensity: 0,
         initialOrganisms: 0, initialFoodPatches: 0, torporEnabled: false, ledgerCheckInterval: 1, controller: 'dials',
         plantsEnabled: false,
@@ -116,7 +116,7 @@ describe('Terrain physics', () => {
 
 describe('Terrain in saved worlds', () => {
   it('survives an export and restore, and a world from before terrain loads with it off', () => {
-    const a = new World({ seed: 6 });
+    const a = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 6 });
     for (let t = 0; t < 30; t++) a.step();
     const state = a.exportState();
     expect(state.terrain).toBeDefined();
@@ -132,7 +132,7 @@ describe('Terrain in saved worlds', () => {
   }, 60_000);
 
   it('keeps the energy books balanced with terrain on', () => {
-    const w = new World({ seed: 8, ledgerCheckInterval: 1 });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 8, ledgerCheckInterval: 1 });
     for (let t = 0; t < 300; t++) w.step();
     expect(w.ledgerReport()!.violations).toBe(0);
   }, 120_000);
@@ -186,7 +186,7 @@ describe('Terrain wear and recovery', () => {
 
   it('wears the ground in a real world, and not at all with wear switched off', () => {
     const worn = (terrainWearEnabled: boolean) => {
-      const w = new World({ seed: 12, terrainWearEnabled });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 12, terrainWearEnabled });
       for (let t = 0; t < 250; t++) w.step();
       return w.getTerrain()!.wornCells();
     };
@@ -195,7 +195,7 @@ describe('Terrain wear and recovery', () => {
   }, 120_000);
 
   it('a crossing leaves the cell entered smoother, and no other cell changes', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 4, gridWidth: 12, gridHeight: 12, weatherEnabled: false, terrainEnabled: true, obstacleDensity: 0,
       initialOrganisms: 0, initialFoodPatches: 0, torporEnabled: false, controller: 'dials', plantsEnabled: false,
     });
@@ -211,7 +211,7 @@ describe('Terrain wear and recovery', () => {
   });
 
   it('survives a save and restore bit for bit, worn ground included, and then continues identically', () => {
-    const a = new World({ seed: 21 });
+    const a = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 21 });
     for (let t = 0; t < 120; t++) a.step();
     expect(a.getTerrain()!.wornCells()).toBeGreaterThan(0);
     const b = World.fromState(a.exportState());

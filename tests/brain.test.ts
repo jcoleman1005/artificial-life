@@ -38,7 +38,7 @@ const ZERO_POLICY: PolicyWeights = {
 };
 
 function brainWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 11,
     gridWidth: 10,
     gridHeight: 10,
@@ -138,7 +138,7 @@ describe('Brain controller', () => {
 
   it('runs a whole world deterministically, keeping invariants', () => {
     const run = () => {
-      const w = new World({ seed: 'brains', controller: 'brain' });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'brains', controller: 'brain' });
       const violations: string[] = [];
       for (let t = 0; t < 400; t++) {
         w.step();
@@ -160,7 +160,7 @@ describe('Brain controller', () => {
   }, 60_000);
 
   it('can switch controller mid-run', () => {
-    const w = new World({ seed: 5 });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5 });
     for (let t = 0; t < 50; t++) w.step();
     w.config.controller = 'brain';
     for (let t = 0; t < 50; t++) w.step();

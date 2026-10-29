@@ -8,7 +8,7 @@ import { senseEnvironment } from '../src/sim/sensors';
 import type { Organism, PlantGenome, SimulationConfig } from '../src/sim/types';
 
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 'redqueen',
     gridWidth: 20,
     gridHeight: 20,

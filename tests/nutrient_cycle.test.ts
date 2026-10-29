@@ -53,7 +53,7 @@ describe('Nutrient Cycle', () => {
   });
 
   it('plant growth draws nutrients from soil', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 'nutrient-plant-draw',
       gridWidth: 20,
       gridHeight: 20,
@@ -93,7 +93,7 @@ describe('Nutrient Cycle', () => {
   });
 
   it('organism metabolism excretes nutrients underfoot', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 'nutrient-excretion',
       gridWidth: 10,
       gridHeight: 10,
@@ -122,7 +122,7 @@ describe('Nutrient Cycle', () => {
   });
 
   it('rotting carrion returns nutrients to soil', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 'nutrient-carrion',
       gridWidth: 10,
       gridHeight: 10,
@@ -159,7 +159,7 @@ describe('Nutrient Cycle', () => {
   });
 
   it('triggers local lean state and plant dormancy when soil nutrients drop below threshold', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 'nutrient-dormancy',
       gridWidth: 10,
       gridHeight: 10,
@@ -200,7 +200,7 @@ describe('Nutrient Cycle', () => {
   });
 
   it('restores soil nutrients and continues bit-identically after snapshot round trip', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 'nutrient-snap',
       gridWidth: 20,
       gridHeight: 20,

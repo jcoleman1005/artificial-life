@@ -152,7 +152,7 @@ describe('Fertility field', () => {
 
 describe('Fertility in a world', () => {
   it('a body crossing a cell wears that cell by the set amount, after the action phase', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 4, gridWidth: 12, gridHeight: 12, weatherEnabled: false, obstacleDensity: 0, foodRegionCount: 0,
       initialOrganisms: 0, initialFoodPatches: 0, torporEnabled: false, controller: 'dials', terrainEnabled: false,
     });
@@ -167,8 +167,8 @@ describe('Fertility in a world', () => {
   });
 
   it('is deterministic, and a save carries the live field so a restored world continues identically', () => {
-    const a = new World({ seed: 31 });
-    const b = new World({ seed: 31 });
+    const a = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 31 });
+    const b = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 31 });
     for (let t = 0; t < 150; t++) {
       a.step();
       b.step();
@@ -187,13 +187,13 @@ describe('Fertility in a world', () => {
   }, 120_000);
 
   it('with the switch off the fertility never changes, and a save from before it loads with it off', () => {
-    const w = new World({ seed: 32, fertilityDynamicEnabled: false });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 32, fertilityDynamicEnabled: false });
     for (let t = 0; t < 120; t++) w.step();
     expect(w.soil().fertility).toBe(w.soil().baseFertility);
     const state = w.exportState();
     expect(state.soilFertility).toBeUndefined();
 
-    const on = new World({ seed: 33 });
+    const on = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 33 });
     for (let t = 0; t < 30; t++) on.step();
     const { soilFertility: _field, ...old } = on.exportState();
     const { fertilityDynamicEnabled: _flag, ...oldConfig } = old.config as unknown as Record<string, unknown>;
@@ -203,7 +203,7 @@ describe('Fertility in a world', () => {
   }, 120_000);
 
   it('keeps the energy books balanced with dynamic fertility on', () => {
-    const w = new World({ seed: 34, ledgerCheckInterval: 1 });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 34, ledgerCheckInterval: 1 });
     for (let t = 0; t < 250; t++) w.step();
     expect(w.ledgerReport()!.violations).toBe(0);
   }, 120_000);

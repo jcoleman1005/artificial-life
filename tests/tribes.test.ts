@@ -68,7 +68,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
  * free movement, reproduction out of reach, no seasons or newcomers.
  */
 function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 3,
     gridWidth: 10,
     gridHeight: 10,
@@ -694,7 +694,7 @@ describe('Tribe metrics', () => {
 
 describe('Long run with sharing', () => {
   it('keeps energy and tags within bounds and never puts two organisms in one cell', () => {
-    const world = new World({ seed: 'tribes-invariants' });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'tribes-invariants' });
     const violations: string[] = [];
     for (let t = 0; t < 600; t++) {
       world.step();
@@ -730,7 +730,7 @@ describe('Rest drive (dials)', () => {
   });
 
   it('makes the brain the default controller, with dials still available', () => {
-    expect(new World({ seed: 1 }).config.controller).toBe('brain');
+    expect(new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 1 }).config.controller).toBe('brain');
     expect(emptyWorld().config.controller).toBe('dials');
   });
 });

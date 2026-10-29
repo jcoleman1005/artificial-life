@@ -15,7 +15,7 @@ const NEUTRAL: PolicyWeights = {
 
 /** A parent at (10, 10) keen to reproduce, in an empty world where only births cost energy. */
 function birthScene(dispersal: number, overrides: Partial<SimulationConfig> = {}, seed: string | number = 'disperse') {
-  const world = new World({
+  const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed,
     gridWidth: 21,
     gridHeight: 21,
@@ -135,7 +135,7 @@ describe('Dispersal (inherited birth distance)', () => {
   });
 
   it('keeps the world valid over a long run: no overlaps, nobody on rocks, positive energy', () => {
-    const world = new World({ seed: 'disperse-run', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'disperse-run', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 });
     for (let t = 0; t < 400; t++) {
       world.step();
       const cells = new Set<string>();

@@ -127,6 +127,6 @@ export class CellHealth {
 /** The cells overgrazing metrics and the matched-random control use: fertile ground proper (not the thin margins). */
 export function fertileCells(field: SoilField): number[] {
   const cells: number[] = [];
-  for (let i = 0; i < field.baseFertility.length; i++) if (field.baseFertility[i] >= 1) cells.push(i);
+  for (let i = 0; i < field.baseFertility.length; i++) if (field.baseFertility[i] >= 0.5) cells.push(i);
   return cells;
 }

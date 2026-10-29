@@ -1,3 +1,4 @@
+import type { ElevationField } from './elevation';
 import type { PRNG } from './prng';
 import { founderGenes, geneTableKeys, inheritGenes, type GeneTable } from './genes';
 import type {
@@ -97,7 +98,8 @@ export class SoilField {
   constructor(
     config: Readonly<SimulationConfig>,
     regions: readonly FoodRegion[],
-    obstacles: ReadonlySet<string>
+    obstacles: ReadonlySet<string>,
+    elevation: ElevationField | null = null
   ) {
     const { gridWidth: w, gridHeight: h } = config;
     this.fertility = new Float32Array(w * h);
@@ -110,10 +112,12 @@ export class SoilField {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
-        if (obstacles.has(`${x},${y}`)) continue;
+        if (obstacles.has(`${x},${y}`) || (elevation !== null && elevation.isWater(i))) continue; // rock and water grow nothing
         if (regions.length === 0) {
-          this.fertility[i] = 1;
-          this.nutrients[i] = 1;
+          // No discs: everywhere is equally fertile, or with elevation the soil quality made from water, slope and height.
+          const f0 = elevation !== null ? elevation.fertility[i] / 255 : 1;
+          this.fertility[i] = f0;
+          this.nutrients[i] = f0;
           continue;
         }
         let nearest = 0;
@@ -156,9 +160,9 @@ export class SoilField {
   public applyWear(config: Readonly<SimulationConfig>): void {
     const pending = this.wearPending;
     if (!pending || this.wearTouched.length === 0) return;
-    const floor = config.marginFertility;
     for (const i of this.wearTouched) {
-      if (this.baseFertility[i] > 0) this.fertility[i] = Math.max(floor, this.fertility[i] - pending[i] * 1e-6);
+      // The floor is the margin value, or the cell's own original fertility where that is poorer (bare ground).
+      if (this.baseFertility[i] > 0) this.fertility[i] = Math.max(Math.min(config.marginFertility, this.baseFertility[i]), this.fertility[i] - pending[i] * 1e-6);
       pending[i] = 0;
     }
     this.wearTouched = [];
@@ -181,10 +185,11 @@ export class SoilField {
     for (let i = 0; i < f.length; i++) {
       if (this.baseFertility[i] <= 0) continue;
       const nutrient = config.nutrientCycleEnabled ? this.nutrients[i] : this.baseFertility[i];
-      const target = Math.max(floor, Math.min(cap, nutrient));
+      const cellFloor = Math.min(floor, this.baseFertility[i]);
+      const target = Math.max(cellFloor, Math.min(cap, nutrient));
       const wet = moisture ? Math.max(0, (moisture[i] - 128) / 127) : 0;
       const next = f[i] + rebuild * (target - f[i]) + wetRate * wet * (cap - f[i]);
-      f[i] = Math.max(floor, Math.min(cap, next));
+      f[i] = Math.max(cellFloor, Math.min(cap, next));
     }
     this.version++;
   }

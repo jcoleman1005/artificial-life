@@ -12,6 +12,7 @@ import type { WorldEvent } from './events';
 import type { HeatmapKind } from './activity';
 import type { AncestorNode } from './lineage';
 import type { TerrainField, TerrainState } from './terrain';
+import type { ElevationField, ElevationState } from './elevation';
 export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
   Abilities,
@@ -107,6 +108,8 @@ export interface WorldView {
   readonly obstacles: ReadonlySet<string>;
   /** Roughness and cover per cell (null or absent with terrain off). */
   readonly terrain?: TerrainField | null;
+  /** Continents, sea, rivers and lakes (null or absent with elevation off). */
+  readonly elevation?: ElevationField | null;
   readonly deathPulses?: readonly DeathPulse[];
   readonly weather?: {
     readonly fronts: readonly WeatherFront[];
@@ -217,6 +220,8 @@ export interface WorldStatic {
   readonly obstacles: readonly string[];
   /** Terrain fields (absent with terrain off). */
   readonly terrain?: TerrainState;
+  /** Elevation and water (absent with elevation off); static for the run. */
+  readonly elevation?: ElevationState;
   readonly foodRegions: readonly FoodRegion[];
   /** Recent world events, oldest first (the feed starts from these). */
   readonly events: readonly WorldEvent[];

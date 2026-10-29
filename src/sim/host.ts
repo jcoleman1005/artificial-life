@@ -295,7 +295,8 @@ export class SimulationHost {
     const message: FromWorker = {
       kind: 'static',
       config: { ...world.config },
-      obstacles: Array.from(world.obstacles),
+      obstacles: world.rocks(),
+      ...(world.getElevation() ? { elevation: world.getElevation()!.exportView() } : {}),
       ...(world.getTerrain() ? { terrain: world.getTerrain()!.exportState(true) } : {}),
       foodRegions: world.foodRegions.map((r) => ({ ...r })),
       events: [...this.events.recentEvents()],

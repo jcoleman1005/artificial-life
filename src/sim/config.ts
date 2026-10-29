@@ -80,6 +80,23 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   attackCost: 2,
   bitePowerMin: 0.2,
   sexEnabled: true,
+  elevationEnabled: true, // off reproduces the world without continents (the control arm)
+  elevationPlateCount: 6, // three continental and three oceanic plates
+  elevationContinentalShare: 0.5,
+  elevationSeaFraction: 0.38, // about 38% of the map is ocean, leaving large continents
+  elevationMinContinent: 150, // fragments below this many cells are flooded
+  elevationNoise: 0.12,
+  elevationRidge: 0.25,
+  elevationDeepThreshold: 0.2, // deeper than a fifth of the depth range cannot be crossed
+  elevationRiverFraction: 0.03,
+  elevationSlopeUp: 5, // a steep step of 0.1 of the height range costs 50% more
+  elevationSlopeDown: 2, // and the same step down saves 20%
+  elevationLapse: 0.4, // the highest peaks are 0.4 colder
+  elevationWadeDrag: 1, // the deepest wadeable water doubles a size-1 body's move cost
+  elevationWaterChill: 0.25, // standing in water is 0.25 colder
+  elevationRiparianReach: 5, // wetness fades out over five cells from water
+  elevationFertilityMean: 0.6, // about the old disc world's total food, now spread by water, slope and height
+  elevationFertilityMin: 0.04,
   terrainEnabled: true, // off reproduces the world without terrain (the control arm)
   terrainScale: 8, // patches about 8 cells across on the 60×60 grid
   terrainThreshold: 0.5, // about half of the ground is open

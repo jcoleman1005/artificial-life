@@ -93,7 +93,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
  * are unchanged (tests/defaults.test.ts).
  */
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 'sex',
     gridWidth: 12,
     gridHeight: 12,
@@ -579,8 +579,8 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   });
 
   it('with clutchGeneEnabled false: no clutch field, no clutch gene, and no extra PRNG draws', () => {
-    const off = new World({ seed: 5, clutchGeneEnabled: false, initialOrganisms: 5 });
-    const on = new World({ seed: 5, initialOrganisms: 5 });
+    const off = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5, clutchGeneEnabled: false, initialOrganisms: 5 });
+    const on = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5, initialOrganisms: 5 });
     const clutchKey = geneKey(GeneClass.trait, 46);
     for (const o of off.organisms.values()) {
       expect(o.clutchSize).toBeUndefined();

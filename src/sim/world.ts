@@ -1,5 +1,6 @@
 import { LineageTracker, type AncestorNode } from './lineage';
 import { EnergyLedger, type LedgerReport } from './ledger';
+import { ElevationField, elevationTemperature, generateElevation, slopeMoveFactor, wadeMoveFactor } from './elevation';
 import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor, type TerrainState } from './terrain';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
@@ -286,6 +287,10 @@ export class World {
   public weather: WeatherSimulation | null = null;
   /** Roughness and cover per cell; made on first use while terrainEnabled (see getTerrain). */
   private terrainField: TerrainField | null = null;
+  /** Continents, sea, rivers and lakes; made on first use while elevationEnabled (see getElevation). */
+  private elevationField: ElevationField | null = null;
+  /** Cells of deep water, which are also in `obstacles` (nothing can cross them yet); the page draws these as water, not rock. */
+  public readonly deepWater = new Set<string>();
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -348,6 +353,8 @@ export class World {
     this.cellHealth = this.config.overgrazingEnabled ? new CellHealth(this.config.gridWidth * this.config.gridHeight) : null;
     this.weather = this.config.weatherEnabled ? new WeatherSimulation(this.config.gridWidth, this.config.gridHeight) : null;
     this.terrainField = null;
+    this.elevationField = null;
+    this.deepWater.clear();
     this.lineageTracker = new LineageTracker();
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -361,13 +368,24 @@ export class World {
 
     this.prng.reset();
 
-    // 1. Generate obstacles (terrain barriers)
+    // 0. Continents, sea, rivers and lakes (own random stream); deep water cannot be crossed, so it counts as an obstacle.
     const { gridWidth, gridHeight, obstacleDensity } = this.config;
+    const elevation = this.getElevation();
+    if (elevation) {
+      for (let i = 0; i < gridWidth * gridHeight; i++) {
+        if (!elevation.isDeep(i, this.config)) continue;
+        const key = `${i % gridWidth},${Math.floor(i / gridWidth)}`;
+        this.obstacles.add(key);
+        this.deepWater.add(key);
+      }
+    }
+
+    // 1. Generate obstacles (terrain barriers); rocks only stand on dry ground
     for (let y = 0; y < gridHeight; y++) {
       for (let x = 0; x < gridWidth; x++) {
         // Keep a clear border to prevent instant edge entrapment
         if (x > 1 && x < gridWidth - 2 && y > 1 && y < gridHeight - 2) {
-          if (this.prng.next() < obstacleDensity) {
+          if (this.prng.next() < obstacleDensity && !this.isWet(x, y)) {
             this.obstacles.add(`${x},${y}`);
           }
         }
@@ -400,7 +418,7 @@ export class World {
       const y = this.prng.nextInt(0, gridHeight - 1);
       const key = `${x},${y}`;
 
-      if (!this.obstacles.has(key) && !occupiedCells.has(key)) {
+      if (!this.obstacles.has(key) && !occupiedCells.has(key) && !this.isWet(x, y)) {
         occupiedCells.add(key);
         const organism = this.createFounder(x, y);
         this.organisms.set(organism.id, organism);
@@ -420,6 +438,8 @@ export class World {
    * when seasons are staggered. Draws nothing from the PRNG when regions are off.
    */
   private createFoodRegions(): void {
+    // With continents there are no fertile discs: fertility comes from the soil map (water, slope, height).
+    if (this.getElevation()) return;
     const { foodRegionCount: count, foodRegionRadius: radius, gridWidth, gridHeight } = this.config;
     const marginX = Math.floor(Math.min(radius, gridWidth / 4));
     const marginY = Math.floor(Math.min(radius, gridHeight / 4));
@@ -466,7 +486,9 @@ export class World {
       if (x < 0 || x >= gridWidth || y < 0 || y >= gridHeight) return false;
     }
     const key = `${x},${y}`;
-    if (this.obstacles.has(key) || this.foodPatches.has(key)) return false;
+    if (this.obstacles.has(key) || this.foodPatches.has(key) || this.isWet(x, y)) return false;
+    // With continents a new patch is accepted in proportion to the soil's fertility, so food starts on good ground.
+    if (this.getElevation() && this.foodRegions.length === 0 && this.prng.next() >= this.soil().baseFertility[y * gridWidth + x]) return false;
     if (this.config.plantsEnabled) {
       // A founder plant instead of a patch, starting with the patch's stock.
       const plant = createPlant(this.plantCounters, founderGenome(this.prng, this.config), this.config.foodPatchInitialStock, this.tick, null);
@@ -492,7 +514,7 @@ export class World {
 
   /** Soil fertility and season regions, built once the terrain and regions exist. */
   public soil(): SoilField {
-    this.soilField ??= new SoilField(this.config, this.foodRegions, this.obstacles);
+    this.soilField ??= new SoilField(this.config, this.foodRegions, this.obstacles, this.getElevation());
     return this.soilField;
   }
 
@@ -707,11 +729,21 @@ export class World {
     for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
     // Saves from before dynamic fertility load with it off (their fertility was the fixed map).
     if (!state.soilFertility && (state.config as Partial<SimulationConfig>).fertilityDynamicEnabled === undefined) world.config.fertilityDynamicEnabled = false;
+    // Saves from before elevation load with it off (their world had no continents).
+    if ((state.config as Partial<SimulationConfig>).elevationEnabled === undefined) world.config.elevationEnabled = false;
     // Saves from before terrain load with it off (their world was made without it).
     if (!state.terrain && (state.config as Partial<SimulationConfig>).terrainEnabled === undefined) world.config.terrainEnabled = false;
     world.terrainField = state.terrain ? TerrainField.fromState(state.terrain, world.config) : null;
     world.obstacles.clear();
     for (const key of state.obstacles) world.obstacles.add(key);
+    world.elevationField = null;
+    world.deepWater.clear();
+    const restoredElevation = world.getElevation(); // regenerated from the seed: static for the run
+    if (restoredElevation) {
+      for (let i = 0; i < world.config.gridWidth * world.config.gridHeight; i++) {
+        if (restoredElevation.isDeep(i, world.config)) world.deepWater.add(`${i % world.config.gridWidth},${Math.floor(i / world.config.gridWidth)}`);
+      }
+    }
     world.foodRegions.length = 0;
     world.foodRegions.push(...state.foodRegions.map((r) => ({ ...r })));
     world.foodPatches.clear();
@@ -1129,6 +1161,7 @@ export class World {
     const pendingMatings: { organism: Organism; mateId: string }[] = [];
 
     const terrain = this.getTerrain();
+    const elevation = this.getElevation();
     // Wear from this tick's moves and bites, applied after all actions so no body is affected by the order they act in.
     const wearing = terrain !== null && this.config.terrainWearEnabled;
     // Soil fertility wears from the same moves and from plant bites (windfalls are not soil).
@@ -1147,7 +1180,9 @@ export class World {
         const season = seasonAt(this.tick, this.config)?.season ?? null;
         const temp = this.weather.getTemperature(organism.x, organism.y, season);
         // Cover shelters a body from the swing in temperature.
-        const felt = terrain ? temp * coverExposure(terrain.coverAt(organism.x, organism.y), this.config) : temp;
+        // Height and standing in water change the temperature a body feels (within the temperature range).
+        const here = elevation ? Math.max(-1, Math.min(1, temp + elevationTemperature(organism.y * this.config.gridWidth + organism.x, elevation, this.config))) : temp;
+        const felt = terrain ? here * coverExposure(terrain.coverAt(organism.x, organism.y), this.config) : here;
         metabolism *= thermalUpkeepFactor(organism, felt, this.config);
       }
       // Resting saves upkeep in proportion to torpor depth.
@@ -1350,8 +1385,14 @@ export class World {
             cost *= (mudDrag * windMultiplier);
           }
           // The cell entered: rough ground costs more to enter, more for a larger footprint, and crossings wear it.
-          const entered = terrain || fertilityOn ? (chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined)) : undefined;
+          const entered = terrain || fertilityOn || elevation ? (chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined)) : undefined;
           if (terrain && entered) cost *= roughnessMoveFactor(terrain.roughnessAt(entered.x, entered.y), sizeOf(organism, this.config), this.config);
+          // Slope and wading: climbing costs more, wading into water costs more for a larger footprint.
+          if (elevation && entered) {
+            const from = startCell.y * this.config.gridWidth + startCell.x;
+            const to = entered.y * this.config.gridWidth + entered.x;
+            cost *= slopeMoveFactor(from, to, elevation, this.config) * wadeMoveFactor(to, sizeOf(organism, this.config), elevation, this.config);
+          }
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
@@ -1992,6 +2033,26 @@ export class World {
     return stored;
   }
 
+  /** Continents, sea, rivers and lakes, made on first use (from the world's seed) while elevationEnabled; null when it is off. */
+  public getElevation(): ElevationField | null {
+    if (!this.config.elevationEnabled) return null;
+    if (!this.elevationField || this.elevationField.width !== this.config.gridWidth || this.elevationField.height !== this.config.gridHeight) {
+      this.elevationField = generateElevation(this.config);
+    }
+    return this.elevationField;
+  }
+
+  /** Whether a cell is under water (deep or shallow); always false without elevation. */
+  public isWet(x: number, y: number): boolean {
+    const e = this.elevationField ?? this.getElevation();
+    return e !== null && e.isWater(y * this.config.gridWidth + x);
+  }
+
+  /** The rocks only: the obstacles without the deep water, which the page draws as water. */
+  public rocks(): string[] {
+    return Array.from(this.obstacles).filter((k) => !this.deepWater.has(k));
+  }
+
   /** The terrain fields, made on first use (from the world's seed) while terrainEnabled; null when it is off. */
   public getTerrain(): TerrainField | null {
     if (!this.config.terrainEnabled) return null;
@@ -2143,7 +2204,7 @@ export class World {
   private placeWindfall(): void {
     const { gridWidth, gridHeight, windfallUnits, windfallPatches, windfallLifetime } = this.config;
     const free = (x: number, y: number) =>
-      x >= 0 && y >= 0 && x < gridWidth && y < gridHeight && !this.obstacles.has(`${x},${y}`) && !this.foodPatches.has(`${x},${y}`);
+      x >= 0 && y >= 0 && x < gridWidth && y < gridHeight && !this.obstacles.has(`${x},${y}`) && !this.foodPatches.has(`${x},${y}`) && !this.isWet(x, y);
     for (let attempt = 0; attempt < 30; attempt++) {
       const cx = this.prng.nextInt(0, gridWidth - 1);
       const cy = this.prng.nextInt(0, gridHeight - 1);
@@ -2368,7 +2429,7 @@ export class World {
         const x = this.prng.nextInt(0, gridWidth - 1);
         const y = this.prng.nextInt(0, gridHeight - 1);
         const key = `${x},${y}`;
-        if (this.obstacles.has(key) || occupied.has(key)) continue;
+        if (this.obstacles.has(key) || occupied.has(key) || this.isWet(x, y)) continue;
         const immigrant = this.createFounder(x, y);
         this.ledger.immigrants += immigrant.energy + (immigrant.fat ?? 0);
         this.organisms.set(immigrant.id, immigrant);

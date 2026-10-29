@@ -64,7 +64,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
 
 /** An empty world where only movement costs energy, with all mobility options on (organisms here hold all abilities by default). */
 function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 21,
     gridWidth: 12,
     gridHeight: 12,
@@ -320,7 +320,7 @@ describe('All mobility options together', () => {
   it('keeps invariants and stays deterministic over a long run (both controllers)', async () => {
     for (const controller of ['dials', 'brain'] as const) {
       const run = async () => {
-        const w = new World({ seed: 'mobility', controller, leapEnabled: true });
+        const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'mobility', controller, leapEnabled: true });
         const violations: string[] = [];
         const kinds = new Set<string>();
         for (let t = 0; t < 500; t++) {
