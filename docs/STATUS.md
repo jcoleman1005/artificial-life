@@ -175,6 +175,8 @@ Not targets to hardcode: conditions to build so they *can* happen, then watch.
 
 ## Physics build order (agreed 2026-10-29; supersedes nothing in the Roadmap below, it orders the physics decisions)
 
+The quantities, laws and the gene-fit test are in `docs/specs/physics.md`; this section only orders the implementation.
+
 Ranked by protection, phone cost and what each unlocks. The decisions themselves are in `docs/decisions.md`. Rules for every item: a `...Enabled` switch (the control arm), a perf check against the S21 profile before it ships on by default, a Parameter-log entry for any new constant, a matched on/off experiment, a new fingerprint recorded here, and `npm run verify`.
 
 **Phone baseline (Termux, 2026-10-28, `docs/findings.md`):** ~177 µs per organism-tick, ~2.9× the dev container; at ~800 organisms single ticks already take 130–172 ms against a 167 ms budget at 1×. Features that add per-organism work default OFF for the phone profile unless the optimisation pass buys headroom.
@@ -195,10 +197,11 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 | 9 | Line of sight inside the sensing window | The most expensive item on the phone; server first, phone off by default unless within the ~15% budget | high | Decided, conditional on the budget |
 | 10 | Tempo: sub-step clock from metabolic rate and size, capped at 2 actions per tick | Biggest engine change and a cost multiplier; server only | high | Decided; `tempoEnabled` off for the phone profile |
 
-**Left as is or held (revisit after rank 3):**
-- Weather coupling (rain drag and headwind scaled by body): held until the baseline run shows whether wind and mud drive selection.
-- Food physics (bite size scaling, handling time): left as is; no evidence a one-unit bite limits anything.
-- Terrain types (movement cost, shelter, habitat): not decided. It is the likely precondition for habitat specialisation and the colour-group split, so reconsider it after rank 3.
+**Open hook points (reopened 2026-10-29; decide with `docs/specs/physics.md` section 5, slot in after rank 3):**
+- Weather acting through the body (rain drag, headwind, shape-scaled heat).
+- Food physics (bite size by body mass, carry as a mass limit, handling time).
+- Terrain types (movement cost, shelter, habitat); the likely precondition for habitat specialisation and the colour-group split.
+- Persistent signal layer (pheromone trails; roadmap item 15).
 - Senescence (declining wound ceiling and healing with age): deferred until growth is built.
 
 **Re-rank rule:** after rank 3, reorder ranks 4–10 by what the long runs show. Do not build anything from rank 9 or 10 on the phone profile before the Termux benchmark is repeated on the optimised branch.
