@@ -24,6 +24,8 @@ export interface TerrainState {
   readonly format?: 2;
   readonly roughness: readonly number[];
   readonly cover: readonly number[];
+  /** The terrain before any wear, for a page that shows what has worn (sent once with the static data; never saved). */
+  readonly original?: { readonly roughness: readonly number[]; readonly cover: readonly number[] };
 }
 
 /**
@@ -111,9 +113,25 @@ export class TerrainField {
     this.version++;
   }
 
-  /** The current fields only; the original is regenerated from the seed. */
-  public exportState(): TerrainState {
-    return { width: this.width, height: this.height, format: 2, roughness: Array.from(this.roughness), cover: Array.from(this.cover) };
+  /** The current fields only (saves); the original is regenerated from the seed. With `withOriginal`, the original too (for the page). */
+  public exportState(withOriginal = false): TerrainState {
+    return {
+      width: this.width,
+      height: this.height,
+      format: 2,
+      roughness: Array.from(this.roughness),
+      cover: Array.from(this.cover),
+      ...(withOriginal ? { original: { roughness: Array.from(this.baseRoughness), cover: Array.from(this.baseCover) } } : {}),
+    };
+  }
+
+  /** How worn a cell is, 0 (as first made) to 1 (all of its roughness and cover gone): the larger of the two losses, each as a share of the original. */
+  public wear01(index: number): number {
+    const br = this.baseRoughness[index];
+    const bc = this.baseCover[index];
+    const lr = br > 0 ? (br - this.roughness[index]) / br : 0;
+    const lc = bc > 0 ? (bc - this.cover[index]) / bc : 0;
+    return Math.max(0, Math.min(1, Math.max(lr, lc)));
   }
 
   /** Current fields from a saved state, with the original regenerated from the world's seed. */
@@ -131,11 +149,19 @@ export class TerrainField {
   }
 
   /** The current fields for a page that only draws them (no original kept, so no recovery to run). */
-  public static forView(state: TerrainState): TerrainField {
+  public static forView(state: TerrainState, original?: { readonly roughness: Uint16Array; readonly cover: Uint16Array }): TerrainField {
     const scale = state.format === 2 ? 1 : 257;
     const roughness = Uint16Array.from(state.roughness, (v) => v * scale);
     const cover = Uint16Array.from(state.cover, (v) => v * scale);
-    return new TerrainField(state.width, state.height, roughness, cover, roughness.slice(), cover.slice());
+    const given = state.original;
+    const baseRoughness = given ? Uint16Array.from(given.roughness, (v) => v * scale) : (original?.roughness ?? roughness.slice());
+    const baseCover = given ? Uint16Array.from(given.cover, (v) => v * scale) : (original?.cover ?? cover.slice());
+    return new TerrainField(state.width, state.height, roughness, cover, baseRoughness, baseCover);
+  }
+
+  /** The original fields, so a page can keep them across updates that carry only the current ones. */
+  public originalFields(): { readonly roughness: Uint16Array; readonly cover: Uint16Array } {
+    return { roughness: this.baseRoughness, cover: this.baseCover };
   }
 
   /** Fresh terrain: the original, with a separate copy as the current. */

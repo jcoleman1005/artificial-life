@@ -194,7 +194,7 @@ export class SimulationClient implements WorldView {
       case 'frame': {
         this.events.beforeFrame();
         this.tick = message.tick;
-        if (message.terrain) this.terrain = TerrainField.forView(message.terrain);
+        if (message.terrain) this.terrain = TerrainField.forView(message.terrain, this.terrain?.originalFields());
         this.organisms = new Map(message.organisms.map((o) => [o.id, o]));
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));

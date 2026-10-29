@@ -40,6 +40,7 @@ const OVERLAYS: readonly (readonly [OverlayMode, string, string])[] = [
   ['senses', 'Senses & signals', 'sight, signal reach, ripples'],
   ['trails', 'Trails', 'where they just went'],
   ['weather', 'Weather', 'rain, wind, temperature fronts'],
+  ['terrain', 'Terrain', 'rough, cover and worn paths'],
   ['crowding', 'Crowding', 'blocked moves'],
   ['deaths', 'Deaths', 'where they die'],
   ['feeding', 'Feeding', 'where they eat'],

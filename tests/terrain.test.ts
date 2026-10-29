@@ -231,4 +231,22 @@ describe('Terrain wear and recovery', () => {
     const restored = TerrainField.fromState(state, createConfig({ seed: 5 }));
     expect(restored.roughness[10]).toBe(bytes[10] * 257);
   });
+
+  it('reports how worn a cell is against the original, and the page can keep the original across updates', () => {
+    const f = field();
+    expect(f.wear01(3)).toBe(0);
+    for (let i = 0; i < 100; i++) f.trample(3, 1, cfg);
+    const w = f.wear01(3);
+    expect(w).toBeGreaterThan(0.2);
+    expect(w).toBeLessThan(1);
+    expect(field(0, 0).wear01(3)).toBe(0); // open ground has nothing to wear
+
+    // The static message carries the original; later updates carry only the current fields.
+    const first = TerrainField.forView(f.exportState(true));
+    expect(first.wear01(3)).toBeCloseTo(w, 6);
+    f.trample(3, 1, cfg);
+    const next = TerrainField.forView(f.exportState(), first.originalFields());
+    expect(next.wear01(3)).toBeCloseTo(f.wear01(3), 6);
+    expect(f.exportState().original).toBeUndefined(); // saves never hold it
+  });
 });
