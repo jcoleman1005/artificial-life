@@ -84,6 +84,13 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   terrainScale: 8, // patches about 8 cells across on the 60×60 grid
   terrainThreshold: 0.5, // about half of the ground is open
   terrainRoughnessCoeff: 1.0, // the roughest ground doubles a size-1 body's move cost
+  fertilityDynamicEnabled: true, // off keeps the fixed disc map (the control arm)
+  fertilityInterval: 10,
+  fertilityRebuildRate: 0.002, // about 86% of the gap in ~1,000 ticks
+  fertilityMoistureRate: 0.001, // gentle: one storm passage is worth 5-10% of the gap
+  fertilityGrazeWear: 0.0004, // one bite per tick on a cell lowers it about 0.2 at equilibrium
+  fertilityTrampleWear: 0.0001, // a route crossed 10 times a tick lowers it about 0.5
+  fertilityMax: 1.0, // no hot spots above the disc value
   terrainWearEnabled: true, // off keeps the terrain as first made (the control arm)
   terrainTrampleRoughness: 0.005, // a path takes a few hundred crossings to wear down
   terrainTrampleCover: 0.003,

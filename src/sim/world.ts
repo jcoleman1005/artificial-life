@@ -130,6 +130,8 @@ export interface WorldState {
   readonly soilNutrients?: readonly number[];
   /** Terrain fields (absent in saves from before terrain, or with it off; such saves load with it off). */
   readonly terrain?: TerrainState;
+  /** Live soil fertility (absent in saves from before dynamic fertility, or with it off; such saves load with it off). */
+  readonly soilFertility?: readonly number[];
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -619,6 +621,7 @@ export class World {
       ...(this.weather && this.config.weatherEnabled ? { weather: this.weather.exportState() } : {}),
       ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
       ...(this.config.terrainEnabled ? { terrain: this.getTerrain()!.exportState() } : {}),
+      ...(this.config.fertilityDynamicEnabled ? { soilFertility: Array.from(this.soil().fertility) } : {}),
     };
   }
 
@@ -645,6 +648,8 @@ export class World {
     world.nextOrganismSeq = state.nextOrganismSeq;
     // Saves from before a field existed load with its neutral default.
     for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
+    // Saves from before dynamic fertility load with it off (their fertility was the fixed map).
+    if (!state.soilFertility && (state.config as Partial<SimulationConfig>).fertilityDynamicEnabled === undefined) world.config.fertilityDynamicEnabled = false;
     // Saves from before terrain load with it off (their world was made without it).
     if (!state.terrain && (state.config as Partial<SimulationConfig>).terrainEnabled === undefined) world.config.terrainEnabled = false;
     world.terrainField = state.terrain ? TerrainField.fromState(state.terrain, world.config) : null;
@@ -685,6 +690,7 @@ export class World {
       }
       world.soil().updateAggregates(world.fertile());
     }
+    if (state.soilFertility && world.config.fertilityDynamicEnabled) world.soil().restoreFertility(state.soilFertility);
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
     return world;
@@ -1024,8 +1030,12 @@ export class World {
     const terrain = this.getTerrain();
     // Wear from this tick's moves and bites, applied after all actions so no body is affected by the order they act in.
     const wearing = terrain !== null && this.config.terrainWearEnabled;
+    // Soil fertility wears from the same moves and from plant bites (windfalls are not soil).
+    const fertilityOn = this.config.fertilityDynamicEnabled && this.config.plantsEnabled;
+    const collect = wearing || fertilityOn;
     const trampled: { index: number; size: number }[] = [];
     const grazed: number[] = [];
+    const grazedSoil: number[] = [];
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
       const startCell = { x: organism.x, y: organism.y };
@@ -1093,6 +1103,7 @@ export class World {
               grazePlant(patch, this.tick, this.plantCounters);
               this.biteCell(patch);
               if (wearing) grazed.push(patch.y * this.config.gridWidth + patch.x);
+              if (fertilityOn && patch.plant) grazedSoil.push(patch.y * this.config.gridWidth + patch.x);
             } else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
@@ -1208,13 +1219,13 @@ export class World {
             cost *= (mudDrag * windMultiplier);
           }
           // The cell entered: rough ground costs more to enter, more for a larger footprint, and crossings wear it.
-          const entered = terrain ? (chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined)) : undefined;
+          const entered = terrain || fertilityOn ? (chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined)) : undefined;
           if (terrain && entered) cost *= roughnessMoveFactor(terrain.roughnessAt(entered.x, entered.y), sizeOf(organism, this.config), this.config);
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
             this.ledger.move += cost;
-            if (wearing && entered) trampled.push({ index: entered.y * this.config.gridWidth + entered.x, size: sizeOf(organism, this.config) });
+            if (collect && entered) trampled.push({ index: entered.y * this.config.gridWidth + entered.x, size: sizeOf(organism, this.config) });
             energyDelta -= cost;
             spentEnergy += cost;
             pendingSwaps.set([organism.id, item.swapWithId].sort().join('|'), {
@@ -1227,7 +1238,7 @@ export class World {
             organism.y = chosenAction.target.y;
             organism.energy -= cost;
             this.ledger.move += cost;
-            if (wearing) trampled.push({ index: organism.y * this.config.gridWidth + organism.x, size: sizeOf(organism, this.config) });
+            if (collect) trampled.push({ index: organism.y * this.config.gridWidth + organism.x, size: sizeOf(organism, this.config) });
             energyDelta -= cost;
             spentEnergy += cost;
             outcome = 'success';
@@ -1286,6 +1297,7 @@ export class World {
             grazePlant(patch, this.tick, this.plantCounters);
             this.biteCell(patch);
             if (wearing) grazed.push(patch.y * this.config.gridWidth + patch.x);
+            if (fertilityOn && patch.plant) grazedSoil.push(patch.y * this.config.gridWidth + patch.x);
             organism.carriedFood += 1;
             outcome = 'success';
           } else {
@@ -1385,6 +1397,12 @@ export class World {
     if (wearing) {
       for (const t of trampled) terrain.trample(t.index, t.size, this.config);
       for (const g of grazed) terrain.graze(g, this.config);
+    }
+    if (fertilityOn) {
+      const soil = this.soil();
+      for (const t of trampled) soil.addWear(t.index, Math.round(1e6 * this.config.fertilityTrampleWear * Math.sqrt(t.size)));
+      for (const g of grazedSoil) soil.addWear(g, Math.round(1e6 * this.config.fertilityGrazeWear));
+      soil.applyWear(this.config);
     }
 
     // Matings: pairs who asked each other (in id order, once per pair). Both
@@ -1977,6 +1995,13 @@ export class World {
     // Step nutrient cycle (abiotic replenishment and spatial diffusion)
     if (this.config.nutrientCycleEnabled) {
       this.soil().stepNutrients(this.config, this.fertile());
+    }
+    // Fertility follows the soil and the rain, slowly.
+    if (this.config.fertilityDynamicEnabled && this.config.plantsEnabled) {
+      const interval = Math.max(1, Math.floor(this.config.fertilityInterval));
+      if (this.tick % interval === 0) {
+        this.soil().stepFertility(this.config, this.weather && this.config.weatherEnabled ? this.weather.moisture : null);
+      }
     }
 
     // 1b. Food patch stock regeneration (windfalls never regrow)

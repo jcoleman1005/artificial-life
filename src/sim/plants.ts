@@ -79,7 +79,14 @@ export function inheritGenome(parent: PlantGenome, config: Readonly<SimulationCo
  * the region whose season each cell follows (the nearest one, or -1).
  */
 export class SoilField {
+  /** The fertility growth, germination and seed rain read; live when fertilityDynamicEnabled. */
   public readonly fertility: Float32Array;
+  /** The original map (1 / marginFertility / 0). The same array as `fertility` when the feature is off. */
+  public readonly baseFertility: Float32Array;
+  /** Bumped whenever fertility changes, so the host can send an update only when needed. Not saved. */
+  public version = 0;
+  private readonly wearPending: Float64Array | null; // integer millionths: exact sums, so order never matters
+  private wearTouched: number[] = [];
   public readonly region: Int16Array;
   public readonly nutrients: Float32Array;
   private readonly diffBuffer: Float32Array;
@@ -129,6 +136,63 @@ export class SoilField {
         this.region[i] = nearest;
       }
     }
+    // The original map, kept apart only while fertility can change (off: one array, nothing extra).
+    this.baseFertility = config.fertilityDynamicEnabled ? this.fertility.slice() : this.fertility;
+    this.wearPending = config.fertilityDynamicEnabled ? new Float64Array(w * h) : null;
+  }
+
+  /**
+   * Records wear on a cell, in millionths of fertility. Integer sums are exact and do not depend on the order
+   * bodies acted in; `applyWear` turns them into fertility after all actions.
+   */
+  public addWear(index: number, micro: number): void {
+    const pending = this.wearPending;
+    if (!pending || micro <= 0) return;
+    if (pending[index] === 0) this.wearTouched.push(index);
+    pending[index] += micro;
+  }
+
+  /** Takes the recorded wear off fertility (never below the floor, never on rock) and clears it. */
+  public applyWear(config: Readonly<SimulationConfig>): void {
+    const pending = this.wearPending;
+    if (!pending || this.wearTouched.length === 0) return;
+    const floor = config.marginFertility;
+    for (const i of this.wearTouched) {
+      if (this.baseFertility[i] > 0) this.fertility[i] = Math.max(floor, this.fertility[i] - pending[i] * 1e-6);
+      pending[i] = 0;
+    }
+    this.wearTouched = [];
+    this.version++;
+  }
+
+  /**
+   * Fertility follows the soil's nutrient level, slowly, and gains where it has been raining. A pass over the whole
+   * grid every `fertilityInterval` ticks: no random draws, a fixed order, bounded by the floor and the cap.
+   * Without the nutrient cycle it recovers toward the original map instead.
+   */
+  public stepFertility(config: Readonly<SimulationConfig>, moisture: Uint8Array | null): void {
+    if (!config.fertilityDynamicEnabled) return;
+    const interval = Math.max(1, Math.floor(config.fertilityInterval));
+    const floor = config.marginFertility;
+    const cap = config.fertilityMax;
+    const rebuild = interval * config.fertilityRebuildRate;
+    const wetRate = interval * config.fertilityMoistureRate;
+    const f = this.fertility;
+    for (let i = 0; i < f.length; i++) {
+      if (this.baseFertility[i] <= 0) continue;
+      const nutrient = config.nutrientCycleEnabled ? this.nutrients[i] : this.baseFertility[i];
+      const target = Math.max(floor, Math.min(cap, nutrient));
+      const wet = moisture ? Math.max(0, (moisture[i] - 128) / 127) : 0;
+      const next = f[i] + rebuild * (target - f[i]) + wetRate * wet * (cap - f[i]);
+      f[i] = Math.max(floor, Math.min(cap, next));
+    }
+    this.version++;
+  }
+
+  /** Copies a saved fertility field in (the original map is rebuilt from the regions, never saved). */
+  public restoreFertility(values: readonly number[]): void {
+    for (let i = 0; i < this.fertility.length && i < values.length; i++) this.fertility[i] = values[i];
+    this.version++;
   }
 
   public stepNutrients(config: Readonly<SimulationConfig>, fertileIndices: readonly number[]): void {
@@ -139,7 +203,7 @@ export class SoilField {
     // 1. Abiotic equilibrium relaxation
     if (rRegen > 0) {
       for (let i = 0; i < n.length; i++) {
-        const target = this.fertility[i];
+        const target = this.baseFertility[i];
         if (target <= 0) continue;
         const diff = target - n[i];
         n[i] = Math.min(cap, Math.max(0, n[i] + rRegen * diff));
@@ -150,7 +214,7 @@ export class SoilField {
     if (dRate > 0) {
       this.diffBuffer.set(n);
       const buf = this.diffBuffer;
-      const fert = this.fertility;
+      const fert = this.baseFertility;
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const idx = y * w + x;

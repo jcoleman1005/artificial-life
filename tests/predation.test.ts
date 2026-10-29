@@ -1,3 +1,4 @@
+import { maxEnergyOf } from '../src/sim/lifehistory';
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
@@ -380,7 +381,7 @@ describe('A world with carrion and predation', () => {
       for (let t = 0; t < 300; t++) {
         w.step();
         for (const o of w.organisms.values()) {
-          expect(o.energy > 0 && o.energy <= w.config.maxEnergy).toBe(true);
+          expect(o.energy > 0 && o.energy <= maxEnergyOf(o, w.config)).toBe(true); // the cap scales with body size
           expect(o.carnivory >= 0 && o.carnivory <= 1).toBe(true);
         }
         for (const c of w.carrion.values()) expect(c.stock).toBeGreaterThan(0);

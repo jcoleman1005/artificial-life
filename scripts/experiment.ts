@@ -34,6 +34,7 @@ import { seasonAt } from '../src/sim/seasons';
 import { PLANT_TRAIT_KEYS, computePlantMetrics } from '../src/sim/plants';
 import type { Organism, SimulationConfig } from '../src/sim/types';
 import { Diagnostics } from './diagnostics';
+import { FertilityTracker } from './fertility-tracker';
 import { continuousAbilities, herbivoryOf, splitDiets } from '../src/sim/traits';
 import { GENE_TYPES, genomeStats } from '../src/sim/dna';
 
@@ -133,6 +134,8 @@ function runJob(job: Job): RunResult {
   let stepMs = 0;
   let organismSteps = 0;
   const diagnostics = new Diagnostics();
+  // Fertile ground (with plants): did it move, and did it cost the animals? Measured in both arms of a fertility comparison.
+  const fertility = world.config.plantsEnabled ? new FertilityTracker(world, job.ticks) : null; // both arms, so on and off can be compared
 
   for (let t = 1; t <= job.ticks; t++) {
     onWindfall.clear();
@@ -145,6 +148,7 @@ function runJob(job: Job): RunResult {
     world.step();
     stepMs += performance.now() - stepStart;
     diagnostics.observe(world, t > tailStart);
+    fertility?.observe(world, t);
     const n = world.organisms.size;
     organismSteps += n;
     popSum += n;
@@ -236,6 +240,7 @@ function runJob(job: Job): RunResult {
     avgPop: popSum / job.ticks,
     finalPop: organisms.length,
     ...(leanLows.length ? { leanLow: leanLows.reduce((a, v) => a + v, 0) / leanLows.length } : {}),
+    ...(fertility ? fertility.results(world) : {}),
     ...(world.foodRegions.length
       ? { 'inRegion%': (100 * inRegionSum) / Math.max(1, popSum), regionMovesPer1k: (1000 * regionChanges) / job.ticks }
       : {}),

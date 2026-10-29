@@ -576,6 +576,13 @@ export interface SimulationConfig {
   terrainScale: number; // Cells per noise lattice step: larger gives broader patches
   terrainThreshold: number; // Noise below this is open ground (0..1); higher means less rough and sheltered ground
   terrainRoughnessCoeff: number; // Extra move cost entering a fully rough cell, for a size-1 body (× √size for larger ones)
+  fertilityDynamicEnabled: boolean; // Soil fertility is a live per-cell field: grazing and trampling wear it, nutrients and rain rebuild it (docs/decisions.md, Dynamic fertility); off keeps the fixed map
+  fertilityInterval: number; // Ticks between rebuild steps (the step closes the share for all of them)
+  fertilityRebuildRate: number; // Share of the gap to the soil's nutrient level fertility closes per tick
+  fertilityMoistureRate: number; // Share of the gap to the cap a fully wet cell gains per tick
+  fertilityGrazeWear: number; // Fertility a plant bite removes from its cell
+  fertilityTrampleWear: number; // Fertility a move into a cell removes, × √size
+  fertilityMax: number; // Cap on fertility (the floor is marginFertility)
   terrainWearEnabled: boolean; // Bodies wear the terrain (trampling, grazing) and worn ground recovers; off keeps it static (needs terrainEnabled)
   terrainTrampleRoughness: number; // Share of a cell's roughness a crossing removes, × √size (multiplicative)
   terrainTrampleCover: number; // Share of a cell's cover a crossing removes, × √size

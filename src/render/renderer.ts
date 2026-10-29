@@ -60,6 +60,7 @@ const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
   feeding: '134, 239, 172',
   health: '217, 119, 6',
   nutrients: '34, 197, 94',
+  fertility: '250, 204, 21',
 };
 /** Trail points kept per organism (one per frame). */
 const TRAIL_LENGTH = 12;
@@ -620,12 +621,13 @@ export class CanvasRenderer {
 
     // Overlays drawn under the organisms
     if (this.heatmap && this.overlay !== 'none' && this.overlay in HEATMAP_COLOUR) {
-      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView, this.overlay === 'health' || this.overlay === 'nutrients');
+      this.drawHeatmap(this.heatmap, HEATMAP_COLOUR[this.overlay as HeatmapKind], inView, this.overlay === 'health' || this.overlay === 'nutrients' || this.overlay === 'fertility');
     }
     if (this.overlay === 'trails') this.drawTrails(selectedOrg);
     if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
     if (this.overlay === 'weather') this.drawWeather();
     if (this.overlay === 'terrain') this.drawTerrainLegend();
+    if (this.overlay === 'fertility') this.drawFertilityKey();
 
     // Sensing range of the selected organism: a soft dashed square
     if (selectedOrg) {
@@ -673,6 +675,7 @@ export class CanvasRenderer {
     if (this.overlay === 'nutrients') {
       max = this.world.config.nutrientCapacity || 2.0;
     }
+    if (this.overlay === 'fertility') max = this.world.config.fertilityMax || 1;
     if (!absolute) {
       max = 0;
       for (let i = 0; i < cells.length; i++) if (cells[i] > max) max = cells[i];
@@ -1104,6 +1107,46 @@ export class CanvasRenderer {
     this.terrainLayer = layer;
     this.terrainLayerFor = terrain;
     this.terrainLayerEmphasis = emphasis;
+  }
+
+  /** The Fertility layer's key: the original zones as dashed outlines, and how much ground is still rich. */
+  private drawFertilityKey(): void {
+    const { ctx, cellSize } = this;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 5]);
+    for (const r of this.world.foodRegions) {
+      ctx.beginPath();
+      ctx.arc((r.x + 0.5) * cellSize, (r.y + 0.5) * cellSize, r.radius * cellSize, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    let rich = 0;
+    if (this.heatmap) for (let i = 0; i < this.heatmap.length; i++) if (this.heatmap[i] >= 0.6) rich++;
+    const x = this.viewX + 12;
+    const y = this.viewY + 12;
+    ctx.fillStyle = 'rgba(11, 16, 24, 0.82)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, 214, 50, 10);
+    ctx.fill();
+    ctx.stroke();
+    const grad = ctx.createLinearGradient(x + 10, 0, x + 70, 0);
+    grad.addColorStop(0, 'rgba(250, 204, 21, 0.15)');
+    grad.addColorStop(1, 'rgba(250, 204, 21, 0.85)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x + 10, y + 11, 60, 12, 3);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.92)';
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('poor to rich soil', x + 78, y + 17);
+    ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(`${rich} cells rich; dashed = starting zones`, x + 10, y + 37);
+    ctx.restore();
   }
 
   /** The key for the Terrain layer, in the corner of the view, with how much ground has worn. */
