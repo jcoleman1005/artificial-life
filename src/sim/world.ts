@@ -1,4 +1,5 @@
 import { LineageTracker, type AncestorNode } from './lineage';
+import { EnergyLedger, type LedgerReport } from './ledger';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
 import type {
@@ -176,6 +177,8 @@ export class World {
   public tick = 0;
 
   public readonly obstacles = new Set<string>(); // "x,y"
+  /** Observer only: balances the energy the animals hold (never saved, never hashed). */
+  public readonly ledger = new EnergyLedger();
   public readonly foodPatches = new Map<string, FoodPatch>(); // "x,y" -> FoodPatch
   /** What dead organisms left behind, "x,y" -> CarrionPatch (separate from plant food; a cell can hold both). */
   public readonly carrion = new Map<string, CarrionPatch>();
@@ -777,11 +780,13 @@ export class World {
    * Enforces simultaneous decisions, fair seeded tie-breakers, and explicit energy accounting.
    */
   public step(): void {
+    if (this.config.ledgerEnabled && !this.ledger.started) this.ledger.begin(this.storedEnergy(), this.tick);
     if (this.organisms.size === 0) {
       // Same order as a populated tick: advance, then update the environment.
       this.tick++;
       this.updateEnvironment();
       this.updateMetrics();
+      this.checkLedger();
       return;
     }
 
@@ -1023,10 +1028,12 @@ export class World {
       let energyDelta = -metabolism;
       let spentEnergy = metabolism;
       organism.energy -= metabolism;
+      this.ledger.upkeep += metabolism;
       if (this.config.torporEnabled && organism.rested && chosenAction.type !== 'REST') {
         // Acting right after a rest costs energy to wake, more the deeper the rest.
         const wakeCost = this.config.torporWakeCost * (organism.torporDepth ?? 0);
         organism.energy -= wakeCost;
+        this.ledger.wake += wakeCost;
         energyDelta -= wakeCost;
         spentEnergy += wakeCost;
       }
@@ -1055,6 +1062,7 @@ export class World {
                 if (unneutralized > 0.3) {
                   const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
                   organism.energy -= malaise;
+                  this.ledger.malaise += malaise;
                   energyDelta -= malaise;
                   spentEnergy += malaise;
                 }
@@ -1063,7 +1071,7 @@ export class World {
             organism.lastBiteYield = Number(biteEfficiency.toFixed(3));
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
-            this.storeSurplus(organism, meal - energyGain);
+            this.ledger.plantMeal += energyGain + this.storeSurplus(organism, meal - energyGain);
             if (fromPatch) {
               patch.stock -= 1;
               grazePlant(patch, this.tick, this.plantCounters);
@@ -1091,7 +1099,7 @@ export class World {
               Math.min(1, organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config));
             const energyGain = Math.min(maxEnergyOf(organism, this.config) - organism.energy, meal);
             organism.energy += energyGain;
-            this.storeSurplus(organism, meal - energyGain);
+            this.ledger.eggMealLoss += egg.child.energy - energyGain - this.storeSurplus(organism, meal - energyGain);
             this.eggs.delete(egg.child.id);
             organism.foodEatenCount++;
             this.eggsEatenTotal++;
@@ -1103,9 +1111,12 @@ export class World {
             const maxEnergy = maxEnergyOf(organism, this.config);
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
-            this.storeSurplus(organism, meal - energyGain);
+            this.ledger.carrionMealLoss += taken - energyGain - this.storeSurplus(organism, meal - energyGain);
             patch.stock -= taken;
-            if (patch.stock <= 1e-9) this.carrion.delete(`${patch.x},${patch.y}`);
+            if (patch.stock <= 1e-9) {
+              this.ledger.carrionRot += patch.stock;
+              this.carrion.delete(`${patch.x},${patch.y}`);
+            }
             organism.foodEatenCount++;
             this.carrionEatenTotal++;
             energyDelta += energyGain;
@@ -1123,6 +1134,7 @@ export class World {
           // The bite lands after all actions (below), if the prey is still
           // within reach; the cost is paid either way.
           organism.energy -= this.config.attackCost;
+          this.ledger.attack += this.config.attackCost;
           energyDelta -= this.config.attackCost;
           spentEnergy += this.config.attackCost;
           if (chosenAction.preyId) {
@@ -1180,6 +1192,7 @@ export class World {
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
+            this.ledger.move += cost;
             energyDelta -= cost;
             spentEnergy += cost;
             pendingSwaps.set([organism.id, item.swapWithId].sort().join('|'), {
@@ -1191,6 +1204,7 @@ export class World {
             organism.x = chosenAction.target.x;
             organism.y = chosenAction.target.y;
             organism.energy -= cost;
+            this.ledger.move += cost;
             energyDelta -= cost;
             spentEnergy += cost;
             outcome = 'success';
@@ -1217,6 +1231,7 @@ export class World {
               const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost, birthBlocked);
               const birthCost = totalReproCost + birth.extraCost;
               organism.energy -= birthCost;
+              this.ledger.birthCosts += birthCost - childEnergy;
               organism.offspringCount++;
               energyDelta -= birthCost;
               birthBlocked.add(`${birth.x},${birth.y}`);
@@ -1275,6 +1290,7 @@ export class World {
 
         case 'SIGNAL': {
           organism.energy -= this.config.signalCost;
+          this.ledger.signal += this.config.signalCost;
           energyDelta -= this.config.signalCost;
           spentEnergy += this.config.signalCost;
           organism.signalTick = this.tick;
@@ -1313,7 +1329,10 @@ export class World {
       }
 
       // Clamp energy [0, maxEnergy]
-      organism.energy = Math.max(0, Math.min(maxEnergyOf(organism, this.config), organism.energy));
+      const energyCap = maxEnergyOf(organism, this.config);
+      if (organism.energy > energyCap) this.ledger.overCap += organism.energy - energyCap;
+      else if (organism.energy < 0) this.ledger.overdraft += -organism.energy;
+      organism.energy = Math.max(0, Math.min(energyCap, organism.energy));
       organism.age++;
 
       // Record decision history
@@ -1374,7 +1393,7 @@ export class World {
       const maxEnergy = maxEnergyOf(recipient, this.config);
       const gain = Math.min(maxEnergy - recipient.energy, meal);
       recipient.energy += gain;
-      this.storeSurplus(recipient, meal - gain);
+      this.ledger.plantMeal += gain + this.storeSurplus(recipient, meal - gain);
       recipient.foodReceived += 1;
       recipient.foodEatenCount++;
     }
@@ -1392,6 +1411,7 @@ export class World {
       if (Math.max(Math.abs(prey.x - attacker.x), Math.abs(prey.y - attacker.y)) > 1) continue;
       if (roll >= attack.chance) continue;
       bodies.set(prey.id, prey.energy);
+      this.ledger.killed += prey.energy;
       prey.energy = 0;
       this.lastKill = { tick: this.tick, killerTag: attacker.tag, preyTag: prey.tag };
       attacker.kills++;
@@ -1417,9 +1437,13 @@ export class World {
         this.deceasedLifespanSum += org.age;
         this.deathsTotal++;
         this.organisms.delete(id);
+        this.ledger.deathFat += org.fat ?? 0;
         if (this.config.carrionEnabled) {
           const energy = carrionFromBody(bodies.get(id) ?? 0, this.config, sizeOf(org, this.config));
-          if (energy > 0) this.addCarrion(org.x, org.y, energy);
+          if (energy > 0) {
+            this.ledger.carrionCreated += energy;
+            this.addCarrion(org.x, org.y, energy);
+          }
           else this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
         } else {
           this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
@@ -1435,6 +1459,7 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+    this.checkLedger();
 
     // Periodic pruning of dead lineage branches with no living descendants (every 500 ticks)
     if (this.tick % 500 === 0) {
@@ -1483,6 +1508,7 @@ export class World {
       signalTick: -1,
       recentHistory: [],
     };
+    this.ledger.birthClamp += energy - child.energy;
     this.lineageTracker.recordBirth(child, parent, mate, this.tick);
     return child;
   }
@@ -1541,6 +1567,7 @@ export class World {
     ]);
     a.energy -= shareA + tax;
     b.energy -= shareB + tax;
+    this.ledger.birthCosts += 2 * tax;
     if (config.metabolismGeneEnabled) for (const o of [a, b]) o.nextBirthTick = this.tick + birthCooldownOf(o, config);
     this.matingsTotal++;
     const similarity = tagSimilarity(a.tag, b.tag);
@@ -1558,12 +1585,14 @@ export class World {
     const viableCount = Math.min(targetCount, maxViable);
 
     let born = 0;
+    let perChildEnergy = 0; // what each placed child was given, for the ledger
     if (viableCount === 0) {
       this.clutchesFailedTotal++;
       this.matingChildrenLostTotal += targetCount;
       this.matingEnergyLostTotal += pool;
     } else {
       const perChild = viableCount === targetCount ? pool / targetCount : config.minViableChildEnergy;
+      perChildEnergy = perChild;
       const poolAllocated = perChild * viableCount;
       const heatSurplus = pool - poolAllocated;
       this.matingEnergyLostTotal += heatSurplus;
@@ -1579,6 +1608,7 @@ export class World {
         const target = this.prng.choice(cells);
         const birth = this.birthCell(carrier, target, carrier.energy, blocked);
         carrier.energy -= birth.extraCost;
+        this.ledger.birthCosts += birth.extraCost;
         paid.set(carrier, (paid.get(carrier) ?? 0) + birth.extraCost);
         blocked.add(`${birth.x},${birth.y}`);
         this.birthDistanceSum += birth.distance;
@@ -1587,6 +1617,7 @@ export class World {
       }
       this.matingChildrenLostTotal += (targetCount - viableCount);
     }
+    this.ledger.matingHeat += pool - perChildEnergy * born;
     this.birthsTotal += born;
     this.matingChildrenTotal += born;
 
@@ -1605,11 +1636,35 @@ export class World {
     return true;
   }
 
-  /** Food energy beyond what an organism can hold becomes fat, at a loss, up to its capacity. */
-  private storeSurplus(organism: Organism, surplus: number): void {
+  /** Food energy beyond what an organism can hold becomes fat, at a loss, up to its capacity. Returns the fat stored. */
+  private storeSurplus(organism: Organism, surplus: number): number {
     const room = fatRoom(organism, this.config);
-    if (room <= 0 || surplus <= 0) return;
-    organism.fat = (organism.fat ?? 0) + Math.min(room, surplus * this.config.fatStoreEfficiency);
+    if (room <= 0 || surplus <= 0) return 0;
+    const stored = Math.min(room, surplus * this.config.fatStoreEfficiency);
+    organism.fat = (organism.fat ?? 0) + stored;
+    return stored;
+  }
+
+  /** Energy the animals hold: organisms (energy and fat), eggs, and carrion. The ledger's system. */
+  private storedEnergy(): number {
+    let total = 0;
+    for (const o of this.organisms.values()) total += o.energy + (o.fat ?? 0);
+    for (const e of this.eggs.values()) total += e.child.energy;
+    for (const c of this.carrion.values()) total += c.stock;
+    return total;
+  }
+
+  /** Close the ledger's window every `ledgerCheckInterval` ticks (observer only). */
+  private checkLedger(): void {
+    if (!this.config.ledgerEnabled) return;
+    const interval = Math.max(1, Math.floor(this.config.ledgerCheckInterval));
+    if (this.tick % interval !== 0) return;
+    this.ledger.check(this.storedEnergy(), this.tick);
+  }
+
+  /** The ledger's last completed check, if any. */
+  public ledgerReport(): LedgerReport | null {
+    return this.ledger.report();
   }
 
   /**
@@ -1627,6 +1682,7 @@ export class World {
           egg.shell -= 1;
         } else {
           this.eggs.delete(id);
+          this.ledger.eggDecay += egg.child.energy;
           this.eggsDecayedTotal++;
           this.depositNutrients(egg.x, egg.y, (egg.child.energy + (egg.shell ?? 0)) * this.config.nutrientCarrionDecomp);
           continue;
@@ -1645,9 +1701,11 @@ export class World {
       this.eggsHatchedTotal++;
       this.birthsTotal++;
       const { child } = egg;
+      const hatchEnergy = Math.max(1, Math.floor(child.energy * eggHatchEfficiency));
+      this.ledger.hatchLoss += child.energy - hatchEnergy;
       this.organisms.set(child.id, {
         ...child,
-        energy: Math.max(1, Math.floor(child.energy * eggHatchEfficiency)),
+        energy: hatchEnergy,
         lineage: { ...child.lineage, birthTick: this.tick },
         memory: newMemory(egg.x, egg.y),
       });
@@ -1832,6 +1890,7 @@ export class World {
       }
       if (c.expiresAt <= this.tick) {
         this.carrionUnitsRotted += c.stock;
+        this.ledger.carrionRot += c.stock;
         this.depositNutrients(c.x, c.y, c.stock * this.config.nutrientCarrionDecomp);
         this.carrion.delete(key);
       }
@@ -1929,6 +1988,7 @@ export class World {
         const key = `${x},${y}`;
         if (this.obstacles.has(key) || occupied.has(key)) continue;
         const immigrant = this.createFounder(x, y);
+        this.ledger.immigrants += immigrant.energy + (immigrant.fat ?? 0);
         this.organisms.set(immigrant.id, immigrant);
         occupied.add(key);
         this.immigrantsTotal++;

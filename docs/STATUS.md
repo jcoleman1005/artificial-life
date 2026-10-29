@@ -179,7 +179,7 @@ The quantities, laws and the gene-fit test are in `docs/specs/physics.md`; this 
 
 Ranked by protection, phone cost and what each unlocks. The decisions themselves are in `docs/decisions.md`. Rules for every item: a `...Enabled` switch (the control arm), a perf check against the S21 profile before it ships on by default, a Parameter-log entry for any new constant, a matched on/off experiment, a new fingerprint recorded here, and `npm run verify`.
 
-**Phone baseline (Termux, 2026-10-28, `docs/findings.md`):** ~177 µs per organism-tick, ~2.9× the dev container; at ~800 organisms single ticks already take 130–172 ms against a 167 ms budget at 1×. Features that add per-organism work default OFF for the phone profile unless the optimisation pass buys headroom.
+**Phone baseline (Termux, 2026-10-28, corrected 2026-10-29, `docs/findings.md`):** ~177 µs per organism-tick against ~111 µs in the dev container at the same population, so roughly 1.3–1.8× slower (not 2.9×; the first comparison used a low-population container figure). Average ticks of 62–69 ms against a 167 ms budget at 1× leave headroom on average, but the worst ticks at ~800 organisms took 130–172 ms, and 2× (83 ms) is not sustainable. Features that add per-organism work are measured against the worst ticks, and default OFF for the phone profile unless the measured cost fits.
 
 **Fingerprint now** (branch `claude/blissful-cerf-w1gdbk`, after the energy-cap fix and size-scaled corpses): `large dials 38c0a9a328b0de87 · large brain d6e185c2c5b848ae` (pop 632 / 773, births 3095 / 3268).
 
@@ -187,7 +187,7 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 |---|---|---|---|---|
 | 0 | Energy cap uses `maxEnergyOf` everywhere; corpse energy scales with size | Bug fix and the agreed size rule | none | Built 2026-10-28 |
 | 1 | Energy ledger (observer; in minus out equals change in stored) | Protects every later change; the cap bug would have shown at once | small; sampled every N ticks on the phone | Decided |
-| 2 | Single-thread engine optimisation pass (garbage collection, brain scoring), proven by an unchanged fingerprint | The phone has almost no headroom; this buys it for everything below | negative (a saving) | Prompt written for agy; not yet run |
+| 2 | Single-thread engine optimisation pass (garbage collection, brain scoring), proven by an unchanged fingerprint | Worst-case ticks on the phone are near the 1× budget, and 2× has none; this buys headroom for everything below | negative (a saving) | Prompt written for agy; not yet run |
 | 3 | Long baseline runs on the server (100k+ ticks) with the existing genes; re-run the Termux benchmark on the optimised branch | Shows which genes drift and where selection is weak, so ranks 5–10 are chosen by evidence, not taste | none | To do (needs the server installed; roadmap item 13) |
 | 4 | Thermal physics: cold and heat cost, scaled by surface-area-to-volume, fat and metabolic rate | Replaces an existing per-organism rule, so the cost is about zero; gives size a downside and regions different niches (species goal) | ~0 | Decided |
 | 4b | Terrain fields: roughness and cover from seeded noise, independent of food (`terrainEnabled`); two brain inputs batched with wound load | Cover feeds thermal physics and line of sight; roughness gives footprint a mechanical effect; the habitat lever for the species goal | small (a cell lookup per move and sense) | Decided 2026-10-29 |

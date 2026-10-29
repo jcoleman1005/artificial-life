@@ -80,6 +80,8 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   attackCost: 2,
   bitePowerMin: 0.2,
   sexEnabled: true,
+  ledgerEnabled: true, // observer only; never changes the world
+  ledgerCheckInterval: 25, // a check sums the animals' stored energy once; 1 checks every tick (tests)
   immigrationEnabled: false, // watch only the founders and their descendants
   immigrationInterval: 25,
   immigrationCount: 1,

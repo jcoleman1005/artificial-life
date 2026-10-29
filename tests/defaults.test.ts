@@ -24,6 +24,8 @@ describe('Default world', () => {
       predationEnabled: DEFAULT_CONFIG.predationEnabled,
       sexEnabled: DEFAULT_CONFIG.sexEnabled,
       immigrationEnabled: DEFAULT_CONFIG.immigrationEnabled,
+      ledgerEnabled: DEFAULT_CONFIG.ledgerEnabled,
+      ledgerCheckInterval: DEFAULT_CONFIG.ledgerCheckInterval,
       plantsEnabled: DEFAULT_CONFIG.plantsEnabled,
       dnaEnabled: DEFAULT_CONFIG.dnaEnabled,
       dnaContinuousAbilities: DEFAULT_CONFIG.dnaContinuousAbilities,
@@ -58,6 +60,9 @@ describe('Default world', () => {
       predationEnabled: true,
       sexEnabled: true,
       immigrationEnabled: false,
+      // The energy ledger is an observer: on, and a check every 25 ticks.
+      ledgerEnabled: true,
+      ledgerCheckInterval: 25,
       plantsEnabled: true,
       // DNA Stage 1 is on; the Stage 1b toggles and Stage 2 stay off until their gates are signed off.
       dnaEnabled: true,

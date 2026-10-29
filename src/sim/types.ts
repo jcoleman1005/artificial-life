@@ -572,6 +572,8 @@ export interface SimulationConfig {
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
   sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
+  ledgerEnabled: boolean; // Observer: balance the energy the animals hold every ledgerCheckInterval ticks (docs/decisions.md, Energy ledger)
+  ledgerCheckInterval: number; // Ticks between ledger checks; flows are summed every tick, stored energy only at a check
   immigrationEnabled: boolean; // Newcomers arrive during the run (off: only the founders and their descendants)
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
