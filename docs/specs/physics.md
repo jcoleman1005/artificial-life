@@ -96,7 +96,7 @@ Reopened 2026-10-29 as places gene ideas will need. Each lists what the lever wo
 - *Wear (Built 2026-10-29):* bodies change the terrain passively. Trampling smooths roughness and strips cover, grazing strips cover, and worn ground recovers toward the original. An active dig or build action is a later step.
 - *Still open:* a wetness field tied to the weather moisture baseline, world-driven change (rivers, fire), brain inputs for terrain, and which body-dependent costs besides footprint apply.
 
-**5.4 Persistent signal layer**
+**5.4 Persistent signal layer (scent)** (Proposed 2026-10-29, awaiting approval: `docs/specs/scent-layer.md`)
 - *Lever:* cells hold a decaying signal value (trails, scent marks) that bodies can deposit and sense, drifting with wind.
 - *Unlocks:* pheromone trails, territory marking, alarm, recognition. This is roadmap item 15.
 - *Decide:* number of channels, decay and diffusion rates, deposit cost, sensing cost.

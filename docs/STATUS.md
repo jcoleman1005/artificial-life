@@ -190,22 +190,29 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 | 2 | Single-thread engine optimisation pass (garbage collection, brain scoring), proven by an unchanged fingerprint | Worst-case ticks on the phone are near the 1× budget, and 2× has none; this buys headroom for everything below | negative (a saving) | Prompt written for agy; not yet run |
 | 3 | Long baseline runs on the server (100k+ ticks) with the existing genes; re-run the Termux benchmark on the optimised branch | Shows which genes drift and where selection is weak, so ranks 5–10 are chosen by evidence, not taste | none | To do (needs the server installed; roadmap item 13) |
 | 4 | Thermal physics: cold and heat cost, scaled by surface-area-to-volume, fat and metabolic rate | Replaces an existing per-organism rule, so the cost is about zero; gives size a downside and regions different niches (species goal) | ~0 | Built 2026-10-29; switch off is bit-identical; no Settings toggle yet |
-| 4b | Terrain fields: roughness and cover from seeded noise, independent of food (`terrainEnabled`); two brain inputs batched with wound load | Cover feeds thermal physics and line of sight; roughness gives footprint a mechanical effect; the habitat lever for the species goal | small (a cell lookup per move) | Built 2026-10-29 (fields, costs, cover shelter, drawing, wear and recovery); brain inputs wait for wound load; `terrainEnabled` off is bit-identical |
-| 5 | Growth: born small, grow to the genetic size by spending energy | One extra state value; makes size a trajectory; needed before footprint and wound ceilings mean much | small | Decided |
-| 6 | Footprint space rule: derived radius, overlap crowding, size-gated squeeze and leap | Reuses the sensing pass; gives growth a visible and mechanical effect | small; measure | Decided |
-| 7 | Wound load (one scalar, upkeep, impairment, energy-paid healing, size-scaled ceiling) | Foundation for combat; one append-only brain input, so batch it with any other new brain input in a single `upgradeBrain` | small, one input | Decided |
-| 8 | Combat as one resolution function over a combatant record (force from mass and energy; damage into wound load); no combat-specific genes | Needs wounds and size physics first | small | Outline only; needs a short spec before building |
-| 9 | Line of sight inside the sensing window | The most expensive item on the phone; server first, phone off by default unless within the ~15% budget | high | Decided, conditional on the budget |
-| 10 | Tempo: sub-step clock from metabolic rate and size, capped at 2 actions per tick | Biggest engine change and a cost multiplier; server only | high | Decided; `tempoEnabled` off for the phone profile |
+| 4b | Terrain fields (roughness, cover) and terrain wear (trampling, grazing, recovery), with the canvas layer | Cover feeds thermal physics; wear is the first way bodies change the world; the habitat lever for the species goal | small (a cell lookup per move; worn cells tracked) | Built 2026-10-29; wear on/off experiment still running; `terrainEnabled` off is bit-identical |
+| 5 | Persistent signal layer (scent and trails): cells hold decaying, wind-drifting values that bodies deposit and sense | The second base lever bodies can write to; needed before pheromone-style behaviour can exist at all; roadmap item 15 | the cost has to be settled first (see the decision to approve) | Decision written for approval, not built (2026-10-29) |
+| 6 | One append-only brain upgrade: the terrain inputs (target-cell move cost, cover underfoot) together with the signal layer's sensing inputs | Brain inputs are the expensive kind of addition, so they are added once, together; until then organisms feel terrain and signals only through energy | one upgrade (more weights per organism per tick) | Decided 2026-10-29 (changes the earlier plan to batch the terrain inputs with wound load) |
+| 7 | Footprint space rule: derived radius, overlap crowding, size-gated squeeze and leap | Reuses the sensing pass; gives growth a visible and mechanical effect | small; measure | Decided |
+| 8 | Growth: born small, grow to the genetic size by spending energy | One extra state value; makes size a trajectory; needed before footprint and wound ceilings mean much | small | Decided |
+| 9 | Wound load (one scalar, upkeep, impairment, energy-paid healing, size-scaled ceiling) | Foundation for combat; its one brain input now goes in a later upgrade of its own | small, one input | Decided |
+| 10 | Combat as one resolution function over a combatant record (force from mass and energy; damage into wound load); no combat-specific genes | Needs wounds and size physics first | small | Outline only; needs a short spec before building |
+| 11 | Line of sight inside the sensing window | The most expensive item on the phone; server first, phone off by default unless within the ~15% budget | high | Decided, conditional on the budget |
+| 12 | Tempo: sub-step clock from metabolic rate and size, capped at 2 actions per tick | Biggest engine change and a cost multiplier; server only | high | Decided; `tempoEnabled` off for the phone profile |
+
+**What changed on 2026-10-29 (later):** after terrain wear, the next builds are the signal layer and then one brain upgrade that adds the terrain inputs together with the signal layer's sensing inputs. The terrain inputs used to be batched with wound load; they no longer are, and wound load now gets its own later upgrade. Footprint, growth, wound load, combat, line of sight and tempo follow, in that order. The optimisation pass (rank 2) and the long baseline runs (rank 3) are still with the user and still gate any re-ranking: after rank 3, reorder everything from rank 5 down by what the runs show.
+
+**Energy is still the only need.** Cold, heat, wounds, exposure and crowding act as costs and pressures on energy, never as separate needs with their own meters. A secondary goal (find shelter, avoid rough ground, follow a scent) has to pay for itself through energy.
+
+**What this does and does not show.** These are ingredients: fields bodies can read and change, and costs that shape bodies. They are not packs, families, nests or settlements, and nothing measured so far shows any of those. The experiments so far show no clear body-gene response to thermal physics or terrain, and population effects that are within noise. The active dig or build action is not possible yet: it needs new brain inputs, which are batched into rank 6 and later.
 
 **Open hook points (reopened 2026-10-29; decide with `docs/specs/physics.md` section 5, slot in after rank 3):**
 - Weather acting through the body (rain drag, headwind, shape-scaled heat).
 - Food physics (bite size by body mass, carry as a mass limit, handling time).
-- Persistent signal layer (pheromone trails; roadmap item 15).
-- Terrain: fields decided 2026-10-29 (rank 4b); wetness and dynamic terrain still open.
+- Terrain: fields and wear built (rank 4b); wetness, world-driven change (fire, flood) and an active dig or build action still open.
 - Senescence (declining wound ceiling and healing with age): deferred until growth is built.
 
-**Re-rank rule:** after rank 3, reorder ranks 4–10 by what the long runs show. Do not build anything from rank 9 or 10 on the phone profile before the Termux benchmark is repeated on the optimised branch.
+**Re-rank rule:** after rank 3, reorder ranks 5–12 by what the long runs show. Do not build line of sight or tempo on the phone profile before the Termux benchmark is repeated on the optimised branch.
 
 ## Roadmap (agreed 2026-10-25; build in this order)
 
