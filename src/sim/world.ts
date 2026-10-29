@@ -1,6 +1,6 @@
 import { LineageTracker, type AncestorNode } from './lineage';
 import { EnergyLedger, type LedgerReport } from './ledger';
-import { ElevationField, elevationTemperature, generateElevation, slopeMoveFactor, wadeMoveFactor } from './elevation';
+import { ElevationField, elevationTemperature, generateElevation, slopeMoveFactor, swimMoveFactor, wadeMoveFactor } from './elevation';
 import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor, type TerrainState } from './terrain';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
@@ -79,6 +79,8 @@ import {
   toughnessOf,
   toxicityOf,
   stealthOf,
+  canSwimDeep,
+  swimOf,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
 import { bodyScaleOf, carryCapacityOf, diesOfOldAge, growthCostOf, growthRateOf, hatchCostActive, hatchMaturityOf, isMature, launchRatioOf, maturityOf, minViableEnergyAt } from './growth';
@@ -291,6 +293,7 @@ export class World {
   private elevationField: ElevationField | null = null;
   /** Cells of deep water, which are also in `obstacles` (nothing can cross them yet); the page draws these as water, not rock. */
   public readonly deepWater = new Set<string>();
+  private deepGridCache: Uint8Array | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -355,6 +358,7 @@ export class World {
     this.terrainField = null;
     this.elevationField = null;
     this.deepWater.clear();
+    this.deepGridCache = null;
     this.lineageTracker = new LineageTracker();
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -738,6 +742,7 @@ export class World {
     for (const key of state.obstacles) world.obstacles.add(key);
     world.elevationField = null;
     world.deepWater.clear();
+    world.deepGridCache = null;
     const restoredElevation = world.getElevation(); // regenerated from the seed: static for the run
     if (restoredElevation) {
       for (let i = 0; i < world.config.gridWidth * world.config.gridHeight; i++) {
@@ -889,6 +894,7 @@ export class World {
       organisms: orgsList,
       organismAt,
       obstacleGrid,
+      ...(this.deepWater.size > 0 ? { deepGrid: this.deepGrid() } : {}),
       foodGrid,
       carrionGrid,
       eggGrid,
@@ -1391,7 +1397,8 @@ export class World {
           if (elevation && entered) {
             const from = startCell.y * this.config.gridWidth + startCell.x;
             const to = entered.y * this.config.gridWidth + entered.x;
-            cost *= slopeMoveFactor(from, to, elevation, this.config) * wadeMoveFactor(to, sizeOf(organism, this.config), elevation, this.config);
+            const swim = swimOf(organism, this.config);
+            cost *= slopeMoveFactor(from, to, elevation, this.config) * wadeMoveFactor(to, sizeOf(organism, this.config), elevation, this.config, swim) * swimMoveFactor(to, swim, elevation, this.config);
           }
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
@@ -1861,7 +1868,7 @@ export class World {
           c.y >= 0 &&
           c.x < config.gridWidth &&
           c.y < config.gridHeight &&
-          !this.obstacles.has(`${c.x},${c.y}`) &&
+          this.canEnter(o, `${c.x},${c.y}`) &&
           !blocked.has(`${c.x},${c.y}`)
       );
     const first = this.prng.next() < 0.5 ? a : b;
@@ -2046,6 +2053,23 @@ export class World {
   public isWet(x: number, y: number): boolean {
     const e = this.elevationField ?? this.getElevation();
     return e !== null && e.isWater(y * this.config.gridWidth + x);
+  }
+
+  /** Deep water as a grid (1 = deep), built once and shared with every snapshot. */
+  private deepGrid(): Uint8Array {
+    if (this.deepGridCache) return this.deepGridCache;
+    const { gridWidth, gridHeight } = this.config;
+    const grid = new Uint8Array(gridWidth * gridHeight);
+    for (const key of this.deepWater) {
+      const comma = key.indexOf(',');
+      grid[Number(key.slice(comma + 1)) * gridWidth + Number(key.slice(0, comma))] = 1;
+    }
+    return (this.deepGridCache = grid);
+  }
+
+  /** Whether this body may stand on the cell: not rock, and deep water only for a swimmer. */
+  private canEnter(o: Readonly<Pick<Organism, 'swim'>>, key: string): boolean {
+    return !this.obstacles.has(key) || (this.deepWater.has(key) && canSwimDeep(o, this.config));
   }
 
   /** The rocks only: the obstacles without the deep water, which the page draws as water. */
@@ -2262,7 +2286,7 @@ export class World {
         }
         if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) continue;
         const key = `${x},${y}`;
-        if (this.obstacles.has(key) || blocked.has(key)) continue;
+        if (!this.canEnter(parent, key) || blocked.has(key)) continue;
         candidates.push({ x, y, distance });
       }
     }
@@ -2606,6 +2630,7 @@ export class World {
       toughness: mean(c.toughnessGeneEnabled, (o) => o.toughness ?? c.toughnessFounder),
       toxicity: mean(c.toxicityGeneEnabled, (o) => o.toxicity ?? c.toxicityFounder),
       stealth: mean(c.stealthGeneEnabled, (o) => o.stealth ?? c.stealthFounder),
+      swim: mean(c.swimGeneEnabled && c.elevationEnabled, (o) => o.swim ?? c.swimFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

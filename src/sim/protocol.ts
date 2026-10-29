@@ -69,6 +69,7 @@ export interface OrganismView {
   readonly toughness?: number;
   readonly toxicity?: number;
   readonly stealth?: number;
+  readonly swim?: number;
   readonly lastBiteYield?: number;
   /** Life-history genes the colour modes and card read (absent while their switch is off). */
   readonly metabolicRate?: number;
@@ -148,6 +149,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.toughness !== undefined ? { toughness: org.toughness } : {}),
     ...(org.toxicity !== undefined ? { toxicity: org.toxicity } : {}),
     ...(org.stealth !== undefined ? { stealth: org.stealth } : {}),
+    ...(org.swim !== undefined ? { swim: org.swim } : {}),
     ...(org.lastBiteYield !== undefined ? { lastBiteYield: org.lastBiteYield } : {}),
     ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0
       ? { acquiredBrainUnits: org.circuit.effectiveAcquiredUnits }

@@ -12,7 +12,7 @@ import { isKin, shareWeightFor, tagSimilarity } from './tags';
 import { isLeapAction, unitDirectionOf } from './directions';
 import { carrionYield, killChance } from './traits';
 import { isParentOf, isParentOrChild } from './family';
-import { maxEnergyOf, thresholdOf } from './lifehistory';
+import { canSwimDeep, maxEnergyOf, thresholdOf } from './lifehistory';
 import { carryCapacityOf, isMature } from './growth';
 
 export const WEIGHT_MIN = -2.0;
@@ -131,8 +131,10 @@ export function getLegalActions(
   const width = snapshot.gridWidth;
   const inBounds = (cx: number, cy: number) =>
     cx >= 0 && cx < width && cy >= 0 && cy < snapshot.gridHeight;
+  // Deep water is a wall unless this body can swim it.
+  const swimsDeep = canSwimDeep(organism, config);
   const isWall = (cx: number, cy: number) =>
-    !inBounds(cx, cy) || snapshot.obstacleGrid[cy * width + cx] === 1;
+    !inBounds(cx, cy) || (snapshot.obstacleGrid[cy * width + cx] === 1 && !(swimsDeep && snapshot.deepGrid?.[cy * width + cx] === 1));
   const occupantAt = (cx: number, cy: number) => {
     if (!inBounds(cx, cy)) return undefined;
     const index = snapshot.organismGrid[cy * width + cx];
@@ -244,7 +246,7 @@ export function getLegalActions(
       }
 
       // Cannot place child on obstacle
-      if (snapshot.obstacleGrid[targetY * snapshot.gridWidth + targetX] === 1) {
+      if (snapshot.obstacleGrid[targetY * snapshot.gridWidth + targetX] === 1 && !(swimsDeep && snapshot.deepGrid?.[targetY * snapshot.gridWidth + targetX] === 1)) {
         continue;
       }
 

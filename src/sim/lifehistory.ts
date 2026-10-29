@@ -38,7 +38,8 @@ export type LifeField =
   | 'hatchMaturity'
   | 'toughness'
   | 'toxicity'
-  | 'stealth';
+  | 'stealth'
+  | 'swim';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -209,6 +210,16 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.stealthMin,
     max: (c) => c.stealthMax,
   },
+  {
+    // Swimming (docs/specs/swimming-marine.md): only exists where there is deep water to cross.
+    field: 'swim',
+    traitId: 57,
+    enabled: (c) => c.swimGeneEnabled && c.elevationEnabled,
+    founder: (c) => c.swimFounder,
+    step: (c) => c.swimStep,
+    min: (c) => c.swimMin,
+    max: (c) => c.swimMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -303,6 +314,14 @@ export const toxicityOf = (o: Readonly<Pick<Organism, 'toxicity'>>, c: Readonly<
 /** Ambush & cry suppression / stealth (stealthGeneEnabled); 0 without the gene. */
 export const stealthOf = (o: Readonly<Pick<Organism, 'stealth'>>, c: Readonly<SimulationConfig>): number =>
   c.stealthGeneEnabled ? (o.stealth ?? c.stealthFounder) : 0;
+
+/** Swimming 0..1 (swimGeneEnabled with elevation); 0 without the gene. */
+export const swimOf = (o: Readonly<Pick<Organism, 'swim'>>, c: Readonly<SimulationConfig>): number =>
+  c.swimGeneEnabled && c.elevationEnabled ? (o.swim ?? c.swimFounder) : 0;
+
+/** Whether this body can enter deep water. */
+export const canSwimDeep = (o: Readonly<Pick<Organism, 'swim'>>, c: Readonly<SimulationConfig>): boolean =>
+  swimOf(o, c) > 0 && swimOf(o, c) >= c.swimDeepThreshold;
 
 export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold' | 'size'>>, c: Readonly<SimulationConfig>): number =>
   (o.reproThreshold ?? c.reproductionThreshold) * sizeOf(o, c);

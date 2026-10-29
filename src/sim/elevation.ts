@@ -421,10 +421,21 @@ export function slopeMoveFactor(from: number, to: number, field: ElevationField,
 }
 
 /** The factor on a move's cost for wading into shallow water: more for deeper water and a larger footprint. */
-export function wadeMoveFactor(index: number, size: number, field: ElevationField, config: Readonly<SimulationConfig>): number {
+export function wadeMoveFactor(index: number, size: number, field: ElevationField, config: Readonly<SimulationConfig>, swim = 0): number {
   const depth = field.depth01(index);
   if (depth <= 0) return 1;
-  return 1 + config.elevationWadeDrag * Math.min(1, depth / Math.max(1e-9, config.elevationDeepThreshold)) * Math.sqrt(size);
+  // A swimmer is buoyant: the wading drag shrinks with swimming.
+  return 1 + config.elevationWadeDrag * Math.min(1, depth / Math.max(1e-9, config.elevationDeepThreshold)) * Math.sqrt(size) * (1 - swim);
+}
+
+/**
+ * What swimming does to the cost of entering a cell: dry land costs a swimmer
+ * more (fins and bulk), deep water costs a weak swimmer more. 1 for swim 0.
+ */
+export function swimMoveFactor(index: number, swim: number, field: ElevationField, config: Readonly<SimulationConfig>): number {
+  if (swim <= 0) return 1;
+  if (!field.isWater(index)) return 1 + config.swimLandDrag * swim;
+  return field.isDeep(index, config) ? 1 + config.swimDeepDrag * (1 - swim) : 1;
 }
 
 /** The temperature offset a body feels from its height and from standing in water (added to the weather temperature). */

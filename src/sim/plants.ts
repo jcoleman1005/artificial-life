@@ -88,6 +88,8 @@ export class SoilField {
   public version = 0;
   private readonly wearPending: Float64Array | null; // integer millionths: exact sums, so order never matters
   private wearTouched: number[] = [];
+  /** 1 on water cells that grow marine plants (null without them). Seeds only take root in their parent's medium. */
+  public marine: Uint8Array | null = null;
   public readonly region: Int16Array;
   public readonly nutrients: Float32Array;
   private readonly diffBuffer: Float32Array;
@@ -112,7 +114,16 @@ export class SoilField {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
-        if (obstacles.has(`${x},${y}`) || (elevation !== null && elevation.isWater(i))) continue; // rock and water grow nothing
+        if (elevation !== null && elevation.isWater(i) && config.marineEnabled) {
+          // Marine plants: light fades with depth, so the shallows are richest. Deep water is in `obstacles` but still grows plants.
+          this.marine ??= new Uint8Array(w * h);
+          this.marine[i] = 1;
+          const f0 = config.marineFertility * (1 - (1 - config.marineDeepLight) * Math.min(1, elevation.depth01(i)));
+          this.fertility[i] = f0;
+          this.nutrients[i] = f0;
+          continue;
+        }
+        if (obstacles.has(`${x},${y}`) || (elevation !== null && elevation.isWater(i))) continue; // rock and (without marine plants) water grow nothing
         if (regions.length === 0) {
           // No discs: everywhere is equally fertile, or with elevation the soil quality made from water, slope and height.
           const f0 = elevation !== null ? elevation.fertility[i] / 255 : 1;
@@ -423,7 +434,7 @@ export function stepPlants(ctx: PlantStepContext): void {
   }
   living.sort((a, b) => a.index - b.index);
 
-  const seeds: { x: number; y: number; parent: Plant }[] = [];
+  const seeds: { x: number; y: number; from: number; parent: Plant }[] = [];
   for (const { key, index, patch, plant } of living) {
     const g = plant.genome;
     const { x, y } = patch;
@@ -548,7 +559,7 @@ export function stepPlants(ctx: PlantStepContext): void {
         sx += Math.round(wind.wx * config.weatherSeedDrift);
         sy += Math.round(wind.wy * config.weatherSeedDrift);
       }
-      seeds.push({ x: sx, y: sy, parent: plant });
+      seeds.push({ x: sx, y: sy, from: index, parent: plant });
     }
     patch.stock = Math.floor(plant.biomass);
   }
@@ -556,6 +567,7 @@ export function stepPlants(ctx: PlantStepContext): void {
   // Seeds land after every plant has grown, so they shade nobody this tick.
   for (const seed of seeds) {
     if (!canGerminate(ctx, seed.x, seed.y)) continue;
+    if (field.marine && field.marine[seed.y * w + seed.x] !== field.marine[seed.from]) continue;
     const genome = inheritGenome(seed.parent.genome, config, prng);
     const child = createPlant(counters, genome, seed.parent.genome.seedSize, tick, seed.parent);
     plantAt(patches, field, w, seed.x, seed.y, child);

@@ -190,7 +190,7 @@ describe('Elevation in a world', () => {
   }, 60_000);
 
   it('grows nothing in water and more on richer soil', () => {
-    const w = world();
+    const w = world(42, { marineEnabled: false }); // isolates the land soil map from marine plants (tests/swimming.test.ts)
     const soil = w.soil();
     const e = w.getElevation()!;
     for (let i = 0; i < soil.fertility.length; i++) if (e.isWater(i)) expect(soil.fertility[i]).toBe(0);

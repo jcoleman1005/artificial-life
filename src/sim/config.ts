@@ -97,6 +97,18 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   elevationRiparianReach: 5, // wetness fades out over five cells from water
   elevationFertilityMean: 0.6, // about the old disc world's total food, now spread by water, slope and height
   elevationFertilityMin: 0.04,
+  swimGeneEnabled: true, // inherited swimming (trait 57); only with elevation. Off: nobody can cross deep water
+  swimFounder: 0, // founders cannot swim; it has to arise by mutation near the shore
+  swimStep: 0.05,
+  swimMin: 0,
+  swimMax: 1,
+  swimDeepThreshold: 0.5, // swimming needed to cross deep water
+  swimUpkeepRate: 0.02, // upkeep per tick per unit of (swim * sizeFactor): fins and fat cost on land too
+  swimLandDrag: 0.5, // a full swimmer pays 50% more to move on dry land
+  swimDeepDrag: 1, // a swimmer at the threshold pays 1 + this x (1 - swim) in deep water
+  marineEnabled: true, // plants also grow under water (shallows richest); seeds stay in their own medium
+  marineFertility: 0.5, // soil fertility of the shallowest water, 0..1
+  marineDeepLight: 0.25, // share of that fertility left at the deepest water
   terrainEnabled: true, // off reproduces the world without terrain (the control arm)
   terrainScale: 8, // patches about 8 cells across on the 60×60 grid
   terrainThreshold: 0.5, // about half of the ground is open

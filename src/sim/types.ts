@@ -341,6 +341,8 @@ export interface Organism {
   readonly toxicity?: number;
   /** Ambush stealth & cry suppression (stealthGeneEnabled), 0..1. Muffles or negates death pulse upon kill/death; ambush surprise boost. */
   readonly stealth?: number;
+  /** Swimming (swimGeneEnabled with elevation), 0..1: crosses deep water above swimDeepThreshold, wades more cheaply, pays upkeep and a drag on land. */
+  readonly swim?: number;
   /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
   lastBiteYield?: number;
   /** Fat held now (state; only with fatEnabled). */
@@ -604,6 +606,18 @@ export interface SimulationConfig {
   elevationWaterChill: number; // Temperature lost standing in water
   elevationRiparianReach: number; // Cells from water over which the shore's wetness fades to nothing
   elevationFertilityMean: number; // Average fertility of dry land (the soil map is scaled to this); the old disc world averaged about 0.6
+  swimGeneEnabled: boolean; // Inherited swimming (trait 57), only with elevation; off: deep water is a wall for all
+  swimFounder: number;
+  swimStep: number;
+  swimMin: number;
+  swimMax: number;
+  swimDeepThreshold: number; // Swimming needed to cross deep water, 0..1
+  swimUpkeepRate: number; // Upkeep per tick per unit of (swim * sizeFactor)
+  swimLandDrag: number; // Extra move cost on dry land at swim 1 (shallow wading drag shrinks by the same swim)
+  swimDeepDrag: number; // Deep-water move cost is 1 + this x (1 - swim)
+  marineEnabled: boolean; // Plants grow under water too, richest in the shallows; seeds keep to their own medium
+  marineFertility: number; // Soil fertility of the shallowest water, 0..1
+  marineDeepLight: number; // Share of that fertility left at the deepest water, 0..1
   elevationFertilityMin: number; // The poorest ground (bare rock, steep slopes), 0..1
   terrainEnabled: boolean; // Per-cell roughness and cover from seeded noise (docs/decisions.md, Terrain fields); off draws nothing and changes nothing
   terrainScale: number; // Cells per noise lattice step: larger gives broader patches
@@ -971,6 +985,7 @@ export interface LifeMetrics {
   toughness: number | null;
   toxicity: number | null;
   stealth: number | null;
+  swim?: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
@@ -993,6 +1008,8 @@ export interface WorldSnapshot {
   readonly organismAt: ReadonlyMap<string, Organism>;
   /** Fast lookups indexed by y * gridWidth + x: 1 where there is an obstacle. */
   readonly obstacleGrid: Uint8Array;
+  /** 1 on deep water (also 1 in obstacleGrid): swimmers may cross it. Shared and never mutated; absent without deep water. */
+  readonly deepGrid?: Uint8Array;
   /** Food stock in each cell (0 when no patch or empty). */
   readonly foodGrid: Int32Array;
   /** Carrion energy in each cell (0 when none). */
