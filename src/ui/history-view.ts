@@ -94,6 +94,8 @@ const DIST_PANELS: readonly DistPanel[] = [
   { trait: 'reproThreshold', label: 'Breeding threshold spread', low: 'early', high: 'late' },
   { trait: 'clutchSize', label: 'Clutch size spread', low: 'small', high: 'large' },
   { trait: 'metabolicRate', label: 'Metabolic rate spread', low: 'slow', high: 'fast' },
+  { trait: 'growthDuration', label: 'Growth duration spread', low: 'fast grower', high: 'slow grower' },
+  { trait: 'hatchMaturity', label: 'Hatch maturity spread', low: 'altricial', high: 'precocial' },
 ];
 
 /** Bin counts as fractions of their total (all zero when empty). */
@@ -479,6 +481,8 @@ export class HistoryView {
         reference: (s) => s.life?.fat?.mean ?? 0,
       }),
       lifePanel('clutchSize', 'Clutch size (per mating)', null, (v) => v.toFixed(1)),
+      lifePanel('growthDuration', 'Growth duration (fed ticks to adult)', null, (v) => v.toFixed(0)),
+      lifePanel('hatchMaturity', 'Hatch maturity (grown share at birth)', [0, 1], pct, { axisLabel: pct }),
       lifePanel('torporDepth', 'Rest efficiency', [0, 1], pct, { axisLabel: pct }),
       lifePanel('eggAllocation', 'Births laid as eggs', [0, 1], pct, { axisLabel: pct }),
       {

@@ -1,6 +1,7 @@
 import type { PRNG } from './prng';
 import type { Abilities, AbilityName, Organism, SimulationConfig } from './types';
 import { carnivoreEfficiencyOf, digestiveEfficiencyOf, maxEnergyOf, metabolicRateOf, sizeOf } from './lifehistory';
+import { bodyScaleOf, senescenceFactorOf } from './growth';
 
 /** Carry capacity for a founder (pioneer or immigrant): 1–3 units. */
 export function founderCarryCapacity(config: Readonly<SimulationConfig>, prng: PRNG): number {
@@ -89,22 +90,29 @@ export function inheritAbilityEfficiency(parent: number, config: Readonly<Simula
  * squeeze squeezeCostMultiplier + 1 − e (3 − e), leap leapCostMultiplier + 1 − e (3.5 − e).
  */
 export function moveEnergyCost(
-  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity'>>,
+  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity' | 'toughness'>>,
   move: { readonly leap: boolean; readonly diagonal: boolean; readonly squeeze: boolean },
   config: Readonly<SimulationConfig>
 ): number {
-  const isOrganism = 'abilities' in subject || 'size' in subject || 'fat' in subject;
+  const isOrganism = 'abilities' in subject || 'size' in subject || 'fat' in subject || 'toughness' in subject;
   const abilities = isOrganism ? (subject as Pick<Organism, 'abilities'>).abilities : (subject as Abilities);
   let moveCost = config.moveCost;
   if (isOrganism) {
-    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity'>;
-    const size = sizeOf(org, config);
+    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity' | 'toughness'>;
+    // Mass moved: the size gene's, times body scale while growing (1 when grown).
+    const size = sizeOf(org, config) * bodyScaleOf(org, config);
     moveCost *= size;
     if (config.fatEnabled && config.fatDragCoeff > 0) {
       const fat = org.fat ?? 0;
       if (fat > 0) {
         const capacity = maxEnergyOf(org, config) + Math.max(1, org.fatCapacity ?? 0);
         moveCost *= 1 + config.fatDragCoeff * (fat / capacity);
+      }
+    }
+    if (config.toughnessGeneEnabled && (config.armorDragCoeff ?? 0) > 0) {
+      const toughness = org.toughness ?? 0;
+      if (toughness > 0) {
+        moveCost *= 1 + config.armorDragCoeff * toughness;
       }
     }
   }
@@ -129,10 +137,14 @@ export function herbivoryOf(organism: Readonly<Pick<Organism, 'carnivory' | 'her
 
 /** Energy spent per tick just staying alive, including the upkeep of body traits. */
 export function metabolismCost(organism: Readonly<Organism>, config: Readonly<SimulationConfig>): number {
+  // Kleiber scaling on the effective size: the size gene's, times body scale while growing.
+  const bodyScale = bodyScaleOf(organism, config);
   const sizeFactor =
     config.sizeGeneEnabled && organism.size !== undefined
-      ? Math.pow(organism.size, config.sizeMetabolismExponent ?? 0.75)
-      : 1;
+      ? Math.pow(organism.size * bodyScale, config.sizeMetabolismExponent ?? 0.75)
+      : bodyScale < 1
+        ? Math.pow(bodyScale, config.sizeMetabolismExponent ?? 0.75)
+        : 1;
   const metabolicRate =
     config.metabolismGeneEnabled && organism.metabolicRate !== undefined ? organism.metabolicRate : 1;
   const baseCost = config.tickMetabolismCost * sizeFactor * metabolicRate;
@@ -161,12 +173,33 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.detoxUpkeepRate * organism.detox * sizeFactor
       : 0;
 
-  return (
+  // Armor/Toughness upkeep: maintaining dense hide/carapace scaling with body size
+  const toughnessUpkeep =
+    config.toughnessGeneEnabled && organism.toughness !== undefined && organism.toughness > 0
+      ? config.toughnessUpkeepRate * organism.toughness * sizeFactor
+      : 0;
+
+  // Chemical toxicity upkeep: synthesizing and maintaining defensive toxins scaling with body size
+  const toxicityUpkeep =
+    config.toxicityGeneEnabled && organism.toxicity !== undefined && organism.toxicity > 0
+      ? config.toxicityUpkeepRate * organism.toxicity * sizeFactor
+      : 0;
+
+  // Stealth upkeep: maintaining silent stalking machinery and camouflage scaling with body size
+  const stealthUpkeep =
+    config.stealthGeneEnabled && organism.stealth !== undefined && organism.stealth > 0
+      ? config.stealthUpkeepRate * organism.stealth * sizeFactor
+      : 0;
+
+  const total =
     baseCost +
     sensoryUpkeep +
     digestiveUpkeep +
     carnivoreUpkeep +
     detoxUpkeep +
+    toughnessUpkeep +
+    toxicityUpkeep +
+    stealthUpkeep +
     config.carryUpkeep * organism.carryCapacity +
     (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
@@ -179,8 +212,10 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
     // Stage 2: every gene costs upkeep, so genome length is under selection.
     (config.dnaVariationEnabled && organism.genome ? config.dnaUpkeepPerGene * (organism.genome.length / 3) : 0) +
     // Stage 3: each expressed connection of an acquired hidden unit (past the founders' 6) costs upkeep; founders pay 0.
-    (config.dnaEnabled && config.dnaGrowableBrain && organism.circuit ? config.dnaUpkeepPerConnection * organism.circuit.acquiredConnections : 0)
-  );
+    (config.dnaEnabled && config.dnaGrowableBrain && organism.circuit ? config.dnaUpkeepPerConnection * organism.circuit.acquiredConnections : 0);
+  // Ageing: past senescenceAge the whole upkeep rises (x1 otherwise, and with ageing off).
+  const aged = senescenceFactorOf(organism, config);
+  return aged === 1 ? total : total * aged;
 }
 
 /**
@@ -234,17 +269,23 @@ export function inheritCarnivory(parent: number, config: Readonly<SimulationConf
 }
 
 /** Energy from one unit of plant food: less for meat eaters, when carrion is on; herbivory × yield with split diets. */
-export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herbivory' | 'digestiveEfficiency'>>, config: Readonly<SimulationConfig>): number {
+export function plantYield(organism: Readonly<Pick<Organism, 'carnivory' | 'herbivory' | 'digestiveEfficiency' | 'maturity'>>, config: Readonly<SimulationConfig>): number {
   const eff = digestiveEfficiencyOf(organism, config);
-  if (splitDiets(config)) return config.foodEnergyYield * herbivoryOf(organism, config) * eff;
-  if (!config.carrionEnabled) return config.foodEnergyYield * eff;
-  return config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory) * eff;
+  // A small body takes a smaller bite: yield scales with body scale (x1 when grown, and with growth off).
+  const scale = bodyScaleOf(organism, config);
+  const meal = splitDiets(config)
+    ? config.foodEnergyYield * herbivoryOf(organism, config) * eff
+    : !config.carrionEnabled
+      ? config.foodEnergyYield * eff
+      : config.foodEnergyYield * (1 - config.dietTradeoff * organism.carnivory) * eff;
+  return scale === 1 ? meal : meal * scale;
 }
 
 /** Energy from a full carrion meal (carrionBite of carrion energy); 0 when carrion is off. */
-export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency' | 'carnivoreEfficiency'>>, config: Readonly<SimulationConfig>): number {
+export function carrionYield(organism: Readonly<Pick<Organism, 'carnivory' | 'digestiveEfficiency' | 'carnivoreEfficiency' | 'maturity'>>, config: Readonly<SimulationConfig>): number {
   const eff = digestiveEfficiencyOf(organism, config) * carnivoreEfficiencyOf(organism, config);
-  return config.carrionEnabled ? config.carrionBite * organism.carnivory * eff : 0;
+  // A small body takes a smaller bite (x1 when grown, and with growth off).
+  return config.carrionEnabled ? config.carrionBite * bodyScaleOf(organism, config) * organism.carnivory * eff : 0;
 }
 
 /**
@@ -261,12 +302,20 @@ export function carrionFromBody(bodyEnergy: number, config: Readonly<SimulationC
  * meat eater). Prey that moves out of reach that tick escapes regardless.
  */
 export function killChance(
-  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory'>>,
-  prey: Readonly<Pick<Organism, 'energy'>>,
+  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory' | 'stealth'>>,
+  prey: Readonly<Pick<Organism, 'energy' | 'toughness'>>,
   config: Readonly<SimulationConfig>
 ): number {
   const total = attacker.energy + prey.energy;
   const share = total > 0 ? attacker.energy / total : 0;
   const bite = config.bitePowerMin + (1 - config.bitePowerMin) * attacker.carnivory;
-  return share * bite;
+  let chance = share * bite;
+  if (config.stealthGeneEnabled && attacker.stealth !== undefined && attacker.stealth > 0) {
+    chance *= 1 + (config.stealthAmbushBonus ?? 0.3) * attacker.stealth;
+  }
+  if (!config.toughnessGeneEnabled || prey.toughness === undefined || prey.toughness <= 0) {
+    return Math.min(1, chance);
+  }
+  const armorEffectiveness = config.armorEffectiveness ?? 0.75;
+  return Math.min(1, Math.max(0, chance * (1 - armorEffectiveness * prey.toughness)));
 }

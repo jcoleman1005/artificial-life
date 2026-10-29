@@ -329,6 +329,18 @@ export interface Organism {
   readonly carnivoreEfficiency?: number;
   /** Toxin detoxification efficiency (detoxGeneEnabled), 0..1. Neutralizes plant chemical defenses; charges metabolic upkeep. */
   readonly detox?: number;
+  /** Fed ticks to grow from maturity 0 to 1 (growthGeneEnabled with growthEnabled). Faster growth pays more heat in total; slower leaves the body small and unable to breed for longer. */
+  readonly growthDuration?: number;
+  /** Maturity this organism's own newborns would start at (hatchMaturityGeneEnabled with growthEnabled), 0..1. A more developed newborn costs more of the parent's pool to launch. */
+  readonly hatchMaturity?: number;
+  /** How grown the body is, 0..1 (state; only with growthEnabled; absent means grown, as in saves from before growth). */
+  maturity?: number;
+  /** Prey body armor / toughness (toughnessGeneEnabled), 0..1. Reduces attacker bite kill chance; charges mass upkeep. */
+  readonly toughness?: number;
+  /** Chemical defense / tissue toxicity (toxicityGeneEnabled), 0..1. Inflicts acute malaise on attacking predators and scavengers. */
+  readonly toxicity?: number;
+  /** Ambush stealth & cry suppression (stealthGeneEnabled), 0..1. Muffles or negates death pulse upon kill/death; ambush surprise boost. */
+  readonly stealth?: number;
   /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
   lastBiteYield?: number;
   /** Fat held now (state; only with fatEnabled). */
@@ -476,6 +488,8 @@ export interface CarrionPatch {
   stock: number;
   /** The tick it rots away (renewed when another body lands on it). */
   expiresAt: number;
+  /** Chemical defense / toxicity sequestered or inherited from the body (0..1). */
+  toxicity?: number;
 }
 
 /** An egg: a child waiting inert, in a cell, until conditions are favorable. */
@@ -487,6 +501,8 @@ export interface Egg {
   shell: number;
   /** The child it will hatch into (its energy is what the egg holds). */
   readonly child: Organism;
+  /** Chemical defense / toxicity inherited from the parent (0..1). */
+  toxicity?: number;
 }
 
 /** A fertile disc where food patches grow. Each may run its own season clock. */
@@ -693,6 +709,12 @@ export interface SimulationConfig {
   dnaMaxGenes: number; // Insertions and duplications stop at this genome length (a safety rail for tick cost)
   dnaGrowableBrain: boolean; // With DNA (Stage 3): the brain is compiled from the genome as a sparse circuit with up to dnaMaxInternal hidden units; every brain gene is expressed
   dnaMaxInternal: number; // Hidden units a genome can address with the growable brain (clamped to 6..256)
+  hybridIncompatibilityEnabled: boolean; // With DNA and mating: children of crosses between far-apart genomes may be inviable (docs/specs/speciation.md); off reproduces the old world bit-identically
+  hybridTolerance: number; // Genome distance (0..1) at or below which a cross is fully compatible
+  hybridFull: number; // Genome distance at or above which a cross is maximally incompatible
+  hybridMaxInviability: number; // Chance a child of a maximally incompatible cross is inviable (its share of the clutch is lost as heat)
+  hybridControlInviability: number; // Matched-random control: above 0, every cross loses children at this flat rate whatever the distance (hybridMaxInviability is ignored)
+  genomeDistanceBrainScale: number; // Dose difference counted as 1 for brain and register weight genes
   dnaUpkeepPerConnection: number; // Energy per tick per expressed acquired connection (in hidden units past the founders' 6)
   // Weather systems
   weatherEnabled: boolean;
@@ -730,6 +752,58 @@ export interface SimulationConfig {
   detoxMin: number;
   detoxMax: number;
   detoxUpkeepRate: number;
+  growthEnabled: boolean; // Organisms hatch small, grow to adult size if fed, and can only breed once mature (docs/specs/growth.md)
+  hatchMaturity: number; // Maturity of a newborn or hatchling, 0..1
+  hatchScale: number; // Body scale at maturity 0 (scale = hatchScale + (1 - hatchScale) × maturity)
+  growthTicks: number; // Fed ticks from maturity 0 to 1 (the fixed duration when the gene is off; the reference duration for the heat cost when it is on)
+  growthEnergyFloor: number; // Growth stalls while energy is below this fraction of the current maximum
+  growthCostPerTick: number; // Energy paid (as heat) on each tick that adds growth, at duration growthTicks
+  matureAt: number; // Maturity at which REPRODUCE and MATE become legal
+  growthGeneEnabled: boolean; // With growth: the duration is an inherited gene (trait 55) instead of the fixed growthTicks
+  growthDurationFounder: number; // Founders' growth duration
+  growthDurationMin: number;
+  growthDurationMax: number;
+  growthDurationStep: number; // Size of one mutation step
+  growthDurationCostExponent: number; // Heat per growing tick = growthCostPerTick × (growthTicks / duration)^exponent; above 1, faster growth costs more in total
+  hatchMaturityGeneEnabled: boolean; // With growth: newborn maturity is an inherited gene (trait 56) instead of the fixed hatchMaturity; launch cost scales with it
+  hatchMaturityMin: number;
+  hatchMaturityMax: number;
+  hatchMaturityStep: number; // Size of one mutation step; founders start at hatchMaturity
+  ageingEnabled: boolean; // Upkeep rises with age past senescenceAge, and organisms die of old age at maxAge
+  senescenceAge: number; // Age (ticks) at which upkeep starts to rise
+  senescenceRate: number; // Upkeep multiplier added per tick past senescenceAge
+  maxAge: number; // Age (ticks) at which an organism dies of old age
+  speciesEnabled: boolean; // Observer: detect and name species (clusters in genome); never changes the world
+  speciesInterval: number; // Ticks between species runs
+  speciesThreshold: number; // Distance (0..1) within which an organism belongs to a species representative
+  speciesMinSize: number; // Members a distinct cluster needs to become a species
+  speciesPersistTicks: number; // Ticks a cluster must stay distinct to become a species
+  speciesExtinctTicks: number; // Ticks with no members before a species is extinct
+  speciesBrainWeight: number; // Largest share of the distance the brain can contribute
+  speciesTagWeight: number; // Share of the distance from the hue tag
+  // Red Queen Phase 2: Predator–Prey Arms Race
+  predationDefenseEnabled: boolean; // Master switch for involuntary death cries and uncoupled carrion scent
+  toughnessGeneEnabled: boolean; // Prey armor evolves (reduces bite kill chance, charges mass upkeep)
+  toughnessFounder: number;
+  toughnessStep: number;
+  toughnessMin: number;
+  toughnessMax: number;
+  toughnessUpkeepRate: number; // Upkeep per tick per unit of (toughness * sizeFactor)
+  armorEffectiveness: number; // Max lethality reduction at toughness 1.0 (default 0.75)
+  armorDragCoeff: number; // Mechanical drag multiplier on movement from carrying armor
+  toxicityGeneEnabled: boolean; // Prey chemical defense evolves (inflicts acute malaise on attacking predators and scavengers)
+  toxicityFounder: number;
+  toxicityStep: number;
+  toxicityMin: number;
+  toxicityMax: number;
+  toxicityUpkeepRate: number; // Upkeep per tick per unit of (toxicity * sizeFactor)
+  stealthGeneEnabled: boolean; // Ambush stealth & cry suppression evolves (muffles or negates death pulses)
+  stealthFounder: number;
+  stealthStep: number;
+  stealthMin: number;
+  stealthMax: number;
+  stealthUpkeepRate: number; // Upkeep per tick per unit of (stealth * sizeFactor)
+  stealthAmbushBonus: number; // Attack kill chance multiplier bonus from stealth
   seed: number | string;
 }
 
@@ -798,6 +872,10 @@ export interface WorldMetrics {
   clutchesFailedTotal: number;
   matingChildrenLostTotal: number;
   matingEnergyLostTotal: number;
+  /** Matings that risked inviable children (genome distance above hybridTolerance), children lost to incompatibility, and the summed genome distance of the matings measured (mean = sum / matingsTotal while the switch has been on). */
+  hybridCrossesTotal: number;
+  hybridChildrenLostTotal: number;
+  matingGenomeDistanceSum: number;
   /** Carrion meals eaten so far, and carrion energy lying in the world now. */
   carrionEatenTotal: number;
   carrionStock: number;
@@ -814,6 +892,8 @@ export interface WorldMetrics {
   overgrazing: OvergrazingMetrics | null;
   /** Life-history genes, or null when none is on. */
   life: LifeMetrics | null;
+  /** Growth and ageing, or null when both are off. */
+  growth: GrowthMetrics | null;
   /** Weather conditions, or null when weather is off. */
   weather: WeatherMetrics | null;
   /** Soil nutrient cycle metrics, or null when nutrient cycle is off. */
@@ -838,6 +918,22 @@ export interface WeatherMetrics {
   windAngle: number;
 }
 
+/** Growth and ageing: how grown the population is, and what it has cost. */
+export interface GrowthMetrics {
+  /** Mean maturity (1 with growth off) and the share below matureAt (cannot breed yet). */
+  meanMaturity: number;
+  juvenileFraction: number;
+  /** Share of the living past senescenceAge (0 with ageing off), and the mean age of the living. */
+  senescentFraction: number;
+  meanAge: number;
+  /** Deaths at maxAge so far, and the mean lifespan of all who have died (0 before the first death). */
+  deathsOldAgeTotal: number;
+  meanLifespan: number;
+  /** Energy paid as heat to grow, and newborn energy lost above a small body's capacity, so far. */
+  growthHeatTotal: number;
+  growthEnergyLostTotal: number;
+}
+
 /** Population means of the life-history genes that are switched on, and egg/rest/fat counts. */
 export interface LifeMetrics {
   reproThreshold: number | null;
@@ -853,6 +949,11 @@ export interface LifeMetrics {
   digestiveEfficiency: number | null;
   carnivoreEfficiency: number | null;
   detox: number | null;
+  growthDuration: number | null;
+  hatchMaturity: number | null;
+  toughness: number | null;
+  toxicity: number | null;
+  stealth: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
@@ -885,8 +986,20 @@ export interface WorldSnapshot {
   readonly organismGrid: Int32Array;
   /** Indices into `organisms` of those that signalled last tick. */
   readonly signallers: readonly number[];
+  /** Active involuntary death pulses emitted last tick, or undefined when none. */
+  readonly deathPulses?: readonly DeathPulse[];
   /** Active weather state snapshot, or null when weather is off. */
   readonly weather?: WeatherSnapshot | null;
+}
+
+/** Involuntary acoustic/chemical shockwave broadcast when an organism is violently killed. */
+export interface DeathPulse {
+  readonly x: number;
+  readonly y: number;
+  readonly tag: number;
+  readonly size: number;
+  readonly power?: number;
+  readonly tick: number;
 }
 
 export type WeatherFrontType = 'rain_storm' | 'cold_front' | 'heat_wave';

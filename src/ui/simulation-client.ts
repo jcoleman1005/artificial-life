@@ -3,6 +3,7 @@ import type { HistorySample } from '../sim/history';
 import { TerrainField } from '../sim/terrain';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
+import type { BrainTrace } from '../sim/brain-trace';
 import type {
   AncestorNode,
   EggView,
@@ -13,7 +14,8 @@ import type {
   ToWorker,
   WorldView,
 } from '../sim/protocol';
-import type { CarrionPatch, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
+import type { SpeciesSnapshot } from '../sim/species';
+import type { CarrionPatch, DeathPulse, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
 
 export interface ClientEvents {
   /** A new frame arrived. Called before it is applied, so positions can be remembered for glides. */
@@ -35,9 +37,28 @@ export interface ClientEvents {
 /** What the always-on server says about itself at /api/info. */
 export interface ServerInfo {
   readonly app: 'alife-server';
+  readonly buildId?: string;
   readonly frameIntervalMs: number;
   readonly maxTicksPerSecond: number;
   readonly watchOnly: boolean;
+}
+
+const CONTROL_TOKEN_KEY = 'alife:control-token';
+
+/** Reads ?control=TOKEN (or ?admin=TOKEN) from the URL or sessionStorage so a separate control link unlocks a watch-only server. */
+function getControlToken(): string | null {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('control') ?? params.get('admin');
+    if (fromUrl !== null) {
+      if (fromUrl) sessionStorage.setItem(CONTROL_TOKEN_KEY, fromUrl);
+      else sessionStorage.removeItem(CONTROL_TOKEN_KEY);
+      return fromUrl || null;
+    }
+    return sessionStorage.getItem(CONTROL_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 /** Asks the page's own origin whether it is the always-on server (a plain static host or Vite answers otherwise). */
@@ -45,7 +66,9 @@ async function probeServer(): Promise<ServerInfo | null> {
   const abort = new AbortController();
   const timeout = setTimeout(() => abort.abort(), 3000);
   try {
-    const response = await fetch('api/info', { cache: 'no-store', signal: abort.signal });
+    const token = getControlToken();
+    const headers: Record<string, string> = token ? { 'X-Control-Token': token } : {};
+    const response = await fetch('api/info', { cache: 'no-store', headers, signal: abort.signal });
     if (!response.ok || !(response.headers.get('content-type') ?? '').includes('json')) return null;
     const info = (await response.json()) as Partial<ServerInfo>;
     return info.app === 'alife-server' ? (info as ServerInfo) : null;
@@ -81,6 +104,7 @@ export class SimulationClient implements WorldView {
   public foodPatches = new Map<string, FoodPatch>();
   public carrion = new Map<string, CarrionPatch>();
   public eggs = new Map<string, EggView>();
+  public deathPulses: readonly DeathPulse[] = [];
   public foodRegions: readonly FoodRegion[] = [];
   public obstacles: ReadonlySet<string> = new Set();
   public terrain: TerrainField | null = null;
@@ -98,6 +122,10 @@ export class SimulationClient implements WorldView {
   /** Resolves once the world's location is known and commands can flow. */
   public readonly ready: Promise<void>;
 
+  /** Species of each organism in the latest frame (organism id -> species id; 0 or absent: none). */
+  private speciesIds = new Map<string, number>();
+  private speciesSnapshot: SpeciesSnapshot | null = null;
+  private selectedSpeciesInfo: { speciesId: number; distance: number } | null = null;
   private selectedId: string | null = null;
   private metrics: WorldMetrics | null = null;
   private selectedDetail: Organism | null = null;
@@ -111,6 +139,7 @@ export class SimulationClient implements WorldView {
   private nextRequestId = 1;
   private readonly pendingCsv = new Map<number, (csv: string) => void>();
   private readonly pendingSaves = new Map<number, (saved: SavedWorld) => void>();
+  private readonly pendingTraces = new Map<number, (trace: BrainTrace | null) => void>();
   private transport: ((message: ToWorker) => void) | null = null;
   /** Commands sent before the transport is up. */
   private readonly queue: ToWorker[] = [];
@@ -133,14 +162,21 @@ export class SimulationClient implements WorldView {
     this.mode = 'server';
     this.serverInfo = info;
     let viewer: number | null = null;
+    let currentBuildId = info.buildId;
     const post = (message: ToWorker) => {
       if (viewer === null) {
         this.queue.push(message);
         return;
       }
+      const token = getControlToken();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-Viewer': String(viewer),
+        ...(token ? { 'X-Control-Token': token } : {}),
+      };
       fetch('api/command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Viewer': String(viewer) },
+        headers,
         body: JSON.stringify(message),
       })
         .then(async (response) => {
@@ -153,7 +189,13 @@ export class SimulationClient implements WorldView {
     this.transport = post;
     const source = new EventSource('api/events');
     source.addEventListener('hello', (event) => {
-      viewer = (JSON.parse((event as MessageEvent<string>).data) as { viewer: number }).viewer;
+      const hello = JSON.parse((event as MessageEvent<string>).data) as { viewer: number; buildId?: string };
+      if (currentBuildId && hello.buildId && hello.buildId !== currentBuildId) {
+        window.location.reload();
+        return;
+      }
+      if (hello.buildId) currentBuildId = hello.buildId;
+      viewer = hello.viewer;
       // A new connection is a new viewer: tell it what this page is showing.
       const restore: ToWorker[] = [];
       if (this.selectedId) restore.push({ kind: 'select', id: this.selectedId });
@@ -189,6 +231,8 @@ export class SimulationClient implements WorldView {
         this.foodRegions = message.foodRegions;
         this.worldEvents = [...message.events];
         this.heatmap = null;
+        this.speciesIds = new Map();
+        this.speciesSnapshot = null;
         this.events.reset();
         break;
       case 'frame': {
@@ -199,6 +243,7 @@ export class SimulationClient implements WorldView {
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));
         this.eggs = new Map((message.eggs ?? []).map((e) => [e.id, e]));
+        this.deathPulses = message.deathPulses ?? [];
         if (message.weather) {
           const w = message.weather;
           this.weather = {
@@ -230,6 +275,7 @@ export class SimulationClient implements WorldView {
         } else {
           this.weather = null;
         }
+        this.speciesIds = message.speciesIds ? new Map(message.organisms.map((o, i) => [o.id, message.speciesIds![i]])) : new Map();
         this.ticksPerSecond = message.ticksPerSecond;
         this.running = message.running;
         this.targetTicksPerSecond = message.targetTicksPerSecond;
@@ -254,6 +300,10 @@ export class SimulationClient implements WorldView {
         this.pendingSaves.get(message.requestId)?.(message.saved);
         this.pendingSaves.delete(message.requestId);
         break;
+      case 'brainTrace':
+        this.pendingTraces.get(message.requestId)?.(message.trace);
+        this.pendingTraces.delete(message.requestId);
+        break;
       case 'error':
         this.events.error(message.message);
         break;
@@ -266,6 +316,8 @@ export class SimulationClient implements WorldView {
     this.selectedAncestry = panels.selectedAncestry ?? [];
     if (panels.history) this.history = panels.history;
     this.heatmap = panels.heatmap ?? null;
+    if (panels.species) this.speciesSnapshot = panels.species;
+    this.selectedSpeciesInfo = panels.selectedSpecies ?? null;
   }
 
   // Commands
@@ -330,6 +382,14 @@ export class SimulationClient implements WorldView {
       this.send({ kind: 'save', requestId });
     });
   }
+  /** How an organism would decide right now (read-only; null if it is gone). Works in the worker and on the server. */
+  public inspectBrain(organismId: string): Promise<BrainTrace | null> {
+    const requestId = this.nextRequestId++;
+    return new Promise((resolve) => {
+      this.pendingTraces.set(requestId, resolve);
+      this.send({ kind: 'inspectBrain', requestId, organismId });
+    });
+  }
   /** Replace the world with a saved one; it arrives paused. */
   public load(saved: SavedWorld): void {
     this.selectedId = null;
@@ -356,6 +416,18 @@ export class SimulationClient implements WorldView {
   }
   public getMetrics(): WorldMetrics | null {
     return this.metrics;
+  }
+  /** The species an organism belongs to in the latest frame (0: none or unknown). */
+  public speciesOf(organismId: string): number {
+    return this.speciesIds.get(organismId) ?? 0;
+  }
+  /** The latest species list (the count history only while the Trends tab is showing); null with species off. */
+  public getSpecies(): SpeciesSnapshot | null {
+    return this.speciesSnapshot;
+  }
+  /** The selected organism's species and its distance to that species' representative. */
+  public getSelectedSpecies(): { speciesId: number; distance: number } | null {
+    return this.selectedSpeciesInfo;
   }
   public getHistorySamples(): readonly HistorySample[] {
     return this.history;

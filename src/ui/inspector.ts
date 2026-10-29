@@ -9,6 +9,7 @@ import { LIFE_GENES, birthCooldownOf, clutchSizeOf } from '../sim/lifehistory';
 import { GENE_WORDS, GeneClass, TraitId, genomeStats, geneClassOf, geneCount, geneIndexOf, isExpressed } from '../sim/dna';
 import { describeDoing } from './organism-card';
 import { renderLineageMap } from './lineage-view';
+import { lifeStageOf, maturityOf } from '../sim/growth';
 
 /** Pills for the life-history genes that are switched on in this world (and torpor / fat state). */
 export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationConfig>): string {
@@ -44,6 +45,20 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   }
   if (c.detoxGeneEnabled && o.detox !== undefined) {
     out.push(pill('Detox', `${Math.round(o.detox * 100)}%`));
+  }
+  if (c.growthEnabled || c.ageingEnabled) {
+    const stage = lifeStageOf(o, c);
+    const grown = c.growthEnabled ? ` · ${Math.round(maturityOf(o, c) * 100)}% grown` : '';
+    out.push(pill('Life stage', `${stage[0].toUpperCase()}${stage.slice(1)}${grown}`));
+    out.push(pill('Age', c.ageingEnabled ? `${o.age} of ${c.maxAge} ticks` : `${o.age} ticks`));
+  }
+  if (o.growthDuration !== undefined) out.push(pill('Growth', `${o.growthDuration.toFixed(0)} fed ticks to adult`));
+  if (o.hatchMaturity !== undefined) out.push(pill('Born at', `${Math.round(o.hatchMaturity * 100)}% grown`));
+  if (c.toughnessGeneEnabled && o.toughness !== undefined) {
+    out.push(pill('Armor', `${Math.round(o.toughness * 100)}%`));
+  }
+  if (c.stealthGeneEnabled && o.stealth !== undefined) {
+    out.push(pill('Stealth', `${Math.round(o.stealth * 100)}%`));
   }
   return out.join('');
 }
@@ -118,6 +133,9 @@ export function genomeTraitRows(o: Readonly<Organism>, c: Readonly<SimulationCon
     digestiveEfficiency: 'Digestion',
     carnivoreEfficiency: 'Meat digestion',
     detox: 'Detoxification',
+    growthDuration: 'Growth duration',
+    hatchMaturity: 'Hatch maturity',
+    toughness: 'Prey armor / toughness',
   };
   for (const g of LIFE_GENES) {
     add(lifeLabels[g.field] ?? g.field, g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);
@@ -192,6 +210,8 @@ const WEIGHT_ROWS: [keyof PolicyWeights, string][] = [
 export class InspectorView {
   private readonly container: HTMLElement;
   private onDeselectCallback?: () => void;
+  /** The persistent Brain section (src/ui/brain-view.ts), re-attached after each render. */
+  private brainElement?: HTMLElement;
 
   constructor(container: HTMLElement, onDeselect?: () => void) {
     this.container = container;
@@ -203,6 +223,10 @@ export class InspectorView {
         this.onDeselectCallback?.();
       }
     });
+  }
+
+  public setBrainElement(element: HTMLElement): void {
+    this.brainElement = element;
   }
 
   public render(
@@ -523,6 +547,8 @@ export class InspectorView {
           </div>
         </details>
 
+        <div class="brain-slot"></div>
+
         <details class="inspector-section">
           <summary><strong>Recent Decision Log</strong></summary>
           <div class="table-wrapper">
@@ -545,6 +571,8 @@ export class InspectorView {
       </div>
     `
     );
+    const slot = this.container.querySelector('.brain-slot');
+    if (slot && this.brainElement) slot.replaceWith(this.brainElement);
   }
 
   /** A plant: its genome against each trait's range, its mass, and its line. `tick` is the world's tick (for age). */
@@ -674,6 +702,7 @@ export class InspectorView {
           <div class="summary-pill"><span class="pill-title">Hatch Yield</span><span class="pill-value">~${Math.floor(egg.energy * config.eggHatchEfficiency)} E</span></div>
           <div class="summary-pill"><span class="pill-title">Generation</span><span class="pill-value">Gen ${egg.generation}</span></div>
           <div class="summary-pill"><span class="pill-title">Body Size</span><span class="pill-value">${(detail?.size ?? egg.size ?? 1).toFixed(2)}×</span></div>
+          ${egg.toxicity !== undefined && egg.toxicity > 0 ? `<div class="summary-pill"><span class="pill-title">Toxicity</span><span class="pill-value">${(egg.toxicity * 100).toFixed(0)}%</span></div>` : ''}
           <div class="summary-pill"><span class="pill-title">Diet</span><span class="pill-value">${detail ? dietLabel(detail.carnivory) : 'Herbivore'}</span></div>
           <div class="summary-pill"><span class="pill-title">Abilities</span><span class="pill-value">${detail ? abilityList(detail) : 'None'}</span></div>
         </div>

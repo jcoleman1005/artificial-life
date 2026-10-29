@@ -1,7 +1,8 @@
 import { GROUP_NAMES } from '../sim/groups';
 import type { WorldEvent } from '../sim/events';
 import type { FoodRegion, SimulationConfig } from '../sim/types';
-import { compass } from './peek-view';
+import { speciesHue } from '../sim/species';
+import { compass, compassPoint } from './peek-view';
 
 /** Hue at the centre of a colour group's 30° bucket, for its dot. */
 const groupHue = (group: number) => (group * 360) / GROUP_NAMES.length;
@@ -20,8 +21,25 @@ export function describeEvent(e: WorldEvent, regions: readonly FoodRegion[], con
     case 'season': {
       const where = e.region !== null && regions[e.region] ? ` in the ${compass(regions[e.region], config)}` : '';
       return e.season === 'lean'
-        ? { text: `Lean season begins${where}`, colour: MOOD.lean }
-        : { text: `Plenty returns${where}`, colour: MOOD.good };
+        ? { text: `❄️ Winter begins${where}`, colour: '#38bdf8' }
+        : { text: `🌱 Spring arrives${where}`, colour: '#4ade80' };
+    }
+    case 'weather': {
+      const loc = compassPoint(e.x, e.y, config);
+      const where = loc === 'centre' ? 'in the centre' : `from the ${loc}`;
+      const label =
+        e.frontType === 'rain_storm'
+          ? `🌧️ Rainstorm rolls in ${where}`
+          : e.frontType === 'cold_front'
+            ? `❄️ Cold snap sweeps in ${where}`
+            : `☀️ Heatwave builds in the ${loc}`;
+      const colour =
+        e.frontType === 'rain_storm'
+          ? '#60a5fa'
+          : e.frontType === 'cold_front'
+            ? '#38bdf8'
+            : '#f59e0b';
+      return { text: label, colour };
     }
     case 'groupEstablished':
       return { text: `${GROUP_NAMES[e.group]} are on the rise (${e.count})`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` };
@@ -57,6 +75,10 @@ export function describeEvent(e: WorldEvent, regions: readonly FoodRegion[], con
       return e.diet === 'meat'
         ? { text: `${GROUP_NAMES[e.group]} have turned to meat`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` }
         : { text: `${GROUP_NAMES[e.group]} have gone back to plants`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` };
+    case 'speciation':
+      return { text: `New species ${e.name} split from ${e.parentName}`, colour: `hsl(${Math.round(speciesHue(e.speciesId))}, 80%, 62%)` };
+    case 'speciesExtinct':
+      return { text: `Species ${e.name} died out`, colour: `hsl(${Math.round(speciesHue(e.speciesId))}, 80%, 62%)` };
   }
 }
 

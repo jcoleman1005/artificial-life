@@ -6,6 +6,7 @@ import { DIRECTION_OFFSETS } from './types';
 import type {
   ActionScore,
   CarrionPatch,
+  DeathPulse,
   DecisionOutcome,
   DecisionRecord,
   Egg,
@@ -13,6 +14,7 @@ import type {
   FoodRegion,
   LegalAction,
   Organism,
+  GrowthMetrics,
   LifeMetrics,
   NutrientMetrics,
   SimulationConfig,
@@ -33,6 +35,7 @@ import {
 import { computeWorldMetrics } from './metrics';
 import { MetricsHistory, type HistorySample, type SlowStats } from './history';
 import { inheritTag, tagSimilarity } from './tags';
+import { genomeDistance, hybridInviableChance } from './speciation';
 import { regionSeasonAt, seasonAt } from './seasons';
 import { CellHealth, fertileCells, type CellHealthState } from './grazing';
 import { WeatherSimulation, type WeatherExportState } from './weather';
@@ -72,8 +75,12 @@ import {
   maxEnergyOf,
   metabolicRateOf,
   sizeOf,
+  toughnessOf,
+  toxicityOf,
+  stealthOf,
 } from './lifehistory';
 import { createHeadStartBrain, evaluateBrain, mutateBrain, upgradeBrain } from './brain';
+import { bodyScaleOf, carryCapacityOf, diesOfOldAge, growthCostOf, growthRateOf, hatchCostActive, hatchMaturityOf, isMature, launchRatioOf, maturityOf, minViableEnergyAt } from './growth';
 import { capGenome, compileCircuit, crossGenomes, decodeOrganismDNA, encodeOrganismDNA, growableBrain, internalUnits, mutateGenome, mutateGenomeVariation, phenotypeOf, upgradeGenome, type Phenotype } from './dna';
 import {
   MEMORY_WEIGHT_COUNT,
@@ -132,6 +139,8 @@ export interface WorldState {
   readonly terrain?: TerrainState;
   /** Live soil fertility (absent in saves from before dynamic fertility, or with it off; such saves load with it off). */
   readonly soilFertility?: readonly number[];
+  /** Active death pulses (absent in saves before predator-prey arms race, or when empty). */
+  readonly deathPulses?: readonly DeathPulse[];
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -166,16 +175,34 @@ const WORLD_COUNTERS = [
   'clutchesFailedTotal',
   'matingChildrenLostTotal',
   'matingEnergyLostTotal',
+  'hybridCrossesTotal',
+  'hybridChildrenLostTotal',
+  'matingGenomeDistanceSum',
   'carrionEatenTotal',
   'carrionUnitsRotted',
   'eggsLaidTotal',
   'eggsHatchedTotal',
   'eggsDecayedTotal',
   'eggsEatenTotal',
+  'growthHeatTotal',
+  'growthEnergyLostTotal',
+  'deathsOldAgeTotal',
 ] as const;
 type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+/** A child's genes before it is placed (see World.conceive). */
+interface Conception {
+  readonly id: string;
+  readonly policy: Organism['policy'];
+  readonly inherited: Phenotype & { genome?: Uint32Array };
+}
+
+/** Placeholders for the snapshot fields the lean per-tick snapshot leaves out (never read, never written). */
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
+const EMPTY_PATCHES = new Map<string, FoodPatch>();
+const EMPTY_AT = new Map<string, Organism>();
 
 export class World {
   public readonly config: SimulationConfig;
@@ -227,15 +254,25 @@ export class World {
   public clutchesFailedTotal = 0;
   public matingChildrenLostTotal = 0;
   public matingEnergyLostTotal = 0;
+  /** Matings whose genomes were far enough apart to risk inviable children, children lost to incompatibility, and the summed genome distance of matings measured (with hybridIncompatibilityEnabled). */
+  public hybridCrossesTotal = 0;
+  public hybridChildrenLostTotal = 0;
+  public matingGenomeDistanceSum = 0;
   public carrionEatenTotal = 0;
   public carrionUnitsRotted = 0;
   /** Eggs laid, hatched and failed so far. */
   public eggsLaidTotal = 0;
   public eggsHatchedTotal = 0;
   public eggsDecayedTotal = 0;
+  /** Growth: energy paid as heat to grow, and energy a newborn could not hold (above its small body's capacity) and lost. Ageing: deaths at maxAge. */
+  public growthHeatTotal = 0;
+  public growthEnergyLostTotal = 0;
+  public deathsOldAgeTotal = 0;
   public eggsEatenTotal = 0;
   /** The latest kill, for observers (not saved). */
   public lastKill: { readonly tick: number; readonly killerTag: number; readonly preyTag: number } | null = null;
+  /** Active death pulses emitted on violent kills (involuntary distress shockwaves). */
+  public deathPulses: DeathPulse[] = [];
   /** The latest mating, for observers (not saved). */
   public lastMating: { readonly tick: number; readonly tags: readonly [number, number] } | null = null;
   /** Plant totals (births, seeds, deaths by cause); used when plantsEnabled. */
@@ -291,11 +328,17 @@ export class World {
     this.clutchesFailedTotal = 0;
     this.matingChildrenLostTotal = 0;
     this.matingEnergyLostTotal = 0;
+    this.hybridCrossesTotal = 0;
+    this.hybridChildrenLostTotal = 0;
+    this.matingGenomeDistanceSum = 0;
     this.carrionEatenTotal = 0;
     this.carrionUnitsRotted = 0;
     this.eggsLaidTotal = 0;
     this.eggsHatchedTotal = 0;
     this.eggsDecayedTotal = 0;
+    this.growthHeatTotal = 0;
+    this.growthEnergyLostTotal = 0;
+    this.deathsOldAgeTotal = 0;
     this.eggsEatenTotal = 0;
     this.lastKill = null;
     this.lastMating = null;
@@ -492,6 +535,7 @@ export class World {
       policy,
       ...phenotype,
       ...(genome ? { genome } : {}),
+      ...(this.config.growthEnabled ? { maturity: 1 } : {}), // founders and immigrants are grown
       memory: newMemory(x, y),
       kills: 0,
       ...(this.config.plantDefenseEnabled ? { lastBiteYield: 1.0 } : {}),
@@ -574,7 +618,7 @@ export class World {
 
   /** A saved organism back as a live one (with the growable brain, its circuit recompiled from the genome). */
   private static restoreOrganism({ genome, ...o }: SavedOrganism, config: Readonly<SimulationConfig>): Organism {
-    const upgraded = genome ? upgradeGenome(genome, o.brain.skip.length) : undefined;
+    const upgraded = genome ? upgradeGenome(genome, o.brain.skip.length, config) : undefined;
     return {
       ...clone(o),
       ...(upgraded ? { genome: upgraded } : {}),
@@ -612,7 +656,14 @@ export class World {
       foodRegions: this.foodRegions.map((r) => ({ ...r })),
       foodPatches: Array.from(this.foodPatches.values(), (p) => clone(p)),
       carrion: Array.from(this.carrion.values(), (c) => ({ ...c })),
-      eggs: Array.from(this.eggs.values(), (e) => ({ x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child: World.saveOrganism(e.child) })),
+      eggs: Array.from(this.eggs.values(), (e) => ({
+        x: e.x,
+        y: e.y,
+        laidTick: e.laidTick,
+        shell: e.shell ?? 0,
+        child: World.saveOrganism(e.child),
+        ...(e.toxicity !== undefined ? { toxicity: e.toxicity } : {}),
+      })),
       organisms: Array.from(this.organisms.values(), (o) => World.saveOrganism(o)),
       history: this.history.exportState(),
       plantCounters: { ...this.plantCounters },
@@ -622,6 +673,7 @@ export class World {
       ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
       ...(this.config.terrainEnabled ? { terrain: this.getTerrain()!.exportState() } : {}),
       ...(this.config.fertilityDynamicEnabled ? { soilFertility: Array.from(this.soil().fertility) } : {}),
+      ...(this.deathPulses.length > 0 ? { deathPulses: this.deathPulses.map((dp) => ({ ...dp })) } : {}),
     };
   }
 
@@ -642,6 +694,11 @@ export class World {
     if (state.version !== 1) throw new Error(`Unknown world state version ${String(state.version)}`);
     const world = new World({ ...state.config, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0, foodRegionCount: 0 });
     Object.assign(world.config, state.config);
+    // Saves from before growth and ageing continue without them (their organisms are grown and have no age limit).
+    if (state.config.growthEnabled === undefined) world.config.growthEnabled = false;
+    if (state.config.ageingEnabled === undefined) world.config.ageingEnabled = false;
+    // A save from before the hatch maturity gene continues without it (its newborns keep the fixed hatchMaturity).
+    if (state.config.hatchMaturityGeneEnabled === undefined) world.config.hatchMaturityGeneEnabled = false;
     world.prng.setSeed(state.prng.seed);
     world.prng.setState(state.prng.state);
     world.tick = state.tick;
@@ -674,7 +731,14 @@ export class World {
     world.eggs.clear();
     for (const e of state.eggs ?? []) {
       const child = World.restoreOrganism(e.child, world.config);
-      world.eggs.set(child.id, { x: e.x, y: e.y, laidTick: e.laidTick, shell: e.shell ?? 0, child });
+      world.eggs.set(child.id, {
+        x: e.x,
+        y: e.y,
+        laidTick: e.laidTick,
+        shell: e.shell ?? 0,
+        child,
+        ...(e.toxicity !== undefined ? { toxicity: e.toxicity } : {}),
+      });
     }
     world.weather = state.weather
       ? WeatherSimulation.fromState(state.weather, world.config.gridWidth, world.config.gridHeight)
@@ -691,6 +755,8 @@ export class World {
       world.soil().updateAggregates(world.fertile());
     }
     if (state.soilFertility && world.config.fertilityDynamicEnabled) world.soil().restoreFertility(state.soilFertility);
+    world.deathPulses.length = 0;
+    for (const dp of state.deathPulses ?? []) world.deathPulses.push({ ...dp });
     world.selectedOrganismId = null;
     world.cachedMetrics = null;
     return world;
@@ -718,9 +784,23 @@ export class World {
    * Captures an immutable pre-tick snapshot of the world for simultaneous decisions.
    */
   public getSnapshot(): WorldSnapshot {
-    const foodCopy = new Map<string, FoodPatch>();
-    for (const [k, v] of this.foodPatches) {
-      foodCopy.set(k, { ...v });
+    return this.buildSnapshot(true);
+  }
+
+  /**
+   * The snapshot behind getSnapshot. `forStep` builds the lean version the tick
+   * itself uses: the decision phase only reads it and nothing mutates an organism
+   * until it is over, so it references the live organisms instead of copying them,
+   * and leaves out the string-keyed copies (obstacles, foodPatches, organismAt)
+   * that nothing in the engine reads.
+   */
+  private buildSnapshot(full: boolean): WorldSnapshot {
+    let foodCopy: Map<string, FoodPatch> = EMPTY_PATCHES;
+    if (full) {
+      foodCopy = new Map<string, FoodPatch>();
+      for (const [k, v] of this.foodPatches) {
+        foodCopy.set(k, { ...v });
+      }
     }
 
     const { gridWidth, gridHeight } = this.config;
@@ -733,7 +813,12 @@ export class World {
     for (const e of this.eggs.values()) eggGrid[e.y * gridWidth + e.x] += e.child.energy;
     const organismGrid = new Int32Array(gridWidth * gridHeight).fill(-1);
     for (const key of this.obstacles) {
-      const [ox, oy] = key.split(',').map(Number);
+      // "x,y" parsed without allocating (coordinates are non-negative integers).
+      let ox = 0;
+      let i = 0;
+      for (let c = key.charCodeAt(i); c !== 44; c = key.charCodeAt(++i)) ox = ox * 10 + (c - 48);
+      let oy = 0;
+      for (i++; i < key.length; i++) oy = oy * 10 + (key.charCodeAt(i) - 48);
       obstacleGrid[oy * gridWidth + ox] = 1;
     }
     for (const patch of this.foodPatches.values()) {
@@ -741,26 +826,33 @@ export class World {
     }
 
     const orgsList: Organism[] = [];
-    const organismAt = new Map<string, Organism>();
+    const organismAt = full ? new Map<string, Organism>() : EMPTY_AT;
     const signallers: number[] = [];
     for (const org of this.organisms.values()) {
-      const copy: Organism = {
-        ...org,
-        policy: { ...org.policy },
-        lineage: { ...org.lineage },
-        recentHistory: [...org.recentHistory],
-      };
+      const copy: Organism = full
+        ? {
+            ...org,
+            policy: { ...org.policy },
+            lineage: { ...org.lineage },
+            recentHistory: [...org.recentHistory],
+          }
+        : org;
       organismGrid[org.y * gridWidth + org.x] = orgsList.length;
       if (org.signalTick >= 0 && org.signalTick === this.tick - 1) signallers.push(orgsList.length);
       orgsList.push(copy);
-      organismAt.set(`${org.x},${org.y}`, copy);
+      if (full) (organismAt as Map<string, Organism>).set(`${org.x},${org.y}`, copy);
     }
+
+    const activeDeathPulses =
+      this.config.predationDefenseEnabled !== false && this.deathPulses.length > 0
+        ? this.deathPulses.filter((dp) => dp.tick === this.tick - 1)
+        : undefined;
 
     return {
       tick: this.tick,
       gridWidth: this.config.gridWidth,
       gridHeight: this.config.gridHeight,
-      obstacles: new Set(this.obstacles),
+      obstacles: full ? new Set(this.obstacles) : EMPTY_KEYS,
       foodPatches: foodCopy,
       organisms: orgsList,
       organismAt,
@@ -770,6 +862,7 @@ export class World {
       eggGrid,
       organismGrid,
       signallers,
+      ...(activeDeathPulses && activeDeathPulses.length > 0 ? { deathPulses: activeDeathPulses } : {}),
       weather: this.weather && this.config.weatherEnabled ? this.weather.getSnapshot() : null,
     };
   }
@@ -779,14 +872,22 @@ export class World {
    * by each contender's metabolic rate when the metabolism gene is enabled.
    */
   private pickContenderByMetabolicRate<T extends { organism: Organism }>(contenders: T[]): T {
-    if (!this.config.metabolismGeneEnabled || contenders.length === 1) {
+    if (contenders.length === 1) return contenders[0];
+    const hasMetabolism = this.config.metabolismGeneEnabled;
+    const hasArmor = this.config.toughnessGeneEnabled && (this.config.armorDragCoeff ?? 0) > 0;
+    if (!hasMetabolism && !hasArmor) {
       return this.prng.choice(contenders);
     }
+    const priority = (o: Organism) => {
+      const meta = hasMetabolism ? metabolicRateOf(o, this.config) : 1;
+      const drag = hasArmor ? 1 + this.config.armorDragCoeff * toughnessOf(o, this.config) : 1;
+      return meta / drag;
+    };
     let total = 0;
-    for (const c of contenders) total += metabolicRateOf(c.organism, this.config);
+    for (const c of contenders) total += priority(c.organism);
     let roll = this.prng.nextFloat(0, total);
     for (const c of contenders) {
-      roll -= metabolicRateOf(c.organism, this.config);
+      roll -= priority(c.organism);
       if (roll <= 0) return c;
     }
     return contenders[contenders.length - 1];
@@ -808,7 +909,7 @@ export class World {
     }
 
     // Phase 1: Pre-tick snapshot
-    const snapshot = this.getSnapshot();
+    const snapshot = this.buildSnapshot(false);
 
     // Phase 2: Simultaneous decision evaluation
     // Sort organisms by ID for strictly deterministic order of iteration
@@ -1122,8 +1223,23 @@ export class World {
           if (egg && organism.carnivory > 0 && this.config.carrionEnabled) {
             // A whole egg goes down at once; its meal is the child's energy through the same gut, and the shell is lost.
             // Capped at the egg's own energy, so even the best gut cannot make laying-and-eating a profit.
+            const tox = egg.toxicity ?? 0;
+            let yieldMultiplier = 1.0;
+            if (this.config.toxicityGeneEnabled && tox > 0) {
+              const unneutralized = Math.max(0, tox - detoxOf(organism, this.config));
+              yieldMultiplier = Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized);
+              if (unneutralized > 0.3) {
+                const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                this.ledger.malaise += Math.min(organism.energy, malaise);
+                organism.energy = Math.max(0, organism.energy - malaise);
+              }
+            }
+            if (this.config.plantDefenseEnabled || this.config.toxicityGeneEnabled) {
+              organism.lastBiteYield = Number(yieldMultiplier.toFixed(3));
+            }
             const meal =
               egg.child.energy *
+              yieldMultiplier *
               Math.min(1, organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config));
             const energyGain = Math.min(maxEnergyOf(organism, this.config) - organism.energy, meal);
             organism.energy += energyGain;
@@ -1134,8 +1250,23 @@ export class World {
             energyDelta += energyGain;
             outcome = 'success';
           } else if (patch && patch.stock > 0 && organism.carnivory > 0 && this.config.carrionEnabled) {
-            const taken = Math.min(patch.stock, this.config.carrionBite);
-            const meal = taken * organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config);
+            const tox = patch.toxicity ?? 0;
+            let yieldMultiplier = 1.0;
+            if (this.config.toxicityGeneEnabled && tox > 0) {
+              const unneutralized = Math.max(0, tox - detoxOf(organism, this.config));
+              yieldMultiplier = Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized);
+              if (unneutralized > 0.3) {
+                const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                this.ledger.malaise += Math.min(organism.energy, malaise);
+                organism.energy = Math.max(0, organism.energy - malaise);
+              }
+            }
+            if (this.config.plantDefenseEnabled || this.config.toxicityGeneEnabled) {
+              organism.lastBiteYield = Number(yieldMultiplier.toFixed(3));
+            }
+            // A small body takes a smaller bite (x1 when grown, and with growth off).
+            const taken = Math.min(patch.stock, this.config.carrionBite * bodyScaleOf(organism, this.config));
+            const meal = taken * yieldMultiplier * organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config);
             const maxEnergy = maxEnergyOf(organism, this.config);
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
@@ -1255,10 +1386,17 @@ export class World {
             const childEnergy = Math.floor(organism.energy * investmentOf(organism, this.config));
             const eggAlloc = this.config.eggsEnabled ? (organism.eggAllocation ?? organism.eggRate ?? 0) : 0;
             const lays = eggAlloc > 0;
-            const eggCost = lays ? Math.round(this.config.eggExtraCost * eggAlloc) : 0;
+            // Hatch maturity gene: the child is conceived first, because what it costs to launch
+            // depends on the maturity it is born at (its own gene): the viability floor on its
+            // energy and the egg envelope both scale with launchRatioOf (docs/specs/hatch-maturity.md).
+            const conceived =
+              hatchCostActive(this.config) && childEnergy > 0 && organism.energy > childEnergy + this.config.reproductionMetabolismTax ? this.conceive(organism, null) : null;
+            const ratio = conceived ? launchRatioOf(this.newbornMaturity(conceived) ?? this.config.hatchMaturity, this.config) : 1;
+            const eggCost = lays ? Math.round(this.config.eggExtraCost * eggAlloc * ratio) : 0;
             const totalReproCost = childEnergy + this.config.reproductionMetabolismTax + eggCost;
+            const viable = !hatchCostActive(this.config) || (conceived !== null && childEnergy >= this.config.minViableChildEnergy * ratio);
 
-            if (organism.energy > totalReproCost && childEnergy > 0) {
+            if (organism.energy > totalReproCost && childEnergy > 0 && viable) {
               // Where the child lands: next to the parent, or (with
               // dispersal) any free cell up to the parent's dispersal
               // distance it can afford, picked at random.
@@ -1271,12 +1409,20 @@ export class World {
               birthBlocked.add(`${birth.x},${birth.y}`);
               this.birthDistanceSum += birth.distance;
 
-              const child = this.makeChild(organism, null, birth, childEnergy);
+              const child = conceived ? this.bearChild(conceived, organism, null, birth, childEnergy) : this.makeChild(organism, null, birth, childEnergy);
 
               if (this.config.metabolismGeneEnabled) organism.nextBirthTick = this.tick + birthCooldownOf(organism, this.config);
               if (lays) {
                 // Counted as a birth when it hatches.
-                this.eggs.set(child.id, { x: birth.x, y: birth.y, laidTick: this.tick, shell: eggCost, child });
+                const tox = toxicityOf(child, this.config);
+                this.eggs.set(child.id, {
+                  x: birth.x,
+                  y: birth.y,
+                  laidTick: this.tick,
+                  shell: eggCost,
+                  child,
+                  ...(tox > 0 ? { toxicity: tox } : {}),
+                });
                 this.eggsLaidTotal++;
               } else {
                 newBorns.push(child);
@@ -1292,7 +1438,7 @@ export class World {
 
         case 'PICK_UP': {
           const patch = this.foodPatches.get(`${organism.x},${organism.y}`);
-          if (patch && patch.stock > 0 && organism.carriedFood < organism.carryCapacity) {
+          if (patch && patch.stock > 0 && organism.carriedFood < carryCapacityOf(organism, this.config)) {
             patch.stock -= 1;
             grazePlant(patch, this.tick, this.plantCounters);
             this.biteCell(patch);
@@ -1361,11 +1507,24 @@ export class World {
 
       // Memory takes in what was sensed at the start of this tick.
       if (this.config.memoryEnabled && organism.memorySpan > 0) {
-        updateMemory(organism.memory, organism.memoryWeights, sensed, organism.carryCapacity, startCell, this.tick);
+        updateMemory(organism.memory, organism.memoryWeights, sensed, carryCapacityOf(organism, this.config), startCell, this.tick);
+      }
+
+      // Growth: a fed juvenile adds maturity (1 / its growth duration) and pays heat for it
+      // (more per tick the shorter its duration, see growthCostOf); a hungry one stalls.
+      const energyCap = maxEnergyOf(organism, this.config);
+      if (this.config.growthEnabled && (organism.maturity ?? 1) < 1) {
+        if (organism.energy >= this.config.growthEnergyFloor * maxEnergyOf(organism, this.config)) {
+          const heat = growthCostOf(organism, this.config);
+          organism.maturity = Math.min(1, (organism.maturity ?? 1) + growthRateOf(organism, this.config));
+          organism.energy -= heat;
+          this.ledger.upkeep += heat;
+          energyDelta -= heat;
+          this.growthHeatTotal += heat;
+        }
       }
 
       // Clamp energy [0, maxEnergy]
-      const energyCap = maxEnergyOf(organism, this.config);
       if (organism.energy > energyCap) this.ledger.overCap += organism.energy - energyCap;
       else if (organism.energy < 0) this.ledger.overdraft += -organism.energy;
       organism.energy = Math.max(0, Math.min(energyCap, organism.energy));
@@ -1459,6 +1618,38 @@ export class World {
       if (roll >= attack.chance) continue;
       bodies.set(prey.id, prey.energy);
       this.ledger.killed += prey.energy;
+      if (this.config.predationDefenseEnabled !== false) {
+        const attackerStealth = stealthOf(attacker, this.config);
+        const preyStealth = stealthOf(prey, this.config);
+        // Stealth dampens the shockwave; at high stealth it is completely silenced.
+        const muffling = Math.max(0, 1 - attackerStealth) * Math.max(0, 1 - preyStealth);
+        const power = metabolicRateOf(prey, this.config) * muffling;
+        if (power > 0.05) {
+          this.deathPulses.push({
+            x: prey.x,
+            y: prey.y,
+            tag: prey.tag,
+            size: sizeOf(prey, this.config),
+            power: Number(power.toFixed(3)),
+            tick: this.tick,
+          });
+        }
+      }
+      if (this.config.predationDefenseEnabled !== false && this.config.toxicityGeneEnabled) {
+        const preyTox = toxicityOf(prey, this.config);
+        if (preyTox > 0) {
+          const detox = detoxOf(attacker, this.config);
+          const unneutralized = Math.max(0, preyTox - detox);
+          if (unneutralized > 0) {
+            attacker.lastBiteYield = Number(Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized).toFixed(3));
+            if (unneutralized > 0.3) {
+              const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+              this.ledger.malaise += Math.min(attacker.energy, malaise);
+              attacker.energy = Math.max(0, attacker.energy - malaise);
+            }
+          }
+        }
+      }
       prey.energy = 0;
       this.lastKill = { tick: this.tick, killerTag: attacker.tag, preyTag: prey.tag };
       attacker.kills++;
@@ -1479,7 +1670,14 @@ export class World {
     // carrionBodyEnergy × size plus carrionEfficiency of the energy it still held (a
     // starved body holds none; a killed one usually some).
     for (const [id, org] of Array.from(this.organisms.entries())) {
-      if (org.energy <= 0) {
+      // Ageing: a body that reaches maxAge dies, leaving carrion like any body (its remaining energy counts as body energy).
+      const oldAge = org.energy > 0 && diesOfOldAge(org, this.config);
+      if (oldAge) {
+        this.deathsOldAgeTotal++;
+        bodies.set(id, org.energy);
+        this.ledger.killed += org.energy; // the body's energy moves into carrion (or is lost), as at a kill
+      }
+      if (org.energy <= 0 || oldAge) {
         this.deceasedCount++;
         this.deceasedLifespanSum += org.age;
         this.deathsTotal++;
@@ -1489,9 +1687,11 @@ export class World {
           const energy = carrionFromBody(bodies.get(id) ?? 0, this.config, sizeOf(org, this.config));
           if (energy > 0) {
             this.ledger.carrionCreated += energy;
-            this.addCarrion(org.x, org.y, energy);
+            const tox = toxicityOf(org, this.config);
+            this.addCarrion(org.x, org.y, energy, tox > 0 ? tox : undefined);
+          } else {
+            this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
           }
-          else this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
         } else {
           this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
         }
@@ -1500,6 +1700,10 @@ export class World {
 
     // Increment simulation tick
     this.tick++;
+
+    if (this.deathPulses.length > 0) {
+      this.deathPulses = this.deathPulses.filter((dp) => dp.tick >= this.tick - 1);
+    }
 
     // Phase 6: Food regeneration and spawning
     this.updateEnvironment();
@@ -1525,17 +1729,41 @@ export class World {
    * belongs to the lineage of `parent`, the one it is born next to.
    */
   private makeChild(parent: Organism, mate: Organism | null, birth: { x: number; y: number }, energy: number): Organism {
+    return this.bearChild(this.conceive(parent, mate), parent, mate, birth, energy);
+  }
+
+  /**
+   * The child's genes, before it has a place or an energy share (the same PRNG
+   * draws, in the same order, as the first half of makeChild). With the hatch
+   * maturity gene on, the launch cost depends on the child's own genes, so the
+   * parent conceives first and prices the child afterwards.
+   */
+  private conceive(parent: Organism, mate: Organism | null): Conception {
     const policySource = mate ? mixPolicies(parent.policy, mate.policy, this.prng) : parent.policy;
     this.nextOrganismSeq++;
     const policy = mutatePolicy(policySource, this.config, this.prng);
-    const inherited = this.inheritBody(parent, mate);
+    return { id: `org-${this.nextOrganismSeq}`, policy, inherited: this.inheritBody(parent, mate) };
+  }
+
+  /** Newborn maturity of a conceived child: its own hatch maturity gene, else the fixed hatchMaturity; undefined without growth. */
+  private newbornMaturity(c: Conception): number | undefined {
+    return this.config.growthEnabled ? hatchMaturityOf(c.inherited, this.config) : undefined;
+  }
+
+  private bearChild(conception: Conception, parent: Organism, mate: Organism | null, birth: { x: number; y: number }, energy: number): Organism {
+    const { policy, inherited } = conception;
+    // With growth a newborn is small: its body holds less, and energy past that is lost (counted).
+    const maturity = this.newbornMaturity(conception);
+    const capacity = maxEnergyOf(maturity === undefined ? inherited : { ...inherited, maturity }, this.config);
+    if (maturity !== undefined && energy > capacity) this.growthEnergyLostTotal += energy - capacity;
     const child: Organism = {
-      id: `org-${this.nextOrganismSeq}`,
+      id: conception.id,
       x: birth.x,
       y: birth.y,
-      energy: Math.min(energy, maxEnergyOf(inherited, this.config)),
+      energy: Math.min(energy, capacity),
       policy,
       ...inherited,
+      ...(maturity === undefined ? {} : { maturity }),
       memory: newMemory(birth.x, birth.y),
       kills: 0,
       ...(this.config.plantDefenseEnabled ? { lastBiteYield: 1.0 } : {}),
@@ -1578,7 +1806,7 @@ export class World {
   private mate(a: Organism, b: Organism, blocked: Set<string>, newBorns: Organism[]): boolean {
     const { config } = this;
     const tax = config.reproductionMetabolismTax;
-    const ready = (o: Organism) => o.energy >= thresholdOf(o, config) && this.tick >= (o.nextBirthTick ?? 0);
+    const ready = (o: Organism) => o.energy >= thresholdOf(o, config) && this.tick >= (o.nextBirthTick ?? 0) && isMature(o, config);
     if (!ready(a) || !ready(b)) return false;
     const share = (o: Organism) => Math.floor(o.energy * investmentOf(o, config));
     const shareA = share(a);
@@ -1623,10 +1851,70 @@ export class World {
     if (isParentOrChild(a, b)) this.matingsInFamilyTotal++;
     this.lastMating = { tick: this.tick, tags: [a.tag, b.tag] };
 
+    // Reproductive isolation: how far apart the genomes are sets the chance each child is inviable (draws nothing when that is 0).
+    let inviableChance = 0;
+    if (config.hybridIncompatibilityEnabled && a.genome && b.genome) {
+      const distance = genomeDistance(a.genome, b.genome, config);
+      this.matingGenomeDistanceSum += distance;
+      inviableChance = hybridInviableChance(distance, config);
+      if (inviableChance > 0) this.hybridCrossesTotal++;
+    }
+
     const f = clutchSizeOf(carrier, config);
     const N = Math.floor(f);
     const remainder = f - N;
     const targetCount = N + (remainder > 0 && this.prng.next() < remainder ? 1 : 0);
+
+    // Hatch maturity gene: each child is conceived first and priced by the maturity it is born at
+    // (minViableEnergyAt). Children are admitted in order while their minima fit the pool; if all fit,
+    // the pool is split in proportion to the minima (a more developed child takes a bigger share),
+    // otherwise each takes just its minimum and the rest is lost as heat. Gene off: the old rule below.
+    if (hatchCostActive(config)) {
+      const conceived: Conception[] = [];
+      for (let k = 0; k < targetCount; k++) conceived.push(this.conceive(carrier, other));
+      const needs = conceived.map((c) => minViableEnergyAt(this.newbornMaturity(c) ?? config.hatchMaturity, config));
+      let viableCount = 0;
+      let needSum = 0;
+      while (viableCount < targetCount && needSum + needs[viableCount] <= pool) needSum += needs[viableCount++];
+      const energies = needs.slice(0, viableCount).map((n) => (viableCount === targetCount ? (pool * n) / needSum : n));
+      let born = 0;
+      let given = 0; // what the placed children were given, for the ledger
+      if (viableCount === 0) {
+        this.clutchesFailedTotal++;
+        this.matingChildrenLostTotal += targetCount;
+        this.matingEnergyLostTotal += pool;
+      } else {
+        this.matingEnergyLostTotal += pool - energies.reduce((x, e) => x + e, 0);
+        for (let k = 0; k < viableCount; k++) {
+          if (inviableChance > 0 && this.prng.next() < inviableChance) {
+            // An incompatible child never forms; its share of the pool is lost as heat.
+            this.hybridChildrenLostTotal++;
+            this.matingChildrenLostTotal++;
+            this.matingEnergyLostTotal += energies[k];
+            continue;
+          }
+          if (k > 0) cells = free(carrier);
+          if (cells.length === 0) {
+            for (let j = k; j < viableCount; j++) this.matingEnergyLostTotal += energies[j];
+            this.matingChildrenLostTotal += viableCount - k;
+            break; // no room for the rest
+          }
+          const target = this.prng.choice(cells);
+          const birth = this.birthCell(carrier, target, carrier.energy, blocked);
+          carrier.energy -= birth.extraCost;
+          this.ledger.birthCosts += birth.extraCost;
+          paid.set(carrier, (paid.get(carrier) ?? 0) + birth.extraCost);
+          blocked.add(`${birth.x},${birth.y}`);
+          this.birthDistanceSum += birth.distance;
+          newBorns.push(this.bearChild(conceived[k], carrier, other, birth, energies[k]));
+          given += energies[k];
+          born++;
+        }
+        this.matingChildrenLostTotal += targetCount - viableCount;
+      }
+      this.ledger.matingHeat += pool - given;
+      return this.finishMating(carrier, other, paid, born);
+    }
 
     const maxViable = Math.floor(pool / config.minViableChildEnergy);
     const viableCount = Math.min(targetCount, maxViable);
@@ -1645,9 +1933,16 @@ export class World {
       this.matingEnergyLostTotal += heatSurplus;
 
       for (let k = 0; k < viableCount; k++) {
+        if (inviableChance > 0 && this.prng.next() < inviableChance) {
+          // An incompatible child never forms; its share of the pool is lost as heat.
+          this.hybridChildrenLostTotal++;
+          this.matingChildrenLostTotal++;
+          this.matingEnergyLostTotal += perChild;
+          continue;
+        }
         if (k > 0) cells = free(carrier);
         if (cells.length === 0) {
-          const unplaced = viableCount - born;
+          const unplaced = viableCount - k;
           this.matingChildrenLostTotal += unplaced;
           this.matingEnergyLostTotal += perChild * unplaced;
           break; // no room for the rest
@@ -1665,6 +1960,11 @@ export class World {
       this.matingChildrenLostTotal += (targetCount - viableCount);
     }
     this.ledger.matingHeat += pool - perChildEnergy * born;
+    return this.finishMating(carrier, other, paid, born);
+  }
+
+  /** Counts a mating's children and records the outcome in both parents' latest decision. */
+  private finishMating(carrier: Organism, other: Organism, paid: Map<Organism, number>, born: number): boolean {
     this.birthsTotal += born;
     this.matingChildrenTotal += born;
 
@@ -1810,15 +2110,28 @@ export class World {
   }
 
   /** Adds carrion energy to a cell (piling onto any already there, which then rots later). */
-  private addCarrion(x: number, y: number, energy: number): void {
+  private addCarrion(x: number, y: number, energy: number, toxicity?: number): void {
     const key = `${x},${y}`;
     const expiresAt = this.tick + 1 + this.config.carrionLifetime;
     const existing = this.carrion.get(key);
     if (existing) {
+      if (toxicity !== undefined || existing.toxicity !== undefined) {
+        const totalStock = existing.stock + energy;
+        const curTox = (existing.toxicity ?? 0) * existing.stock;
+        const newTox = (toxicity ?? 0) * energy;
+        const mergedTox = totalStock > 0 ? (curTox + newTox) / totalStock : 0;
+        existing.toxicity = Number(mergedTox.toFixed(3));
+      }
       existing.stock += energy;
       existing.expiresAt = expiresAt;
     } else {
-      this.carrion.set(key, { x, y, stock: energy, expiresAt });
+      this.carrion.set(key, {
+        x,
+        y,
+        stock: energy,
+        expiresAt,
+        ...(toxicity !== undefined && toxicity > 0 ? { toxicity } : {}),
+      });
     }
   }
 
@@ -2121,6 +2434,9 @@ export class World {
       clutchesFailedTotal: this.clutchesFailedTotal,
       matingChildrenLostTotal: this.matingChildrenLostTotal,
       matingEnergyLostTotal: Number(this.matingEnergyLostTotal.toFixed(2)),
+      hybridCrossesTotal: this.hybridCrossesTotal,
+      hybridChildrenLostTotal: this.hybridChildrenLostTotal,
+      matingGenomeDistanceSum: Number(this.matingGenomeDistanceSum.toFixed(4)),
       carrionEatenTotal: this.carrionEatenTotal,
       carrionStock: Math.round(Array.from(this.carrion.values()).reduce((a, c) => a + c.stock, 0)),
       averageCarnivory:
@@ -2131,6 +2447,7 @@ export class World {
       plants: this.config.plantsEnabled ? computePlantMetrics(this.foodPatches, this.plantCounters) : null,
       overgrazing: this.cellHealth ? this.cellHealth.metrics(this.soil(), this.foodRegions.length, this.fertile()) : null,
       life: this.lifeMetrics(organisms),
+      growth: this.growthMetrics(organisms),
       weather: this.weather && this.config.weatherEnabled ? this.weather.getMetrics(seasonAt(this.tick, this.config)?.season ?? null) : null,
       nutrients: this.computeNutrientMetrics(),
     };
@@ -2187,6 +2504,23 @@ export class World {
     };
   }
 
+  private growthMetrics(organisms: readonly Organism[]): GrowthMetrics | null {
+    const c = this.config;
+    if (!c.growthEnabled && !c.ageingEnabled) return null;
+    const n = organisms.length;
+    const mean = (value: (o: Organism) => number) => (n > 0 ? Number((organisms.reduce((a, o) => a + value(o), 0) / n).toFixed(3)) : 0);
+    return {
+      meanMaturity: mean((o) => maturityOf(o, c)),
+      juvenileFraction: mean((o) => (isMature(o, c) ? 0 : 1)),
+      senescentFraction: mean((o) => (c.ageingEnabled && o.age > c.senescenceAge ? 1 : 0)),
+      meanAge: mean((o) => o.age),
+      deathsOldAgeTotal: this.deathsOldAgeTotal,
+      meanLifespan: this.deceasedCount > 0 ? Number((this.deceasedLifespanSum / this.deceasedCount).toFixed(1)) : 0,
+      growthHeatTotal: Number(this.growthHeatTotal.toFixed(2)),
+      growthEnergyLostTotal: Number(this.growthEnergyLostTotal.toFixed(2)),
+    };
+  }
+
   private lifeMetrics(organisms: readonly Organism[]): LifeMetrics | null {
     const c = this.config;
     if (!LIFE_GENES.some((g) => g.enabled(c))) return null;
@@ -2206,6 +2540,11 @@ export class World {
       digestiveEfficiency: mean(c.digestiveGeneEnabled, (o) => o.digestiveEfficiency ?? 1),
       carnivoreEfficiency: mean(c.carnivoreGeneEnabled, (o) => o.carnivoreEfficiency ?? c.carnivoreFounder),
       detox: mean(c.detoxGeneEnabled, (o) => o.detox ?? c.detoxFounder),
+      growthDuration: mean(c.growthEnabled && c.growthGeneEnabled, (o) => o.growthDuration ?? c.growthDurationFounder),
+      hatchMaturity: mean(c.growthEnabled && c.hatchMaturityGeneEnabled, (o) => hatchMaturityOf(o, c)),
+      toughness: mean(c.toughnessGeneEnabled, (o) => o.toughness ?? c.toughnessFounder),
+      toxicity: mean(c.toxicityGeneEnabled, (o) => o.toxicity ?? c.toxicityFounder),
+      stealth: mean(c.stealthGeneEnabled, (o) => o.stealth ?? c.stealthFounder),
       fat: mean(c.fatEnabled, (o) => o.fat ?? 0),
       resting: c.torporEnabled ? organisms.filter((o) => o.rested).length : null,
       eggs: c.eggsEnabled ? this.eggs.size : null,

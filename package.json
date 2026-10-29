@@ -1,7 +1,7 @@
 {
   "name": "artificial-life",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
@@ -14,6 +14,7 @@
     "fingerprint": "vite-node scripts/fingerprint.ts",
     "sweep:overgrazing": "vite-node scripts/overgrazing-sweep.ts",
     "perf": "vite-node scripts/perf.ts",
+    "genome-distance": "vite-node scripts/genome-distance.ts --",
     "census": "vite-node scripts/census.ts --",
     "ablation": "vite-node scripts/ablation.ts --",
     "experiment": "vite-node scripts/experiment.ts --",

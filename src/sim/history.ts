@@ -86,6 +86,8 @@ export interface HistorySample {
   readonly clutchesFailedTotal?: number;
   /** Plants (absent when plants are off, and in samples from before plants). */
   readonly plants?: PlantSample;
+  /** Growth and ageing (absent when both are off, and in samples from before they existed). */
+  readonly growth?: GrowthSample;
   /**
    * Life-history genes that are switched on (absent fields: switched off), as mean and SD over the
    * living, plus `fat`, the fat actually held now (against `fatCapacity`). Absent in older samples.
@@ -122,7 +124,7 @@ export interface GenomeSample {
 }
 
 /** Traits whose population distribution is kept as a five-bin histogram in each sample. */
-export const DIST_TRAITS = ['carnivory', 'reproThreshold', 'clutchSize', 'metabolicRate'] as const;
+export const DIST_TRAITS = ['carnivory', 'reproThreshold', 'clutchSize', 'metabolicRate', 'growthDuration', 'hatchMaturity'] as const;
 export type DistTrait = (typeof DIST_TRAITS)[number];
 export const DIST_BIN_COUNT = 5;
 /** Ticks between fresh brain-wiring and genome measurements; samples in between repeat the last (they move slowly). */
@@ -226,6 +228,14 @@ export function computeGenomeSample(organisms: readonly Organism[], config: Read
     identicalShare: g.identicalShare,
     silent: g.meanByType.silent,
   };
+}
+
+export interface GrowthSample {
+  readonly meanMaturity: number;
+  readonly juvenileFraction: number;
+  readonly senescentFraction: number;
+  readonly deathsOldAgeTotal: number;
+  readonly meanLifespan: number;
 }
 
 export interface PlantSample {
@@ -406,6 +416,17 @@ export class MetricsHistory {
             ...(genome ? { genome } : {}),
           }
         : {}),
+      ...(metrics.growth
+        ? {
+            growth: {
+              meanMaturity: metrics.growth.meanMaturity,
+              juvenileFraction: metrics.growth.juvenileFraction,
+              senescentFraction: metrics.growth.senescentFraction,
+              deathsOldAgeTotal: metrics.growth.deathsOldAgeTotal,
+              meanLifespan: metrics.growth.meanLifespan,
+            },
+          }
+        : {}),
       ...(metrics.plants
         ? {
             plants: {
@@ -497,6 +518,11 @@ export class MetricsHistory {
       'genome_identical_share',
       'genome_silent_genes_mean',
       ...DIST_TRAITS.flatMap((t) => Array.from({ length: DIST_BIN_COUNT }, (_, b) => `${t}_bin${b}`)),
+      'mean_maturity',
+      'juvenile_fraction',
+      'senescent_fraction',
+      'deaths_old_age_total',
+      'mean_lifespan',
     ];
     const rows = this.samples.map((s) =>
       [
@@ -571,6 +597,10 @@ export class MetricsHistory {
         s.genome ? s.genome.identicalShare.toFixed(4) : '',
         s.genome ? s.genome.silent.toFixed(4) : '',
         ...DIST_TRAITS.flatMap((t) => Array.from({ length: DIST_BIN_COUNT }, (_, b) => s.bins?.[t]?.[b] ?? '')),
+        // Growth columns, blank when growth and ageing are off.
+        ...(s.growth
+          ? [s.growth.meanMaturity, s.growth.juvenileFraction, s.growth.senescentFraction, s.growth.deathsOldAgeTotal, s.growth.meanLifespan]
+          : ['', '', '', '', '']),
       ].join(',')
     );
     return [header.join(','), ...rows].join('\n') + '\n';

@@ -98,5 +98,4 @@ defaults for new fields.
 
 Don't expose the server to the public internet as it is: anyone who can reach
 it can steer the world. For a public link use `--watch-only` (or a second,
-watch-only server) behind Cloudflare Tunnel, as planned under "Future ideas"
-in `docs/STATUS.md`.
+watch-only server) behind Cloudflare Tunnel (`cloudflared tunnel --protocol http2 run --token ...` on Termux/Android, since Android drops unprivileged QUIC handshakes), as now running for `orbitalis.jcoleman.us`.

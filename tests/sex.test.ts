@@ -171,7 +171,8 @@ describe('Mating', () => {
   });
 
   it('makes one child when both ask, each parent paying its own share plus the tax', () => {
-    const world = quietWorld({ reproductionThreshold: 40, reproductionEnergyFraction: 0.5, reproductionMetabolismTax: 5 });
+    // growth off: a newborn's small body would clip the shares this test checks (tests/growth.test.ts covers growth)
+    const world = quietWorld({ reproductionThreshold: 40, reproductionEnergyFraction: 0.5, reproductionMetabolismTax: 5, growthEnabled: false });
     const a = makeOrganism('a', 5, 5, { energy: 60, brain: ASKER, lineage: { id: 'lin-a', parentId: null, generation: 3, birthTick: 0 } });
     const b = makeOrganism('b', 6, 5, { energy: 80, brain: ASKER, tag: 180 });
     addAll(world, a, b);
@@ -378,7 +379,7 @@ describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual rep
     };
     const own = geneCount(encodeOrganismDNA(phenotypeOf(parent('p', 0, 0))));
     const cap = own + 5; // the crossed genome carries ~60 of the 120 silent genes
-    const world = quietWorld({ reproductionThreshold: 40, dnaMaxGenes: cap });
+    const world = quietWorld({ reproductionThreshold: 40, dnaMaxGenes: cap, hybridIncompatibilityEnabled: false }); // hybrid cost off: these parents differ by ~120 silent genes, so a seed-dependent draw could lose the child
     addAll(world, parent('a', 5, 0), parent('b', 6, 1000));
     world.step();
     const child = Array.from(world.organisms.values()).find((o) => o.id !== 'a' && o.id !== 'b')!;
@@ -463,7 +464,8 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   });
 
   it('charges each parent its own energy × its own investment, plus the tax', () => {
-    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5 });
+    // growth off: a newborn's small body would clip the shares this test checks (tests/growth.test.ts covers growth)
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, growthEnabled: false });
     const [a, b] = pair(world, { energy: 60, investment: 0.2 }, { energy: 80, investment: 0.6 });
     world.step();
     const kids = children(world);
@@ -476,7 +478,7 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   it('takes the clutch size from the carrier and splits the pair\'s shares equally', () => {
     const seen = new Set<string>();
     for (let seed = 0; seed < 16; seed++) {
-      const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5 });
+      const world = quietWorld({ seed, reproductionThreshold: 40, reproductionEnergyFraction: 0.5, growthEnabled: false }); // growth off: a newborn's small body would clip the split
       pair(world, { energy: 80, clutchSize: 3 }, { energy: 80, clutchSize: 1 });
       world.step();
       const kids = children(world);
@@ -501,7 +503,8 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   });
 
   it('allocates viable children sequentially and dissipates sub-viable remainder without catastrophic cliff', () => {
-    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10 });
+    // Hatch maturity gene off: with it on, a mutated child's minimum differs from 10 (docs/specs/hatch-maturity.md), so this exact-arithmetic check isolates the fixed-minimum rule.
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 10, hatchMaturityGeneEnabled: false });
     const [a, b] = pair(world, { energy: 50, investment: 0.2, clutchSize: 6 }, { energy: 50, investment: 0.2, clutchSize: 6 });
     world.step();
     expect(children(world)).toHaveLength(2); // pool 20 / minViable 10 = 2 viable children
@@ -528,7 +531,7 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
 
   it('conserves energy across a clutch, counting children that find no room as lost', () => {
     // Walls on three sides of both parents leave one free cell each, so a clutch of 4 places 1 or 2.
-    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 1 });
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 1, growthEnabled: false }); // growth off: a newborn's small body would clip the split;
     for (const [x, y] of [[5, 4], [5, 6], [6, 4], [6, 6], [7, 5]]) world.obstacles.add(`${x},${y}`);
     const [a, b] = pair(world, { energy: 90, investment: 0.5, clutchSize: 4 }, { energy: 70, investment: 0.5, clutchSize: 4 });
     world.step();

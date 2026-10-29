@@ -189,6 +189,9 @@ export type WorldCountedMetric =
   | 'clutchesFailedTotal'
   | 'matingChildrenLostTotal'
   | 'matingEnergyLostTotal'
+  | 'hybridCrossesTotal'
+  | 'hybridChildrenLostTotal'
+  | 'matingGenomeDistanceSum'
   | 'carrionEatenTotal'
   | 'carrionStock'
   | 'averageCarnivory'
@@ -197,6 +200,7 @@ export type WorldCountedMetric =
   | 'plants'
   | 'overgrazing'
   | 'life'
+  | 'growth'
   | 'weather'
   | 'nutrients';
 

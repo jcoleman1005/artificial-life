@@ -292,10 +292,35 @@ describe('Always-on server over HTTP', () => {
     const base = await start({ watchOnly: true });
     const stream = await fetch(`${base}/api/events`);
     const viewer = await readEventsUntilHello(stream);
-    const post = (body: unknown) =>
-      fetch(`${base}/api/command`, { method: 'POST', headers: { 'X-Viewer': String(viewer) }, body: JSON.stringify(body) });
+    const post = (body: unknown, extraHeaders: Record<string, string> = {}) =>
+      fetch(`${base}/api/command`, {
+        method: 'POST',
+        headers: { 'X-Viewer': String(viewer), ...extraHeaders },
+        body: JSON.stringify(body),
+      });
     expect((await post({ kind: 'reset', seed: 1 })).status).toBe(403);
+    expect((await post({ kind: 'pause' })).status).toBe(204);
+    expect((await post({ kind: 'speed', ticksPerSecond: 6 })).status).toBe(204);
     expect((await post({ kind: 'select', id: null })).status).toBe(204);
+    // The brain viewer's read-only request is allowed even when watch-only.
+    expect((await post({ kind: 'inspectBrain', requestId: 1, organismId: 'nobody' })).status).toBe(204);
+    await server!.close();
+
+    server = null;
+    const withToken = await start({ watchOnly: true, controlToken: 'secret123' });
+    expect((await (await fetch(`${withToken}/api/info`)).json()).watchOnly).toBe(true);
+    expect((await (await fetch(`${withToken}/api/info`, { headers: { 'X-Control-Token': 'secret123' } })).json()).watchOnly).toBe(false);
+    const sToken = await fetch(`${withToken}/api/events`);
+    const vToken = await readEventsUntilHello(sToken);
+    expect(
+      (
+        await fetch(`${withToken}/api/command`, {
+          method: 'POST',
+          headers: { 'X-Viewer': String(vToken), 'X-Control-Token': 'secret123' },
+          body: JSON.stringify({ kind: 'reset', seed: 1 }),
+        })
+      ).status
+    ).toBe(204);
     await server!.close();
 
     server = null;

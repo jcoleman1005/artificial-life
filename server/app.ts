@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { constants as zlibConstants, createGzip } from 'node:zlib';
 import { SimulationHost } from '../src/sim/host';
 import type { ToWorker } from '../src/sim/protocol';
 import { encodeMessage, ViewerStream } from './viewer-stream';
@@ -22,6 +25,10 @@ export interface ServerOptions {
   readonly maxTicksPerSecond: number;
   /** Viewers can watch and inspect but not change the world. */
   readonly watchOnly: boolean;
+  /** Optional secret token that unlocks full controls on a watch-only server (?control=TOKEN or X-Control-Token). */
+  readonly controlToken?: string;
+  /** Optional second port that always has full controls over the same world (e.g. for a separate tunnel hostname). */
+  readonly controlPort?: number;
   readonly log?: (line: string) => void;
 }
 
@@ -38,16 +45,16 @@ export const DEFAULT_OPTIONS: ServerOptions = {
   watchOnly: false,
 };
 
-/** Speed of a fresh world (the page's 1×). */
-const DEFAULT_TICKS_PER_SECOND = 6;
+/** Speed of a fresh world (the page's ½×). */
+const DEFAULT_TICKS_PER_SECOND = 3;
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
 /** Frames wait while a viewer's connection has this much unsent. */
 const MAX_QUEUED_BYTES = 1024 * 1024;
 const KEEPALIVE_MS = 15_000;
 
-/** Commands that change the shared world (refused when watch-only). */
-const SHARED_COMMANDS = new Set<ToWorker['kind']>(['play', 'pause', 'step', 'speed', 'reset', 'config', 'load']);
-const ALL_COMMANDS = new Set<ToWorker['kind']>([...SHARED_COMMANDS, 'select', 'panels', 'csv', 'save']);
+/** Commands that replace or reconfigure the shared world (refused when watch-only). */
+const SHARED_COMMANDS = new Set<ToWorker['kind']>(['reset', 'config', 'load']);
+const ALL_COMMANDS = new Set<ToWorker['kind']>([...SHARED_COMMANDS, 'play', 'pause', 'step', 'speed', 'select', 'panels', 'csv', 'save', 'inspectBrain']);
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -83,6 +90,7 @@ export class AlifeServer {
   public readonly store: WorldStore;
   private readonly options: ServerOptions;
   private readonly http: Server;
+  private readonly controlHttp: Server | null;
   private readonly streams = new Map<number, { stream: ViewerStream; end: () => void }>();
   private saveTimer: ReturnType<typeof setInterval> | undefined;
   private lastBackup = 0;
@@ -105,26 +113,36 @@ export class AlifeServer {
     this.host.handle({ kind: 'speed', ticksPerSecond: Math.min(playback.ticksPerSecond, this.options.maxTicksPerSecond) });
     if (playback.running) this.host.handle({ kind: 'play' });
 
-    this.http = createServer((req, res) => {
-      this.route(req, res).catch((error: unknown) => {
-        this.log(`Error on ${req.method} ${req.url}: ${(error as Error).stack ?? String(error)}`);
-        if (!res.headersSent) sendJson(res, 500, { error: 'Internal error' });
-        else res.end();
+    const makeServer = (fromControlPort: boolean) =>
+      createServer((req, res) => {
+        this.route(req, res, fromControlPort).catch((error: unknown) => {
+          this.log(`Error on ${req.method} ${req.url}: ${(error as Error).stack ?? String(error)}`);
+          if (!res.headersSent) sendJson(res, 500, { error: 'Internal error' });
+          else res.end();
+        });
       });
-    });
+    this.http = makeServer(false);
+    this.controlHttp = this.options.controlPort ? makeServer(true) : null;
   }
 
   /** Starts listening and saving. Resolves with the port actually used. */
-  public listen(): Promise<number> {
+  public async listen(): Promise<number> {
     this.saveTimer = setInterval(() => this.saveNow(), this.options.saveEveryMs);
     this.lastBackup = Date.now();
-    return new Promise((resolvePort, reject) => {
+    const port = await new Promise<number>((resolvePort, reject) => {
       this.http.once('error', reject);
       this.http.listen(this.options.port, this.options.host, () => {
         const address = this.http.address();
         resolvePort(typeof address === 'object' && address ? address.port : this.options.port);
       });
     });
+    if (this.controlHttp && this.options.controlPort) {
+      await new Promise<void>((resolveControl, reject) => {
+        this.controlHttp!.once('error', reject);
+        this.controlHttp!.listen(this.options.controlPort, this.options.host, () => resolveControl());
+      });
+    }
+    return port;
   }
 
   /** Saves, backing up when one is due (or when `forceBackup`). */
@@ -149,25 +167,52 @@ export class AlifeServer {
     for (const { end } of this.streams.values()) end();
     const closed = new Promise<void>((done) => this.http.close(() => done()));
     this.http.closeAllConnections();
+    if (this.controlHttp) {
+      const controlClosed = new Promise<void>((done) => this.controlHttp!.close(() => done()));
+      this.controlHttp.closeAllConnections();
+      await controlClosed;
+    }
     await closed;
   }
 
-  private async route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private isWatchOnly(req: IncomingMessage, url: URL, fromControlPort: boolean): boolean {
+    if (!this.options.watchOnly || fromControlPort) return false;
+    const expected = this.options.controlToken;
+    if (expected) {
+      const headerToken = req.headers['x-control-token'];
+      const queryToken = url.searchParams.get('control') ?? url.searchParams.get('admin');
+      if (headerToken === expected || queryToken === expected) return false;
+    }
+    return true;
+  }
+
+  private readBuildId(): string {
+    try {
+      const html = readFileSync(join(resolve(this.options.staticDir), 'index.html'));
+      return createHash('sha1').update(html).digest('hex').slice(0, 12);
+    } catch {
+      return 'dev';
+    }
+  }
+
+  private async route(req: IncomingMessage, res: ServerResponse, fromControlPort = false): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    const watchOnly = this.isWatchOnly(req, url, fromControlPort);
     if (url.pathname === '/api/info' && req.method === 'GET') {
       sendJson(res, 200, {
         app: 'alife-server',
         version: 1,
+        buildId: this.readBuildId(),
         frameIntervalMs: this.options.frameIntervalMs,
         maxTicksPerSecond: this.options.maxTicksPerSecond,
-        watchOnly: this.options.watchOnly,
+        watchOnly,
         tick: this.host.world.tick,
         viewers: this.host.viewerCount,
       });
     } else if (url.pathname === '/api/events' && req.method === 'GET') {
       this.openStream(req, res);
     } else if (url.pathname === '/api/command' && req.method === 'POST') {
-      await this.command(req, res);
+      await this.command(req, res, watchOnly);
     } else if (url.pathname === '/api/world' && req.method === 'GET') {
       const saved = this.host.save();
       res.writeHead(200, {
@@ -185,22 +230,35 @@ export class AlifeServer {
   }
 
   private openStream(req: IncomingMessage, res: ServerResponse): void {
+    req.socket.setNoDelay(true);
+    const acceptsGzip = /\bgzip\b/.test(String(req.headers['accept-encoding'] ?? ''));
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no', // ask proxies not to hold the stream back
+      ...(acceptsGzip ? { 'Content-Encoding': 'gzip' } : {}),
     });
+    const gzip = acceptsGzip
+      ? createGzip({ flush: zlibConstants.Z_SYNC_FLUSH, level: zlibConstants.Z_BEST_SPEED })
+      : null;
+    if (gzip) gzip.pipe(res);
     const write = (text: string) => {
-      res.write(text);
+      if (gzip) {
+        gzip.write(text);
+        gzip.flush(zlibConstants.Z_SYNC_FLUSH);
+      } else {
+        res.write(text);
+      }
     };
-    const queued = () => res.writableLength;
+    const queued = () => res.writableLength + (gzip ? gzip.writableLength : 0);
 
     const stream = new ViewerStream((m) => write(`data: ${encodeMessage(m)}\n\n`), this.options.frameIntervalMs, timers, () => queued() < MAX_QUEUED_BYTES);
     // The id comes first, so the page can send commands as soon as the world arrives.
+    const buildId = this.readBuildId();
     const id = this.host.connect(
       (m) => stream.post(m),
-      (viewer) => write(`event: hello\ndata: ${JSON.stringify({ viewer })}\n\n`)
+      (viewer) => write(`event: hello\ndata: ${JSON.stringify({ viewer, buildId })}\n\n`)
     );
     const keepalive = setInterval(() => write(': keepalive\n\n'), KEEPALIVE_MS);
     let ended = false;
@@ -211,7 +269,8 @@ export class AlifeServer {
       stream.close();
       this.host.disconnect(id);
       this.streams.delete(id);
-      res.end();
+      if (gzip) gzip.end();
+      else res.end();
       this.log(`Viewer ${id} left (${this.host.viewerCount} watching)`);
     };
     this.streams.set(id, { stream, end });
@@ -220,7 +279,7 @@ export class AlifeServer {
     this.log(`Viewer ${id} joined from ${req.socket.remoteAddress ?? '?'} (${this.host.viewerCount} watching)`);
   }
 
-  private async command(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async command(req: IncomingMessage, res: ServerResponse, watchOnly = this.options.watchOnly): Promise<void> {
     const viewerId = Number(req.headers['x-viewer']);
     if (!this.streams.has(viewerId)) {
       sendJson(res, 409, { error: 'Unknown viewer; reconnect the event stream first' });
@@ -237,7 +296,7 @@ export class AlifeServer {
       sendJson(res, 400, { error: 'Unknown command' });
       return;
     }
-    if (this.options.watchOnly && SHARED_COMMANDS.has(message.kind)) {
+    if (watchOnly && SHARED_COMMANDS.has(message.kind)) {
       sendJson(res, 403, { error: 'This server is watch-only' });
       return;
     }
@@ -277,7 +336,7 @@ export class AlifeServer {
     }
     const type = CONTENT_TYPES[extname(path)] ?? 'application/octet-stream';
     // Vite's hashed assets never change; the page itself must always be fresh.
-    const cache = relative.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache';
+    const cache = relative.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-store';
     res.writeHead(200, { 'Content-Type': type, 'Cache-Control': cache, 'Content-Length': body.length });
     res.end(body);
   }

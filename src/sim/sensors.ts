@@ -10,6 +10,7 @@ import { isParentOf } from './family';
 import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
 import { fatRoom, maxEnergyOf, sensingRadiusOf, thresholdOf } from './lifehistory';
+import { carryCapacityOf, isMature } from './growth';
 
 const NEARBY: number[] = [];
 
@@ -219,6 +220,32 @@ export function senseEnvironment(
     }
   }
 
+  // Involuntary death pulses from violently killed organisms also propagate into the signal grid
+  if (snapshot.deathPulses) {
+    for (const pulse of snapshot.deathPulses) {
+      const dx = pulse.x - x;
+      const dy = pulse.y - y;
+      const distance = Math.abs(dx) + Math.abs(dy);
+      let effectiveDist = distance;
+      if (config.weatherEnabled && wind && config.weatherSignalDrift > 0 && distance > 0) {
+        const align = (-dx * wind.wx + -dy * wind.wy) / distance;
+        effectiveDist = Math.max(0, distance - config.weatherSignalDrift * align);
+      }
+      const maxReach = config.signalRadius * Math.max(0.4, pulse.size * (pulse.power ?? 1));
+      if (effectiveDist > maxReach) continue;
+      if (!nearestSignal || effectiveDist < nearestSignal.distance) {
+        nearestSignal = {
+          x: pulse.x,
+          y: pulse.y,
+          distance: effectiveDist,
+          dx,
+          dy,
+          value: Number(tagSimilarity(organism.tag, pulse.tag).toFixed(3)),
+        };
+      }
+    }
+  }
+
   // Microclimate at organism's current position (x, y)
   let weatherTemp = 0;
   let weatherRain = 0;
@@ -257,10 +284,10 @@ export function senseEnvironment(
   const meatYield = carrionYield(organism, config);
   const canEatCarrion =
     currentCellCarrion > 0 && meatYield >= 1 && (energy <= maxEnergy - meatYield || fatRoom(organism, config) >= 1);
-  const canPickUp = currentCellFood > 0 && carriedFood < organism.carryCapacity;
+  const canPickUp = currentCellFood > 0 && carriedFood < carryCapacityOf(organism, config);
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
-  let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0);
+  let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0) && isMature(organism, config);
   if (canReproduce) {
     const open = (nx: number, ny: number) =>
       nx >= 0 && nx < snapshot.gridWidth && ny >= 0 && ny < snapshot.gridHeight && snapshot.obstacleGrid[ny * width + nx] === 0;

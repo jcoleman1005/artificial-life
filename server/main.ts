@@ -13,6 +13,8 @@
 //   --save-minutes N    save every N minutes (ALIFE_SAVE_MINUTES, default 5); also on shutdown
 //   --keep-backups N    hourly compressed backups to keep (ALIFE_KEEP_BACKUPS, default 48)
 //   --watch-only        viewers can watch and inspect, not steer (ALIFE_WATCH_ONLY=1)
+//   --control-token T   secret token that unlocks full controls via ?control=T (ALIFE_CONTROL_TOKEN)
+//   --control-port N    second port with full controls on the same world (ALIFE_CONTROL_PORT)
 
 import { AlifeServer, DEFAULT_OPTIONS, type ServerOptions } from './app';
 
@@ -44,12 +46,15 @@ async function main(): Promise<void> {
     saveEveryMs: saveMinutes ? saveMinutes * 60_000 : DEFAULT_OPTIONS.saveEveryMs,
     keepBackups: numberOption(args, '--keep-backups', 'ALIFE_KEEP_BACKUPS') ?? DEFAULT_OPTIONS.keepBackups,
     watchOnly: args.includes('--watch-only') || process.env.ALIFE_WATCH_ONLY === '1',
+    controlToken: option(args, '--control-token', 'ALIFE_CONTROL_TOKEN'),
+    controlPort: numberOption(args, '--control-port', 'ALIFE_CONTROL_PORT'),
   };
 
   const server = new AlifeServer(options);
   const port = await server.listen();
   const shown = options.host === '0.0.0.0' ? 'localhost' : options.host;
-  console.log(`Artificial life server at http://${shown}:${port} (data in ${options.dataDir}${options.watchOnly ? ', watch-only' : ''})`);
+  const controlInfo = options.controlPort ? `, full-control port ${options.controlPort}` : '';
+  console.log(`Artificial life server at http://${shown}:${port} (data in ${options.dataDir}${options.watchOnly ? ', watch-only' : ''}${controlInfo})`);
 
   let stopping = false;
   const stop = (signal: string) => {

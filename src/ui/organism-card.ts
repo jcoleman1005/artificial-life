@@ -1,4 +1,5 @@
-import type { SimulationConfig } from '../sim/types';
+import type { FoodPatch, SimulationConfig } from '../sim/types';
+import { plantHue } from '../sim/plants';
 import type { EggView, OrganismView } from '../sim/protocol';
 import { givenName, organismName } from './names';
 import { metabolismHue, reproStrategyHue } from '../render/renderer';
@@ -156,6 +157,38 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
     });
   }
 
+  // Growth pace (growth gene): standout only when well away from the founders' 100 ticks.
+  if (config.growthEnabled && config.growthGeneEnabled && org.growthDuration !== undefined) {
+    const d = org.growthDuration;
+    const fast = d <= config.growthDurationFounder * 0.6;
+    const slow = d >= config.growthDurationFounder * 1.6;
+    if (fast || slow) {
+      standouts.push({
+        icon: fast ? '🐇' : '🐢',
+        label: fast ? 'Fast grower' : 'Slow grower',
+        value: `${Math.round(d)}`,
+        category: 'morphology',
+        score: 44 + Math.min(10, Math.abs(Math.log2(d / config.growthDurationFounder)) * 4),
+      });
+    }
+  }
+
+  // Hatch maturity (hatch gene): precocial young are born well developed, altricial ones small and helpless.
+  if (config.growthEnabled && config.hatchMaturityGeneEnabled && org.hatchMaturity !== undefined) {
+    const h = org.hatchMaturity;
+    const precocial = h >= config.hatchMaturity + 0.25;
+    const altricial = h <= config.hatchMaturity - 0.1;
+    if (precocial || altricial) {
+      standouts.push({
+        icon: precocial ? '🦆' : '🐣',
+        label: precocial ? 'Precocial' : 'Altricial',
+        value: `${Math.round(h * 100)}%`,
+        category: 'morphology',
+        score: 44 + Math.min(10, Math.abs(h - config.hatchMaturity) * 20),
+      });
+    }
+  }
+
   // Chemical Defense & Sensory
   if (config.detoxGeneEnabled && (org.detox ?? 0) >= 0.15) {
     standouts.push({
@@ -164,6 +197,24 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
       value: `${Math.round(org.detox! * 100)}%`,
       category: 'defense',
       score: 58 + org.detox! * 20,
+    });
+  }
+  if (config.toughnessGeneEnabled && (org.toughness ?? 0) >= 0.15) {
+    standouts.push({
+      icon: '🥋',
+      label: 'Armor',
+      value: `${Math.round(org.toughness! * 100)}%`,
+      category: 'defense',
+      score: 59 + org.toughness! * 20,
+    });
+  }
+  if (config.stealthGeneEnabled && (org.stealth ?? 0) >= 0.15) {
+    standouts.push({
+      icon: '🥷',
+      label: 'Stealth',
+      value: `${Math.round(org.stealth! * 100)}%`,
+      category: 'defense',
+      score: 59 + org.stealth! * 20,
     });
   }
   const senseR = config.sensingGeneEnabled ? (org.sensingRadius ?? config.sensingRadius) : config.sensingRadius;
@@ -359,6 +410,30 @@ export function drawOrganismBlob(
     ctx.stroke();
   }
 
+  // 7b. Toughness / armor carapace outer rim
+  const toughness = config.toughnessGeneEnabled ? (org.toughness ?? 0) : 0;
+  if (toughness > 0.1 && alive) {
+    ctx.strokeStyle = `hsla(38, 70%, 75%, ${(0.4 + 0.45 * toughness).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.4, r * (0.12 + 0.14 * toughness));
+    ctx.setLineDash([Math.max(2.5, r * 0.28), Math.max(1.5, r * 0.16)]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a + Math.max(1.2, r * 0.12), b + Math.max(1.2, r * 0.12), heading, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 7c. Stealth / camouflage cloaking rim
+  const stealth = config.stealthGeneEnabled ? (org.stealth ?? 0) : 0;
+  if (stealth > 0.1 && alive) {
+    ctx.strokeStyle = `hsla(160, 45%, 65%, ${(0.35 + 0.45 * stealth).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.2, r * (0.08 + 0.1 * stealth));
+    ctx.setLineDash([Math.max(1.5, r * 0.15), Math.max(2, r * 0.25)]);
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, a + Math.max(0.8, r * 0.08), b + Math.max(0.8, r * 0.08), heading, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   // 8. Carnivore mandibles / predator teeth at forward leading edge
   if (carnivory >= 0.22 && alive) {
     const strength = Math.min(1, (carnivory - 0.2) / 0.65);
@@ -404,6 +479,104 @@ export function drawOrganismBlob(
       const ny = cy + fy * (a * 0.45) + ry * offsetLat;
       ctx.moveTo(nx + nodeR, ny);
       ctx.arc(nx, ny, nodeR, 0, TAU);
+    }
+    ctx.fill();
+  }
+}
+
+const unit = (v: number, lo: number, hi: number) => Math.max(0, Math.min(1, (v - lo) / (hi - lo)));
+
+/** Adaptation badges for a plant: its strategy traits, strongest first (at most 5). */
+export function computePlantBadges(patch: FoodPatch): TraitBadge[] {
+  const plant = patch.plant;
+  if (!plant) return [];
+  const g = plant.genome;
+  const badges: TraitBadge[] = [
+    { icon: '🌿', label: 'Edible', value: `${patch.stock}`, category: 'diet', score: 100, customHue: 125 },
+    { icon: '🌱', label: 'Growth', value: g.growthRate.toFixed(2), category: 'metabolism', score: 90, customHue: Math.round(plantHue(g)) },
+    { icon: '🌳', label: 'Max size', value: g.maxBiomass.toFixed(1), category: 'morphology', score: 85 },
+    { icon: '🥔', label: 'Roots', value: `${Math.round(g.rootShare * 100)}%`, category: 'morphology', score: 60 + g.rootShare * 20 },
+    { icon: '🫘', label: 'Seeds', value: `${plant.seedsReleased}`, category: 'breeding', score: 70, customHue: 40 },
+    { icon: '💨', label: 'Dispersal', value: `${g.dispersal.toFixed(1)}`, category: 'mobility', score: 50 + g.dispersal },
+  ];
+  if ((g.defense ?? 0) >= 0.15) {
+    badges.push({ icon: '🌵', label: 'Defense', value: `${Math.round(g.defense! * 100)}%`, category: 'defense', score: 95 });
+  }
+  if (g.leanDormancy >= 0.5) {
+    badges.push({ icon: '💤', label: 'Dormancy', value: `${Math.round(g.leanDormancy * 100)}%`, category: 'metabolism', score: 65 });
+  }
+  return badges.sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
+/** A plant preview blob matching the canvas renderer: leaf rosette, root halo, spines and berries. */
+export function drawPlantBlob(ctx: CanvasRenderingContext2D, patch: FoodPatch, w: number, h: number, alive = true): void {
+  ctx.clearRect(0, 0, w, h);
+  const plant = patch.plant;
+  if (!plant) return;
+  const g = plant.genome;
+  const cx = w / 2;
+  const cy = h / 2;
+  const TAU = Math.PI * 2;
+  const hue = Math.round(plantHue(g));
+  const size = plant.biomass + plant.roots;
+  const dormant = plant.dormant || !alive;
+  const sat = alive ? (plant.dormant ? 12 : 55) : 0;
+  const r = Math.min(w, h) * (0.16 + 0.2 * Math.min(1, Math.sqrt(size / 10)));
+
+  if (alive) {
+    ctx.fillStyle = `hsla(${hue}, 70%, 60%, 0.14)`;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 1.9, 0, TAU);
+    ctx.fill();
+  }
+  if (plant.roots > 0.4) {
+    ctx.strokeStyle = `hsla(32, 48%, 40%, ${(0.3 + 0.4 * g.rootShare).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.2, r * 0.12);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * (1.1 + 0.5 * Math.min(1, Math.sqrt(plant.roots / 6))), 0, TAU);
+    ctx.stroke();
+  }
+  const leaves = 3 + Math.round(unit(g.maxBiomass, 1, 20) * 5);
+  const growthNorm = unit(g.growthRate, 0.01, 1);
+  const leafLen = r * (0.62 + 0.2 * growthNorm);
+  const leafWid = r * (0.5 - 0.16 * growthNorm);
+  const spread = r * (dormant ? 0.35 : 0.65);
+  ctx.fillStyle = alive ? `hsla(${hue}, ${sat}%, ${dormant ? 45 : 38}%, 0.92)` : '#3a4454';
+  ctx.beginPath();
+  for (let i = 0; i < leaves; i++) {
+    const a = (i / leaves) * TAU + 0.3;
+    const lx = cx + Math.cos(a) * spread;
+    const ly = cy + Math.sin(a) * spread;
+    ctx.moveTo(lx + leafLen, ly);
+    ctx.ellipse(lx, ly, leafLen, leafWid, a, 0, TAU);
+  }
+  ctx.fill();
+
+  const defense = g.defense ?? 0;
+  if (defense > 0.2 && alive) {
+    const spines = 3 + Math.round(defense * 5);
+    const spineLen = r * (0.45 + 0.45 * defense);
+    ctx.strokeStyle = `hsla(15, 85%, 65%, ${(0.45 + 0.45 * defense).toFixed(2)})`;
+    ctx.lineWidth = Math.max(1.2, r * 0.1);
+    ctx.beginPath();
+    for (let i = 0; i < spines; i++) {
+      const a = (i / spines) * TAU + Math.PI / spines + 0.3;
+      ctx.moveTo(cx + Math.cos(a) * r * 0.9, cy + Math.sin(a) * r * 0.9);
+      ctx.lineTo(cx + Math.cos(a) * (r * 0.9 + spineLen), cy + Math.sin(a) * (r * 0.9 + spineLen));
+    }
+    ctx.stroke();
+  }
+  if (patch.stock > 0 && alive) {
+    const berries = Math.max(1, Math.ceil(Math.min(1, patch.stock / Math.max(1, patch.capacity)) * 5));
+    const br = Math.max(1.6, r * 0.16 * (0.78 + 0.45 * unit(g.seedSize, 0.2, 4)));
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath();
+    for (let i = 0; i < berries; i++) {
+      const a = i * 1.7 + 0.4;
+      const bx = cx + (berries === 1 ? 0 : Math.cos(a) * r * 0.35);
+      const by = cy + (berries === 1 ? 0 : Math.sin(a) * r * 0.35);
+      ctx.moveTo(bx + br, by);
+      ctx.arc(bx, by, br, 0, TAU);
     }
     ctx.fill();
   }
@@ -565,6 +738,29 @@ export class OrganismCard {
     this.renderBadges(badges.map(renderBadgeHtml).join(''));
   }
 
+  public renderPlant(patch: FoodPatch, tick: number, alive = true): void {
+    const plant = patch.plant;
+    if (!plant) return;
+    const g = plant.genome;
+    const size = plant.biomass + plant.roots;
+    const pct = Math.max(0, Math.min(100, alive ? (size / g.maxBiomass) * 100 : 0));
+    const set = (node: HTMLElement, text: string) => {
+      if (node.textContent !== text) node.textContent = text;
+    };
+    const status = !alive ? 'Died' : plant.dormant ? 'Dormant' : plant.biomass < 1 ? 'Seedling' : 'Growing';
+    this.el.hidden = false;
+    this.el.classList.toggle('dead', !alive);
+    this.orbCanvas.style.setProperty('--hue', String(Math.round(plantHue(g))));
+    if (this.orbCtx) drawPlantBlob(this.orbCtx, patch, this.orbCanvas.width, this.orbCanvas.height, alive);
+    set(this.given, `Plant · ${givenName(plant.id)}`);
+    set(this.family, `Gen ${plant.generation}`);
+    set(this.doing, alive ? `Age ${tick - plant.birthTick} · ${status} · at ${patch.x},${patch.y}` : `Died at age ${tick - plant.birthTick}`);
+    this.energy.setAttribute('aria-label', `Size ${size.toFixed(1)} of ${g.maxBiomass.toFixed(1)}`);
+    this.fill.style.width = `${pct}%`;
+    this.fill.classList.toggle('low', alive && pct < 10);
+    this.renderBadges(computePlantBadges(patch).map(renderBadgeHtml).join(''));
+  }
+
   public renderEgg(
     egg: EggView,
     config: SimulationConfig,
@@ -600,6 +796,9 @@ export class OrganismCard {
     const badges: TraitBadge[] = [
       { icon: '🥚', label: 'Egg', value: '', category: 'breeding', score: 100 },
       { icon: '🛡️', label: 'Shell', value: egg.shell.toFixed(2), category: 'defense', score: 90 },
+      ...(egg.toxicity && egg.toxicity > 0
+        ? [{ icon: '☠️', label: 'Toxic', value: `${(egg.toxicity * 100).toFixed(0)}%`, category: 'defense' as const, score: 85 }]
+        : []),
       { icon: '📏', label: 'Size', value: `${(egg.size || 1).toFixed(1)}×`, category: 'morphology', score: 80 },
       { icon: '⚡', label: 'Energy', value: `${Math.round(egg.energy)}`, category: 'metabolism', score: 70 },
     ];

@@ -85,6 +85,9 @@ function merge(older: Frame, newer: Frame): Frame {
 
 /** JSON for the wire: typed arrays (heatmaps, genomes) become plain arrays; heatmaps are rounded to keep them small. */
 export function encodeMessage(message: FromWorker): string {
+  const hasTypedArrays =
+    message.kind === 'saved' || (message.kind === 'frame' && Boolean(message.panels?.heatmap || message.panels?.selected));
+  if (!hasTypedArrays) return JSON.stringify(message);
   return JSON.stringify(message, (_key, value: unknown) =>
     value instanceof Float32Array
       ? Array.from(value, (v) => Math.round(v * 1000) / 1000)

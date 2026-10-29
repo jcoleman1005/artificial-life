@@ -1,5 +1,6 @@
 import type { PRNG } from './prng';
 import type { Organism, SimulationConfig } from './types';
+import { bodyScaleOf } from './growth';
 
 /**
  * Life-history genes: when to reproduce, how much to put into a child, how
@@ -32,7 +33,12 @@ export type LifeField =
   | 'sensingRadius'
   | 'digestiveEfficiency'
   | 'carnivoreEfficiency'
-  | 'detox';
+  | 'detox'
+  | 'growthDuration'
+  | 'hatchMaturity'
+  | 'toughness'
+  | 'toxicity'
+  | 'stealth';
 
 export interface LifeGene {
   readonly field: LifeField;
@@ -156,6 +162,53 @@ export const LIFE_GENES: readonly LifeGene[] = [
     min: (c) => c.detoxMin,
     max: (c) => c.detoxMax,
   },
+  {
+    // Fed ticks to grow up. Only meaningful (and only carried) while growth is on.
+    field: 'growthDuration',
+    traitId: 55,
+    enabled: (c) => c.growthEnabled && c.growthGeneEnabled,
+    founder: (c) => c.growthDurationFounder,
+    step: (c) => c.growthDurationStep,
+    min: (c) => c.growthDurationMin,
+    max: (c) => c.growthDurationMax,
+  },
+  {
+    // Maturity a newborn starts at (docs/specs/hatch-maturity.md). Founders carry the world's hatchMaturity.
+    field: 'hatchMaturity',
+    traitId: 56,
+    enabled: (c) => c.growthEnabled && c.hatchMaturityGeneEnabled,
+    founder: (c) => c.hatchMaturity,
+    step: (c) => c.hatchMaturityStep,
+    min: (c) => c.hatchMaturityMin,
+    max: (c) => c.hatchMaturityMax,
+  },
+  {
+    field: 'toughness',
+    traitId: 52,
+    enabled: (c) => c.toughnessGeneEnabled,
+    founder: (c) => c.toughnessFounder,
+    step: (c) => c.toughnessStep,
+    min: (c) => c.toughnessMin,
+    max: (c) => c.toughnessMax,
+  },
+  {
+    field: 'toxicity',
+    traitId: 53,
+    enabled: (c) => c.toxicityGeneEnabled,
+    founder: (c) => c.toxicityFounder,
+    step: (c) => c.toxicityStep,
+    min: (c) => c.toxicityMin,
+    max: (c) => c.toxicityMax,
+  },
+  {
+    field: 'stealth',
+    traitId: 54,
+    enabled: (c) => c.stealthGeneEnabled,
+    founder: (c) => c.stealthFounder,
+    step: (c) => c.stealthStep,
+    min: (c) => c.stealthMin,
+    max: (c) => c.stealthMax,
+  },
 ];
 
 export const LIFE_TRAIT_BASE = 40;
@@ -221,8 +274,9 @@ export function inheritLife(parent: Readonly<Organism>, config: Readonly<Simulat
 export const sizeOf = (o: Readonly<Pick<Organism, 'size'>>, c: Readonly<SimulationConfig>): number =>
   c.sizeGeneEnabled ? (o.size ?? 1) : 1;
 
-export const maxEnergyOf = (o: Readonly<Pick<Organism, 'size'>>, c: Readonly<SimulationConfig>): number =>
-  c.maxEnergy * sizeOf(o, c);
+/** Energy capacity: the adult size gene's, times body scale while growing (1 when grown or with growth off). */
+export const maxEnergyOf = (o: Readonly<Pick<Organism, 'size' | 'maturity'>>, c: Readonly<SimulationConfig>): number =>
+  c.maxEnergy * sizeOf(o, c) * bodyScaleOf(o, c);
 
 export const sensingRadiusOf = (o: Readonly<Pick<Organism, 'sensingRadius'>>, c: Readonly<SimulationConfig>): number =>
   c.sensingGeneEnabled ? (o.sensingRadius ?? c.sensingRadius) : c.sensingRadius;
@@ -237,6 +291,18 @@ export const carnivoreEfficiencyOf = (o: Readonly<Pick<Organism, 'carnivoreEffic
 /** Toxin neutralization capacity (detoxGeneEnabled); 0 without the gene. */
 export const detoxOf = (o: Readonly<Pick<Organism, 'detox'>>, c: Readonly<SimulationConfig>): number =>
   c.detoxGeneEnabled ? (o.detox ?? c.detoxFounder) : 0;
+
+/** Prey armor / bite blunting (toughnessGeneEnabled); 0 without the gene. */
+export const toughnessOf = (o: Readonly<Pick<Organism, 'toughness'>>, c: Readonly<SimulationConfig>): number =>
+  c.toughnessGeneEnabled ? (o.toughness ?? c.toughnessFounder) : 0;
+
+/** Prey chemical defense / tissue toxicity (toxicityGeneEnabled); 0 without the gene. */
+export const toxicityOf = (o: Readonly<Pick<Organism, 'toxicity'>>, c: Readonly<SimulationConfig>): number =>
+  c.toxicityGeneEnabled ? (o.toxicity ?? c.toxicityFounder) : 0;
+
+/** Ambush & cry suppression / stealth (stealthGeneEnabled); 0 without the gene. */
+export const stealthOf = (o: Readonly<Pick<Organism, 'stealth'>>, c: Readonly<SimulationConfig>): number =>
+  c.stealthGeneEnabled ? (o.stealth ?? c.stealthFounder) : 0;
 
 export const thresholdOf = (o: Readonly<Pick<Organism, 'reproThreshold' | 'size'>>, c: Readonly<SimulationConfig>): number =>
   (o.reproThreshold ?? c.reproductionThreshold) * sizeOf(o, c);

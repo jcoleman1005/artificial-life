@@ -37,6 +37,8 @@ for (const [name, overrides] of Object.entries(worlds)) {
           h.update(JSON.stringify(life.map((o) => [o.id, o.reproThreshold, o.investment, o.fatCapacity, o.fat, o.torporDepth, o.rested, o.eggRate, o.metabolicRate, o.nextBirthTick, ...(o.clutchSize !== undefined ? [o.clutchSize] : [])])));
           h.update(JSON.stringify(Array.from(w.eggs.values()).map((e) => [e.child.id, e.x, e.y, e.laidTick, e.child.energy])));
         }
+        // Growth state (maturity, age, growth duration), hashed only while growth or ageing is on, so a world with both off keeps its old hash.
+        if (w.config.growthEnabled || w.config.ageingEnabled) h.update(JSON.stringify(orgs.map((o) => [o.id, o.maturity ?? 1, o.age, ...(o.growthDuration !== undefined ? [o.growthDuration] : []), ...(o.hatchMaturity !== undefined ? [o.hatchMaturity] : [])])));
         if (w.cellHealth) h.update(JSON.stringify(w.cellHealth.exportState())); // overgrazing state, only while it is on
         if (w.weather) h.update(JSON.stringify(w.weather.exportState())); // weather state, only while it is on
         if (w.config.nutrientCycleEnabled) h.update(JSON.stringify(Array.from(w.soil().nutrients)));

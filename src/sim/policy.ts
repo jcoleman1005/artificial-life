@@ -13,6 +13,7 @@ import { isLeapAction, unitDirectionOf } from './directions';
 import { carrionYield, killChance } from './traits';
 import { isParentOf, isParentOrChild } from './family';
 import { maxEnergyOf, thresholdOf } from './lifehistory';
+import { carryCapacityOf, isMature } from './growth';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -321,7 +322,7 @@ export function getLegalActions(
   // attacks). It only makes a child if that one asks back this same tick;
   // whether to ask, and whom, is the brain's to evolve. Each must be at its
   // own reproduction threshold and past its own birth cooldown.
-  const readyToBreed = (o: Readonly<Organism>) => o.energy >= thresholdOf(o, config) && snapshot.tick >= (o.nextBirthTick ?? 0);
+  const readyToBreed = (o: Readonly<Organism>) => o.energy >= thresholdOf(o, config) && snapshot.tick >= (o.nextBirthTick ?? 0) && isMature(o, config);
   if (config.sexEnabled && config.controller === 'brain' && readyToBreed(organism)) {
     const candidateMates: { type: LegalAction['type']; dx: number; dy: number }[] = [
       { type: 'MATE_NORTH', dx: 0, dy: -1 },
@@ -408,7 +409,7 @@ export function scoreAction(
 
     case 'PICK_UP': {
       // Stocking up is driven by forageDrive and how much room is left.
-      const room = 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity);
+      const room = 1 - sensed.carriedFood / Math.max(1, carryCapacityOf(organism, config));
       const forageComponent = policy.forageDrive * room * 1.5 - 0.1;
       components['forage'] = Number(forageComponent.toFixed(3));
       totalScore = forageComponent;

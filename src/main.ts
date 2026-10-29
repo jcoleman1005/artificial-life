@@ -6,12 +6,15 @@ import { CanvasRenderer } from './render/renderer';
 import { MetricsView } from './ui/metrics-view';
 import { PlaybackPill, SettingsView } from './ui/controls';
 import { InspectorView } from './ui/inspector';
+import { BrainView } from './ui/brain-view';
 import { HistoryView } from './ui/history-view';
 import { BottomSheet } from './ui/sheet';
 import { OrganismCard } from './ui/organism-card';
 import { PeekView, groupsTableHTML, seasonSummary } from './ui/peek-view';
 import { colourGroups } from './sim/groups';
 import { givenName } from './ui/names';
+import { SpeciesChart, selectedSpeciesHTML, speciesListHTML } from './ui/species-view';
+import { SpeciesSettings } from './ui/species-settings';
 import { LEGEND_HTML } from './ui/legend';
 import { eventListHTML, latestEventHTML } from './ui/events-view';
 import type { OverlayMode } from './render/renderer';
@@ -21,6 +24,7 @@ import type { SimulationConfig } from './sim/types';
 import type { ExperimentToggles } from './ui/controls';
 import { AUTOSAVE_KEY, deleteWorld, getWorld, infoFor, listBranches, putWorld } from './ui/saved-worlds';
 import { DEFAULT_CONFIG, FOOD_LAYOUTS, WORLD_SIZES } from './sim/config';
+import { APP_VERSION, APP_CODENAME } from './version';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -77,7 +81,7 @@ app.innerHTML = `
         <div class="sheet-peek" role="button" tabindex="0" aria-expanded="false" aria-label="Show details">
           <div class="peek-row">
             <span class="peek-pop">0 alive</span>
-            <span class="peek-season">Plenty</span>
+            <span class="peek-season">Spring</span>
             <button type="button" class="round-btn btn-settings" aria-label="Settings">${GEAR_ICON}</button>
           </div>
           <div class="group-strip" role="img" aria-label="Colour groups"></div>
@@ -104,13 +108,19 @@ app.innerHTML = `
             <div class="stats-col">
               <h3 class="panel-heading">Colour groups <small>by tag hue; not species</small></h3>
               <div id="groups-container"></div>
+              <details class="species-panel">
+                <summary class="panel-heading">Species <small>clusters in genome; tap one to highlight it</small></summary>
+                <div id="species-container"></div>
+              </details>
             </div>
             <div class="stats-col stats-col-legend">
               ${LEGEND_HTML}
+              <div class="stats-version-info">Artificial Life Lab <strong>v${APP_VERSION}</strong> · ${APP_CODENAME}</div>
             </div>
           </div>
         </section>
         <section class="tab-panel" data-panel="trends" id="history-container" aria-label="Trends over time"></section>
+        <section class="tab-panel" data-panel="trends" id="species-trends" aria-label="Species over time"></section>
         <section class="tab-panel" data-panel="organism" id="inspector-container"></section>
       </div>
     </aside>
@@ -119,7 +129,7 @@ app.innerHTML = `
       <div class="settings-backdrop"></div>
       <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header class="settings-header">
-          <h2 id="settings-title">Settings</h2>
+          <h2 id="settings-title">Settings <span class="settings-version-tag">v${APP_VERSION}</span></h2>
           <button type="button" class="round-btn settings-close" aria-label="Close settings">✕</button>
         </header>
         <div id="settings-container" class="settings-body"></div>
@@ -147,6 +157,9 @@ const sim = new SimulationClient({
     settingsView.setToggles(togglesFor(sim.config));
     settingsView.setSeed(sim.config.seed);
     historyView.setController(sim.config.controller);
+    speciesSettings.sync(sim.config);
+    highlightedSpecies = null;
+    renderer.setHighlightSpecies(null);
     renderer.resize();
     renderer.clearMotion();
     layout();
@@ -161,6 +174,7 @@ const sim = new SimulationClient({
     // Changed by another viewer of the shared world.
     settingsView.setToggles(togglesFor(sim.config));
     historyView.setController(sim.config.controller);
+    speciesSettings.sync(sim.config);
     refreshPanels();
   },
   connection: (connected) => {
@@ -170,10 +184,25 @@ const sim = new SimulationClient({
   },
 });
 const renderer = new CanvasRenderer(canvas, sim);
+renderer.setSpeciesLookup((id) => sim.speciesOf(id));
 
 // 2. Views
 const metricsView = new MetricsView($('#metrics-container'));
 const groupsContainer = $('#groups-container');
+const speciesContainer = $('#species-container');
+const speciesChart = new SpeciesChart($('#species-trends'));
+/** The species whose members are lit on the map (null: none). */
+let highlightedSpecies: number | null = null;
+let lastSpeciesHTML = '';
+speciesContainer.addEventListener('click', (e) => {
+  const row = (e.target as Element).closest<HTMLElement>('[data-species]');
+  if (!row) return;
+  const id = Number(row.dataset.species);
+  highlightedSpecies = highlightedSpecies === id ? null : id;
+  renderer.setHighlightSpecies(highlightedSpecies);
+  needsRender = true;
+  refreshPanels();
+});
 const eventsContainer = $('#events-container');
 const peekEvent = $('.peek-event');
 const statsStatus = $('#stats-status');
@@ -198,6 +227,8 @@ function findPlant(id: string): FoodPatch | undefined {
 const nameOf = (id: string): string | null => (sim.organisms.has(id) ? givenName(id) : null);
 
 const inspectorView = new InspectorView($('#inspector-container'), () => deselect());
+const brainView = new BrainView(sim);
+inspectorView.setBrainElement(brainView.element);
 const historyView = new HistoryView($('#history-container'), () => {
   const name = `alife-seed-${sim.config.seed}-tick-${sim.tick}.csv`;
   void sim.requestCSV().then((csv) => {
@@ -235,7 +266,7 @@ function updateHistoryWanted(): void {
 // 3. Playback state. The worker keeps time and runs the ticks; the page only
 // draws each frame it sends, gliding organisms over the time until the next.
 let isRunning = false;
-let speedMultiplier = 1;
+let speedMultiplier = 0.5;
 const BASE_TICKS_PER_SECOND = 6;
 
 // Glide from the previous frame's positions over this long.
@@ -250,6 +281,7 @@ let frameGapMs = 0;
 // modest rate; the canvas still redraws every frame.
 const PANEL_REFRESH_MS = 200;
 let lastPanelRefresh = 0;
+let panelsDirty = true;
 let needsRender = true;
 
 /** When this page last changed playback itself; frames sent before that may still say otherwise. */
@@ -289,6 +321,7 @@ function onFrame(fromStep: boolean): void {
   renderer.setPace(fromStep ? STEP_ANIMATION_MS : frameGapMs);
   glideEased = fromStep;
   needsRender = true;
+  panelsDirty = true;
   if (!isRunning) refreshPanels();
 }
 
@@ -319,6 +352,8 @@ function selectedForDisplay(): { org: OrganismView; detail: Organism | null; ali
 }
 
 function refreshPanels(): void {
+  panelsDirty = false;
+  lastPanelRefresh = performance.now();
   // If the selected egg hatched, transition immediately to following the live organism
   if (selectedEggId && sim.organisms.has(selectedEggId)) {
     const org = sim.organisms.get(selectedEggId)!;
@@ -329,15 +364,19 @@ function refreshPanels(): void {
 
   const groups = colourGroups(sim.organisms.values());
   const population = sim.organisms.size;
-  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config), groups);
+  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config, sim.weather), groups);
   const latest = latestEventHTML(sim.worldEvents, sim.foodRegions, sim.config);
   if (peekEvent.innerHTML !== latest) peekEvent.innerHTML = latest;
   pill.setTick(sim.tick);
   const status = statusText();
   settingsView.setStatus(status);
 
-  const shown = selectedEggId ? null : selectedForDisplay();
-  if (selectedEggId && lastSelectedEgg) {
+  const shown = selectedEggId || selectedPlantId ? null : selectedForDisplay();
+  if (selectedPlantId) {
+    const livePlant = findPlant(selectedPlantId);
+    if (livePlant) lastPlantPatch = livePlant;
+    if (lastPlantPatch) card.renderPlant(lastPlantPatch, sim.tick, livePlant !== undefined);
+  } else if (selectedEggId && lastSelectedEgg) {
     const eggLive = sim.eggs.get(selectedEggId);
     if (eggLive) lastSelectedEgg = eggLive;
     card.renderEgg(lastSelectedEgg, sim.config, nameOf, eggLive !== undefined);
@@ -355,16 +394,22 @@ function refreshPanels(): void {
       if (metrics) metricsView.render(metrics);
       const groupsHtml = groupsTableHTML(groups, population);
       if (groupsContainer.innerHTML !== groupsHtml) groupsContainer.innerHTML = groupsHtml;
+      const speciesHTML = speciesListHTML(sim.getSpecies(), highlightedSpecies);
+      if (speciesHTML !== lastSpeciesHTML) {
+        speciesContainer.innerHTML = speciesHTML;
+        lastSpeciesHTML = speciesHTML;
+      }
       const eventsHtml = eventListHTML(sim.worldEvents, sim.foodRegions, sim.config);
       if (eventsContainer.innerHTML !== eventsHtml) eventsContainer.innerHTML = eventsHtml;
     } else if (tab === 'trends') {
       historyView.render(sim.getHistorySamples());
+      speciesChart.render(sim.getSpecies());
     } else {
       const plantPatch = selectedPlantId ? findPlant(selectedPlantId) : undefined;
       if (plantPatch) lastPlantPatch = plantPatch;
       if (selectedPlantId && lastPlantPatch) {
+        brainView.update(null, sim.tick);
         inspectorView.renderPlant(lastPlantPatch, sim.tick, plantPatch !== undefined);
-        lastPanelRefresh = performance.now();
         return;
       }
       if (selectedEggId && lastSelectedEgg) {
@@ -383,7 +428,6 @@ function refreshPanels(): void {
           eggLive !== undefined,
           sim.tick
         );
-        lastPanelRefresh = performance.now();
         return;
       }
       const detail = shown?.detail;
@@ -393,9 +437,10 @@ function refreshPanels(): void {
         nameOf,
         lastSelectedAncestry,
       );
+      brainView.update(detail && shown.alive ? detail.id : null, sim.tick);
+      if (detail && shown.alive) $('#inspector-container').insertAdjacentHTML('afterbegin', selectedSpeciesHTML(sim.getSpecies(), sim.getSelectedSpecies()));
     }
   }
-  lastPanelRefresh = performance.now();
 }
 
 const pill = new PlaybackPill($('#playback'), {
@@ -434,6 +479,8 @@ const settingsView = new SettingsView(
     overgrazingEnabled: sim.config.overgrazingEnabled ?? false,
     carrionEnabled: sim.config.carrionEnabled ?? true,
     predationEnabled: sim.config.predationEnabled ?? true,
+    toughnessGeneEnabled: sim.config.toughnessGeneEnabled ?? true,
+    stealthGeneEnabled: sim.config.stealthGeneEnabled ?? true,
     sexEnabled: sim.config.sexEnabled ?? true,
     immigrationEnabled: sim.config.immigrationEnabled,
     plantsEnabled: sim.config.plantsEnabled,
@@ -475,6 +522,8 @@ const settingsView = new SettingsView(
     onOvergrazingChange: (enabled) => sim.setConfig({ overgrazingEnabled: enabled }),
     onCarrionChange: (enabled) => sim.setConfig({ carrionEnabled: enabled }),
     onPredationChange: (enabled) => sim.setConfig({ predationEnabled: enabled }),
+    onToughnessChange: (enabled) => sim.setConfig({ toughnessGeneEnabled: enabled }),
+    onStealthChange: (enabled) => sim.setConfig({ stealthGeneEnabled: enabled }),
     onSexChange: (enabled) => sim.setConfig({ sexEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
@@ -494,6 +543,10 @@ const settingsView = new SettingsView(
     onLoadFile: (file) => void loadFromFile(file),
   }
 );
+const speciesSettings = new SpeciesSettings($('#settings-container'), sim.config, (patch) => {
+  sim.setConfig(patch);
+  speciesSettings.sync(sim.config);
+});
 
 /** Stops and restarts the world from tick 0 with the given seed (and settings needing a fresh world). */
 function restart(seed: string | number, config?: Partial<typeof sim.config>): void {
@@ -590,7 +643,7 @@ function loop(timestamp: number): void {
   if (isRunning || glide < 1 || needsRender || renderer.isAnimating()) {
     renderer.render(glide, glideEased);
   }
-  if (isRunning && timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) refreshPanels();
+  if (isRunning && panelsDirty && timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) refreshPanels();
   needsRender = false;
   requestAnimationFrame(loop);
 }
@@ -856,6 +909,8 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     overgrazingEnabled: config.overgrazingEnabled ?? false,
     carrionEnabled: config.carrionEnabled ?? true,
     predationEnabled: config.predationEnabled ?? true,
+    toughnessGeneEnabled: config.toughnessGeneEnabled ?? true,
+    stealthGeneEnabled: config.stealthGeneEnabled ?? true,
     sexEnabled: config.sexEnabled ?? true,
     immigrationEnabled: config.immigrationEnabled ?? false,
     plantsEnabled: config.plantsEnabled,

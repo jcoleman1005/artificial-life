@@ -1,5 +1,5 @@
 import type { PRNG } from './prng';
-import { ACTION_INVARIANT_MASK, BASE_BRAIN_INPUT_COUNT, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
+import { ACTION_INVARIANT_MASK, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, MATURITY_INPUT, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
 import { lifeOf, LIFE_GENES, LIFE_TRAIT_BASE, LIFE_TRAIT_COUNT, clampLife, geneForTrait, inheritLifeValue, type LifeValues } from './lifehistory';
@@ -46,7 +46,7 @@ export const GeneClass = {
 } as const;
 export type GeneClass = (typeof GeneClass)[keyof typeof GeneClass];
 
-/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–50 are the life-history genes (lifehistory.ts). */
+/** Trait ids (GeneClass.trait). 9 is reserved; 10–39 are the memory register weights; 40–53 are the life-history genes (lifehistory.ts). */
 export const TraitId = {
   tag: 0,
   carryCapacity: 1,
@@ -64,6 +64,11 @@ export const TraitId = {
   digestiveEfficiency: 49,
   carnivoreEfficiency: 50,
   detox: 51,
+  growthDuration: 55,
+  hatchMaturity: 56,
+  toughness: 52,
+  toxicity: 53,
+  stealth: 54,
 } as const;
 
 /** The phenotype a genome decodes to: every inherited trait except the policy dials. */
@@ -96,6 +101,11 @@ export const ABSENT_DEFAULTS = {
   digestiveEfficiency: 1.0,
   carnivoreEfficiency: 0.5,
   detox: 0.1,
+  growthDuration: 100,
+  hatchMaturity: 0.35,
+  toughness: 0.1,
+  toxicity: 0.05,
+  stealth: 0.1,
 } as const;
 
 const scratch = new DataView(new ArrayBuffer(8));
@@ -133,16 +143,19 @@ export function encodeOrganismDNA(p: Readonly<Phenotype>, config?: Readonly<Simu
   add(GeneClass.trait, TraitId.carryCapacity, p.carryCapacity);
   const weatherOn = config?.weatherEnabled !== false;
   const plantDefenseOn = config?.plantDefenseEnabled !== false;
+  const growthOn = config?.growthEnabled !== false;
   p.brain.skip.forEach((w, i) => {
     if (i >= 52 && i < 55 && !weatherOn) return;
-    if (i >= 55 && !plantDefenseOn) return;
+    if (i >= 55 && i < MATURITY_INPUT && !plantDefenseOn) return;
+    if (i >= MATURITY_INPUT && !growthOn) return; // growth off: no gene for the maturity input (keeps that world bit-identical)
     add(GeneClass.brainSkip, i, w);
   });
   const inputs = p.brain.skip.length;
   p.brain.hidden.forEach((w, k) => {
     const i = k % inputs;
     if (i >= 52 && i < 55 && !weatherOn) return;
-    if (i >= 55 && !plantDefenseOn) return;
+    if (i >= 55 && i < MATURITY_INPUT && !plantDefenseOn) return;
+    if (i >= MATURITY_INPUT && !growthOn) return;
     add(GeneClass.brainHidden, (Math.floor(k / inputs) << 8) | i, w);
   });
   p.brain.hiddenBias.forEach((w, h) => add(GeneClass.brainHiddenBias, h, w));
@@ -708,8 +721,9 @@ export function phenotypeOf(o: Readonly<Organism>): Phenotype {
  * skip length); only inputs past it are added, so a gene that Stage 2
  * deleted is not brought back.
  */
-export function upgradeGenome(dna: ArrayLike<number>, savedInputs: number): Uint32Array {
-  const missing = HEAD_START_SKIP.map((_, i) => i).filter((i) => i >= savedInputs);
+export function upgradeGenome(dna: ArrayLike<number>, savedInputs: number, config?: Readonly<SimulationConfig>): Uint32Array {
+  // The maturity input only gets a gene in a world with growth on.
+  const missing = HEAD_START_SKIP.map((_, i) => i).filter((i) => i >= savedInputs && (i < MATURITY_INPUT || config?.growthEnabled !== false));
   const out = new Uint32Array((geneCount(dna) + missing.length) * GENE_WORDS);
   out.set(Array.from(dna).slice(0, geneCount(dna) * GENE_WORDS));
   missing.forEach((i, k) => writeGene(out, (geneCount(dna) + k) * GENE_WORDS, geneKey(GeneClass.brainSkip, i), HEAD_START_SKIP[i]));
@@ -781,9 +795,9 @@ export function isExpressed(key: number, config: Readonly<SimulationConfig>): bo
         (geneForTrait(index)?.enabled(config) ?? false)
       );
     case GeneClass.brainSkip:
-      return index < BRAIN_INPUT_COUNT;
+      return index < BRAIN_INPUT_COUNT && (index < MATURITY_INPUT || config.growthEnabled);
     case GeneClass.brainHidden:
-      return (index & 0xff) < BRAIN_INPUT_COUNT && mapUnitField(index >>> 8, M) !== SILENT;
+      return (index & 0xff) < BRAIN_INPUT_COUNT && ((index & 0xff) < MATURITY_INPUT || config.growthEnabled) && mapUnitField(index >>> 8, M) !== SILENT;
     case GeneClass.brainHiddenBias:
     case GeneClass.brainOut:
       return mapUnitField(index, M) !== SILENT; // switch off (M = 6): units < 6 only
@@ -803,27 +817,27 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
     if (g.enabled(config)) keys.push(geneKey(GeneClass.trait, g.traitId));
   }
   for (let i = 0; i < MEMORY_WEIGHT_COUNT; i++) keys.push(geneKey(GeneClass.trait, TraitId.memoryWeight0 + i));
-  const inputCount = config.plantDefenseEnabled
-    ? BRAIN_INPUT_COUNT
-    : config.weatherEnabled
-      ? 55
-      : BASE_BRAIN_INPUT_COUNT;
-  for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainSkip, i));
+  // Inputs up to the plant-defense one keep their old ladder; the maturity input has slots only with growth on.
+  const ladder = config.plantDefenseEnabled ? MATURITY_INPUT : config.weatherEnabled ? 55 : 52;
+  const slotInputs = Array.from({ length: ladder }, (_, i) => i);
+  if (config.growthEnabled) slotInputs.push(MATURITY_INPUT);
+  for (const i of slotInputs) keys.push(geneKey(GeneClass.brainSkip, i));
   for (let h = 0; h < units; h++) {
-    for (let i = 0; i < inputCount; i++) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
+    for (const i of slotInputs) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
     keys.push(geneKey(GeneClass.brainHiddenBias, h), geneKey(GeneClass.brainOut, h));
   }
   keys.push(geneKey(GeneClass.brainOutBias, 0));
   return keys;
 }
-let slotCache: { split: boolean; weather: boolean; plantDefense: boolean; units: number; keys: number[] } | null = null;
+let slotCache: { split: boolean; weather: boolean; plantDefense: boolean; growth: boolean; units: number; keys: number[] } | null = null;
 function slotsFor(config: Readonly<SimulationConfig>): number[] {
   const split = splitDiets(config);
   const weather = config.weatherEnabled;
   const plantDefense = config.plantDefenseEnabled;
+  const growth = config.growthEnabled;
   const units = growableBrain(config) ? internalUnits(config) : BRAIN_HIDDEN;
-  if (slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.plantDefense !== plantDefense || slotCache?.units !== units) {
-    slotCache = { split, weather, plantDefense, units, keys: slotKeys(config, units) };
+  if (slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.plantDefense !== plantDefense || slotCache?.growth !== growth || slotCache?.units !== units) {
+    slotCache = { split, weather, plantDefense, growth, units, keys: slotKeys(config, units) };
   }
   return slotCache.keys;
 }

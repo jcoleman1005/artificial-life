@@ -42,7 +42,7 @@ Constants are today's values in `src/sim/config.ts`. A law is a scaling rule, no
 | Matter return | 0.5% of spent energy to soil; corpses and plants return a share on decay | Built |
 | Kill chance | Attacker's energy share × `(0.2 + 0.8 × carnivory)` | Built; to be replaced by the combat function |
 | Combat | One resolution function over a combatant record (force from mass and energy, damage into wound); no combat-specific genes | Decided (outline) |
-| Growth | Born small, grow to the genetic size by spending energy | Decided |
+| Growth | Born small, grow while fed (growth-duration gene, hatch maturity), maturity gates breeding, senescence and old-age death | Built (on `main`, `docs/specs/growth.md`) |
 | Sight | Walls and bodies block what lies behind them inside the sensing window | Decided (conditional on phone budget) |
 | Conservation | Energy in minus energy out equals the change in the energy the animals hold (organisms, fat, eggs, carrion), checked by a runtime ledger; plants are outside the system and food enters at the mouth | Built (2026-10-29, `src/sim/ledger.ts`) |
 
@@ -102,7 +102,7 @@ Reopened 2026-10-29 as places gene ideas will need. Each lists what the lever wo
 - *Unlocks:* pheromone trails, territory marking, alarm, recognition. This is roadmap item 15.
 - *Decide:* number of channels, decay and diffusion rates, deposit cost, sensing cost.
 
-**5.5 Senescence**
+**5.5 Senescence** (ageing and old-age death are built on `main`; the wound-ceiling link below waits for wound load)
 - *Lever:* wound ceiling and healing fall with age.
 - *Unlocks:* lifespan genes, parental investment trade-offs, generational turnover.
 - *Decide:* after growth is built.

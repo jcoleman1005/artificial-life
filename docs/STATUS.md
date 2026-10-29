@@ -28,6 +28,76 @@ _Last updated: 2026-10-29 (Physics build order agreed (ledger, optimisation pass
 
 A 60×60 seeded grid world with obstacles, regions of evolving plants, staggered lean/plenty seasons, windfalls, carrion, and organisms that carry an inherited tag, body traits (abilities, dispersal, carry capacity, memory span, diet) and two inherited controllers (the brain is the default; the dials are the readable reference). They eat, share, signal, remember, reproduce by cloning and, with the brain, mate (by mutual consent) and hunt. The simulation runs in a Web Worker or on the always-on server (`server/`); the phone UI has overlays, a world-events feed, trends, an inspector with an interactive Genome Lineage Map, saved worlds and branch points. Full inventory: `docs/history.md`.
 
+## Species, brain viewer, growth (built 2026-10-28)
+
+- **Species detection** (observer; `src/sim/species.ts`, `docs/specs/species.md`): genome-distance clusters, stable ids, events, Species colour mode, Stats list, Trends chart. `speciesThreshold` was 0.15 (13-53 short-lived ids in 2-3k ticks on seed 2); raised to 0.2 on 2026-10-29 (0.2 gave 8 species by tick 2000, 0.25 gave 4).
+- **Live brain viewer** (observer; `src/sim/brain-trace.ts`, `src/ui/brain-view.ts`): Brain section in the Inspector. Neither it nor the species UI has been checked on the S21 / a 390px screen.
+- **Growth and ageing** (`growthEnabled`, `ageingEnabled`, on; `src/sim/growth.ts`, `docs/specs/growth.md`) with the `growthDuration` gene (trait 55; renumbered from 52 when merging main, which uses 52-54 for toughness/toxicity/stealth). Brain input `maturity` is index 56 (57 inputs). Both switches off: fingerprint equals the pre-change one (`large dials d78a433f62a2b403 · large brain e753aec72830d61b`). Defaults on: `large dials 7cd20dc39ba2533a (pop 700, births 2423) · large brain 17a3d1f6dafd71ed (pop 692, births 2497)`. Quick look (2 seeds x 3000 ticks): fixed 100 = 1.20x, gene on = 1.06x of growth off; no extinctions. The 8-seed gate has NOT been run. The gene stayed at ~100 over 3000 ticks (null at that length). Ageing (4000/8000) is inert: lifespans are 65-250 ticks; rescale after a long-run age histogram.
+- **Hatch maturity** (`hatchMaturityGeneEnabled`, on; trait 56, renumbered from 53; `docs/specs/hatch-maturity.md`): fingerprint gene off equals the growth-merge default (`large dials 7cd20dc39ba2533a · large brain 17a3d1f6dafd71ed`); gene on (default): `large dials 1c9aba7e0db68a51 (pop 636, births 2580) · large brain d2b0c5bbf7328c63 (pop 575, births 2483)`. Quick look 2 seeds x 3000 ticks: avgPop 1.03x of gene off; mean evolved value 0.35 -> 0.38 (small). Not done: 500-organism tick-time measurement, 8-seed gate. Open: the new clone viability floor (the only newly blocked action).
+- **Merged with main (2026-10-29)**: with `--set growthEnabled=false --set ageingEnabled=false` the merged tree reproduces main's default fingerprint exactly (`large dials 73616296841f0df2 pop 792 births 3481 · large brain 16d97260cf1fd805 pop 666 births 3430`). Fingerprints recorded above for growth-on were measured before the merge and are stale; re-record. The mating path with the hatch-maturity gene now applies main's hybrid incompatibility too.
+- **Next**: 8-seed growth gate, long run for `growthDuration` drift (server), threshold decision for species, phone check.
+## Hybrid incompatibility (built 2026-10-28)
+
+- Per-child inviability rising with genome distance between mating parents (hue gene excluded); preference stays on the existing hue input `mateAlike`. Decisions in `docs/decisions.md`; `hybridTolerance` 0.15 and `hybridFull` 0.35 come from `npm run genome-distance` (Parameter log).
+- **Fingerprint & bit-identity** (re-measured after merging `origin/main`, 2026-10-28): switch off (`--set hybridIncompatibilityEnabled=false`) matches `origin/main` exactly (`large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: d221240d829ed5c1 pop 741 births 2786`), and so does cost 0 (`--set hybridMaxInviability=0`, checked before the merge). **New default**: `large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: 2e4adb9c3dd7f55d pop 725 births 3027` (dials never mate). `tests/dna.test.ts` 'switching DNA on mid-run' now switches the hybrid cost off to isolate Stage 1 neutrality.
+- Tests: `tests/speciation.test.ts` (distance, ramp, per-child loss with energy conserved, no extra draws for identical genomes, control arm, snapshot round trip, smoke).
+- **Not done**: the 8-seed experiment with the three arms (off, on, flat-rate control) and the ship-on gate (`npm run experiment -- --compare hybridIncompatibilityEnabled=false,true`), the Trends histogram, inspector distance, cluster colour mode (spec §8), species detection (spec §4 clusters). Default is on per the user's decision until the gate says otherwise.
+
+## Predator–Prey Arms Race & Chemical Defense (built 2026-10-28)
+
+Antagonistic arms race between predators, prey, and scavengers operating purely via thermodynamic and kinetic constraints without behavioral scripting (`src/sim/traits.ts`, `src/sim/world.ts`, `src/sim/sensors.ts`, `src/sim/lifehistory.ts`, `src/sim/dna.ts`, tests `tests/red_queen.test.ts`):
+- **Prey Armor / Toughness (Trait 52, `toughnessGeneEnabled`, on)**:
+  - Evolving physical armor carapace ($T \in [0, 1]$) blunting predator bite kill chance: $\text{chance} = \text{baseChance} \times (1 - \text{armorEffectiveness} \times T)$.
+  - Kinetic drag: armor mass increases movement energy cost ($\text{cost} \times (1 + \text{armorDragCoeff} \times T)$).
+  - Metabolic upkeep: continuous maintenance scaling with structural body size (`toughnessUpkeepRate * toughness * sizeFactor`).
+  - Contested agility: slows priority in cell movement contention ($\text{priority} = \text{metabolicRate} / \text{drag}$).
+  - Segmented chitinous outer carapace border rendered on world canvas and organism preview card.
+- **Prey Chemical Defense & Tissue Toxicity (Trait 53, `toxicityGeneEnabled`, on)**:
+  - Evolving defensive toxins ($X \in [0, 1]$) with continuous synthesis upkeep (`toxicityUpkeepRate * toxicity * sizeFactor`).
+  - Acute malaise retaliation: predators biting toxic prey suffer unneutralized tissue damage if $T_{\text{eff}} = \max(0, X - \text{attacker.detox}) > 0.3$.
+  - Trophic feedback: blunts predator `lastBiteYield`, giving brain neural feedback on toxic prey.
+  - Toxic carrion and eggs: dead toxic organisms leave carrion retaining tissue toxicity; toxic parents lay toxic eggs. Scavengers and egg-eaters eating them suffer acute malaise and yield discounts unless detox neutralizes it.
+  - Aposematic warning venom rim and toxic carrion/egg auras rendered in UI.
+- **Involuntary Metabolic Death Pulse**:
+  - Violent kills broadcast an expanding acoustic/chemical shockwave pulse.
+  - Reach scales with victim body size and basal metabolic rate: $\text{reach} = \text{signalRadius} \times \max(0.4, \text{size} \times \text{power})$.
+  - Drifts downwind with atmospheric weather and is sensed as a directional signal by surrounding organisms.
+  - Uncoupled `moveCarrion` directional sensing from diet so herbivores and omnivores can navigate around carrion clusters and predator activity zones.
+
+## Stealth & Death Pulse Dampening (built 2026-10-28)
+
+Evolving stealth trait that modulates ambush surprise and death pulse shockwaves through thermodynamic and physical constraints (`src/sim/traits.ts`, `src/sim/world.ts`, `src/sim/lifehistory.ts`, `src/sim/dna.ts`, `src/render/renderer.ts`, `src/ui/organism-card.ts`, tests `tests/red_queen.test.ts`):
+- **Stealth Trait (Trait 54, `stealthGeneEnabled`, on)**:
+  - Inherited slider ($S \in [0, 1]$), founders 0.1, step 0.05.
+  - Continuous metabolic mass upkeep: $\text{upkeep} = \text{stealthUpkeepRate} \times S \times \text{sizeFactor}$.
+  - Ambush lethality bonus: boosts attack kill chance via $(1 + \text{stealthAmbushBonus} \times S)$, blunted by prey toughness armor.
+  - Death pulse dampening and silencing: emitted shockwave power scales with $(1 - \text{attacker.stealth}) \times (1 - \text{prey.stealth})$.
+  - Death pulse negation: if power $\le 0.05$ (e.g. at full stealth $\ge 0.95$), the death pulse is completely eliminated and silenced, emitting zero directional shockwaves or sensory traces.
+  - UI: Stippled camouflage rim around stealthy organisms on the world canvas and preview card, plus `🥷 Stealth` badge on the adaptation card.
+- **Bit-Identity & Fingerprint**:
+  - Switch off (`--set stealthGeneEnabled=false`) matches previous baseline bit-identically: `large dials: 724f1e4bcf5e0501 pop 762 births 3174 · large brain: 2e4adb9c3dd7f55d pop 725 births 3027`.
+  - **New default**: `large dials: 73616296841f0df2 pop 792 births 3481 · large brain: 16d97260cf1fd805 pop 666 births 3430`.
+
+## Versioning System & Ecological Seasons & Weather (built 2026-10-28)
+
+Instituted formal Semantic Versioning and replaced binary plenty/lean announcements with natural seasons and atmospheric weather (`src/version.ts`, `src/sim/seasons.ts`, `src/ui/peek-view.ts`, `src/ui/events-view.ts`, `src/ui/controls.ts`, `src/style.css`, tests `tests/version_and_seasons.test.ts`):
+- **Semantic Versioning System (v0.2.0 "Biosphere")**:
+  - Defined in `src/version.ts` and pinned in `package.json`.
+  - Prominently displayed in the Settings panel header (`<span class="settings-version-tag">v0.2.0</span>`) and modal footer, the bottom Stats panel column, and the HTML document title.
+- **Four Ecological Seasons & Atmospheric Weather Patterns**:
+  - Replaces binary "Plenty" / "Lean" announcements with four natural seasons: 🌱 Spring (renewal & regrowth), ☀️ Summer (peak fertility & warmth), 🍂 Autumn (seed maturation & cooling transition), and ❄️ Winter (lean period, frost, dormancy).
+  - Dynamic weather patterns derived from atmospheric simulation: 🌧️ Rainstorm, ❄️ Cold snap, ☀️ Heatwave, 💨 Gale, 🍃 Breezy, and 🌤️ Fair.
+  - Peek pill displays living conditions across all four map quadrants using compact icons: `NW: [icon] NE: [icon] SE: [icon] SW: [icon]` (🌱 sprout for Spring, ☀️ sun for Summer, 🍂 orange leaf for Autumn/Fall, ❄️ snowflake for Winter; e.g. `NW: 🌱 NE: ☀️ SE: 🍂 SW: ❄️`), coupled with active atmospheric weather alerts (` · 🌧️ Rainstorm`). Hover tooltip provides full text details (`NW: Spring (🌱)  NE: Summer (☀️) ...`).
+  - Event feed reports ecological milestones (`❄️ Winter begins in the north-west`, `🌱 Spring arrives`) and atmospheric arrivals (`🌧️ Rainstorm rolls in`, `❄️ Cold snap sweeps in`, `☀️ Heatwave builds`).
+- **2.5D Leap Hop & Parabola Guide Clean-Up**:
+  - Removed the static trajectory parabola curve and ground dashed line across grid cells.
+  - Retained the complete 2.5D airborne jump physics ($Z(u) = 4 H_{\max} u (1-u)$): the organism body lifts upwards in screen $-Y$, an altitude-softened ground drop shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, and selection indicators elevate with the jumping unit.
+- **Seasonal Weather Hues & Cloud Parallax for Storm Regions**:
+  - Weather front rendering harmonized with ecological seasons: Rainstorms rendered in deep atmospheric storm slate/indigo (`rgba(99, 102, 241, ...)` / `rgba(71, 85, 105, ...)`) replacing conflicting green hues; Cold snaps rendered in crisp glacial frost cyan (`rgba(56, 189, 248, ...)`); Heatwaves rendered in radiant golden amber (`rgba(251, 191, 36, ...)`).
+  - Fertile food regions glow in their respective quarter season colors (Spring: fresh mint emerald, Summer: radiant golden sunlight, Autumn: rich bronze amber, Winter: crisp frost blue).
+  - World canvas background radial gradient harmonized with seasonal ambient lighting.
+  - Dual-layer atmospheric storm cloud rendering: Ground overcast shadows darken terrain cells directly under the storm; high-altitude procedural cumulus billow puffs float above organisms with 3D camera line-of-sight parallax displacement, animated wind drift, and falling rain streaks at LOD >= 0.15.
+
 ## Responsive Landscape Desktop Layout (built 2026-10-28)
 
 Stacked landscape desktop presentation with collapsable dashboard on computer screens (`src/style.css`, `src/main.ts`, `src/ui/sheet.ts`):
@@ -42,7 +112,7 @@ Stacked landscape desktop presentation with collapsable dashboard on computer sc
   - *Expanded Trends & Inspector*: Trends charts and Genome Lineage Map automatically utilize the wide horizontal landscape width.
 - **Mobile Landscape Phone Preservation**: Viewports with `max-height: 500px` (e.g. Samsung Galaxy S21 in landscape) retain the side-panel layout, ensuring mobile touch ergonomics and vertical visibility remain intact.
 
-## Organism Adaptation Card & 2.5D Ballistic Leap Overhaul (built 2026-10-28)
+## Organism Adaptation Card & 2.5D Leap Overhaul (built 2026-10-28)
 
 Enhanced organism floating card and 2.5D leap physics rendering (`src/ui/organism-card.ts`, `src/style.css`, `src/render/renderer.ts`, tests `tests/organism-card.test.ts`):
 - **Evolutionary Trait Badges**: Replaced static dots (`diet`, `burn`, `breeding`) with category color-coded micro-pills with icons and quantitative values:
@@ -52,17 +122,17 @@ Enhanced organism floating card and 2.5D leap physics rendering (`src/ui/organis
   - *Dynamic Standout Traits*: Prioritized badges sorted by divergence from baseline: `🦘 Leaper`, `〰️ Squeezer`, `↗️ Diagonal`, `🛡️ Detox [X]%`, `👁️ Vision [R]`, `🦣 Heavy / 🐁 Dwarf`, `🔋 Fat Cap`, `🦴 Scavenge`, `🍃 Gut`, and `🧠 +[N] Neural`.
   - *Status Line*: Displays lineage depth, age, and activity (`Gen 14 · Age 320 · Grazing · carrying 2`).
   - *Egg Badges*: Direct inspection shows `[🥚 Egg]`, `[🛡️ Shell X.XX]`, `[📏 Size X.X×]`, and `[⚡ Energy X]`.
-- **2.5D Ballistic Leap Trajectory & Drop Shadow**:
-  - *Airborne Lift*: Organism body elevates vertically (screen $-Y$) along a true parabolic arc $Z(u) = 4 H_{\max} u (1-u)$ over the intervening cell.
+- **2.5D Leap Hop & Drop Shadow**:
+  - *Airborne Lift*: Organism body elevates vertically (screen $-Y$) along a true 2.5D hop arc $Z(u) = 4 H_{\max} u (1-u)$ over the intervening cell.
   - *Terrain Drop Shadow*: An elliptical ground shadow tracks on the terrain floor at $(gx, gy)$ directly beneath the airborne unit, scaling and softening with altitude.
-  - *Stationary Trajectory Guide*: Ground track and trajectory arc are anchored to fixed origin and target grid cells with a landing arrowhead, eliminating drifting, wobbling, and sideways bowing distortion.
+  - *Clean Action Glyphs*: Trajectory guide parabola line removed per user request, drawing standard action indicators on the airborne organism body while preserving the 2.5D jump physics.
 - **Zero Simulation Physics Drift**: Visual and UI presentation layer only; deterministic invariants preserved.
 
 ## World Canvas Visual Enhancements (built 2026-10-28)
 
 High-fidelity canvas visual enhancements and secondary dashboard expansions (`src/render/renderer.ts`, `src/ui/inspector.ts`, `src/ui/metrics-view.ts`):
 - **Plant Chemical Defense Spines**: Radiates defensive thorn needles from leaf axils at LOD 1+ (`cellSize >= 5.5`) scaling with `plant.genome.defense`.
-- **Parabolic Leaping Arc & Drop Shadow**: Leaping over an adjacent organism draws a 2-cell ballistic quadratic trajectory curve with an intermediate cell ground shadow ellipse, visually lifting the leaper above intermediate terrain.
+- **2.5D Leaping Hop & Drop Shadow**: Leaping over an adjacent organism lifts the leaper vertically along a 2.5D arc above intermediate terrain with an altitude-softened ground drop shadow ellipse tracking underneath on the terrain floor.
 - **Downwind Signal Lobes**: Skews expanding signal diamond ripples along local atmospheric wind vectors ($(w_x, w_y)$), visually showing `weatherSignalDrift`.
 - **Carrion Decomposition Stages**: 3 distinct visual degradation states (fresh crimson carcass with pink fleshy core, rotting brown-red puddle with exposed bone, and weathered bleached bone fragments).
 - **Acute Toxin Malaise Spasm Glyph**: Grazing toxic plants without adequate detox ($T_{\text{eff}} > 0.3$) triggers a vibrating amber-magenta jagged distress ring surrounding the organism.
@@ -171,7 +241,7 @@ Not targets to hardcode: conditions to build so they *can* happen, then watch.
   3. Who mates with whom: an evolved preference for partners of similar colour, and/or weaker or infertile offspring from parents too far apart genetically. Mixed offspring that are bad at both foods would make choosy mating pay.
   4. Recognising species: group organisms by who can still interbreed (instead of fixed hue buckets), name them, colour by species, and log "a new species split off" events; later a family tree.
 
-  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection.
+  Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection. Hybrid cost built 2026-10-28 (`docs/specs/speciation.md`, `src/sim/speciation.ts`, `hybridIncompatibilityEnabled`, on; see 'Hybrid incompatibility' below). Species detection and the UI are still to do.
 
 ## Physics build order (agreed 2026-10-29; supersedes nothing in the Roadmap below, it orders the physics decisions)
 
@@ -195,7 +265,7 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 | 5 | Persistent signal layer (scent and trails): cells hold decaying, wind-drifting values that bodies deposit and sense | The second base lever bodies can write to; needed before pheromone-style behaviour can exist at all; roadmap item 15 | the cost has to be settled first (see the decision to approve) | Decided 2026-10-29 (`docs/specs/scent-layer.md`, recommended choices approved); not built; inert until rank 6 |
 | 6 | One append-only brain upgrade: the terrain inputs (target-cell move cost, cover underfoot) together with the signal layer's sensing inputs | Brain inputs are the expensive kind of addition, so they are added once, together; until then organisms feel terrain and signals only through energy | one upgrade (more weights per organism per tick) | Decided 2026-10-29 (changes the earlier plan to batch the terrain inputs with wound load) |
 | 7 | Footprint space rule: derived radius, overlap crowding, size-gated squeeze and leap | Reuses the sensing pass; gives growth a visible and mechanical effect | small; measure | Decided |
-| 8 | Growth: born small, grow to the genetic size by spending energy | One extra state value; makes size a trajectory; needed before footprint and wound ceilings mean much | small | Decided |
+| 8 | ~~Growth~~ | Already built on `main` (growth, ageing and senescence, growth-duration gene, hatch maturity; `docs/specs/growth.md`) | n/a | **Done on main**; footprint and wound ceilings can use it |
 | 9 | Wound load (one scalar, upkeep, impairment, energy-paid healing, size-scaled ceiling) | Foundation for combat; its one brain input now goes in a later upgrade of its own | small, one input | Decided |
 | 10 | Combat as one resolution function over a combatant record (force from mass and energy; damage into wound load); no combat-specific genes | Needs wounds and size physics first | small | Outline only; needs a short spec before building |
 | 11 | Line of sight inside the sensing window | The most expensive item on the phone; server first, phone off by default unless within the ~15% budget | high | Decided, conditional on the budget |
@@ -241,7 +311,7 @@ There is no target outcome: new features go in on by default and the world is le
     3. Stage 2: plant `defense`, organism `detox` (inherited, with upkeep), a last-bite-yield sense, then the coevolution probe (one tick's plants in another tick's world).
     4. Stage 3: plant `hue` and an organism `plantHue` sense (a possible route to colour groups splitting).
     Also still open: plant events in the feed; seed bank and seeds carried by organisms.
-11. Growth and size, then bite. (Growth decided 2026-10-29; bite scaling left as is. See "Physics build order" above.)
+11. Growth and size, then bite. (Growth is built on main; bite scaling left as is. See "Physics build order" above.)
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
 **Phase 4: slow burners on the always-on server**
