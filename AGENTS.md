@@ -35,11 +35,11 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Tempo (2026-10-28, decided, not built): sub-step clock from metabolic rate and size, capped at 2 actions per tick, `tempoEnabled` switch; combat deferred until tempo and health are settled.
 - Wound load (2026-10-28, decided, not built): injury is one scalar per body (upkeep, impairment, energy-paid healing, size-scaled lethal ceiling); no hit-point pool.
 - Footprint space rule (2026-10-28, decided, not built): one body per cell; derived footprint radius draws large bodies overlapping and drives crowding pressure; squeeze and leap are size-gated.
-- Energy ledger (2026-10-28, decided, not built): observer that checks energy in minus out equals the change in stored energy every tick; every new gene must balance.
+- Energy ledger (2026-10-29, built; `src/sim/ledger.ts`): observer that checks energy in minus out equals the change in the animals' stored energy; a drift fails a test; every new gene must balance.
 - Thermal physics (2026-10-28, decided, not built): cold and heat both cost, scaled by surface-area-to-volume, fat and metabolic rate; no thermal gene; `thermalPhysicsEnabled` switch.
 - Line of sight (2026-10-28, decided, conditional on a perf budget, not built): walls and bodies block sight inside the sensing window; `lineOfSightEnabled` switch; weather coupling is held.
 - Growth (2026-10-29, decided, not built): born small, grow toward the genetic size by spending energy; `growthEnabled` switch; senescence deferred.
-- Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger, optimisation, baseline runs first, re-rank after; food physics left as is, weather coupling held, terrain undecided.
+- Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger (built), optimisation, baseline runs first, re-rank after; terrain fields decided (rank 4b); weather coupling, food physics and the signal layer are open hook points.
 - Physics contract (2026-10-29; `docs/specs/physics.md`): quantities, laws and a gene-fit test every new gene must pass; weather coupling, food physics, terrain, signal layer and senescence are open hook points.
 - Terrain fields (2026-10-29, decided, not built): continuous per-cell roughness and cover from seeded noise independent of food regions; `terrainEnabled` switch; two brain inputs batched with wound load; wetness, dynamic terrain later.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.

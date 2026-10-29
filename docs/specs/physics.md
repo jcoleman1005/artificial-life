@@ -42,7 +42,7 @@ Constants are today's values in `src/sim/config.ts`. A law is a scaling rule, no
 | Combat | One resolution function over a combatant record (force from mass and energy, damage into wound); no combat-specific genes | Decided (outline) |
 | Growth | Born small, grow to the genetic size by spending energy | Decided |
 | Sight | Walls and bodies block what lies behind them inside the sensing window | Decided (conditional on phone budget) |
-| Conservation | Energy in minus energy out equals the change in stored energy, checked every tick by a runtime ledger | Decided |
+| Conservation | Energy in minus energy out equals the change in the energy the animals hold (organisms, fat, eggs, carrion), checked by a runtime ledger; plants are outside the system and food enters at the mouth | Built (2026-10-29, `src/sim/ledger.ts`) |
 
 ## 3. The gene-fit test
 
@@ -51,7 +51,7 @@ Before adding a gene, answer four questions. If any answer is "it needs a rule o
 1. **Which quantity does it change?** (energy, size, wound, time, space, heat, matter, information)
 2. **What does it buy?** Expressed through an existing law: a different input to upkeep, move cost, yield, wound, cap or sensing.
 3. **What does it cost?** A cost through a law, never free: upkeep, size, drag, or a trade against another gene. If a gene is better in every case, the cost is wrong.
-4. **Where does it enter the ledger?** Every unit of energy it moves must be accounted for.
+4. **Where does it enter the ledger?** Every unit of energy it moves across the system boundary must be added to the matching flow in `src/sim/ledger.ts`; a gene that leaves the residual non-zero fails `tests/ledger.test.ts`.
 
 Worked examples (illustrations of the test, not plans):
 

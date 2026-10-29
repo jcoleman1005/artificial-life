@@ -186,7 +186,7 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 | Rank | Item | Why here | Phone cost | Status |
 |---|---|---|---|---|
 | 0 | Energy cap uses `maxEnergyOf` everywhere; corpse energy scales with size | Bug fix and the agreed size rule | none | Built 2026-10-28 |
-| 1 | Energy ledger (observer; in minus out equals change in stored) | Protects every later change; the cap bug would have shown at once | small; sampled every N ticks on the phone | Decided |
+| 1 | Energy ledger (observer; in minus out equals change in stored) | Protects every later change; the cap bug would have shown at once | none measured (within noise) | Built 2026-10-29; fingerprint unchanged; stats-panel readout still to do |
 | 2 | Single-thread engine optimisation pass (garbage collection, brain scoring), proven by an unchanged fingerprint | Worst-case ticks on the phone are near the 1× budget, and 2× has none; this buys headroom for everything below | negative (a saving) | Prompt written for agy; not yet run |
 | 3 | Long baseline runs on the server (100k+ ticks) with the existing genes; re-run the Termux benchmark on the optimised branch | Shows which genes drift and where selection is weak, so ranks 5–10 are chosen by evidence, not taste | none | To do (needs the server installed; roadmap item 13) |
 | 4 | Thermal physics: cold and heat cost, scaled by surface-area-to-volume, fat and metabolic rate | Replaces an existing per-organism rule, so the cost is about zero; gives size a downside and regions different niches (species goal) | ~0 | Decided |
