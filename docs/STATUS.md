@@ -21,6 +21,7 @@ _Last updated: 2026-10-28 (Stealth & death pulse dampening trait; Seasonal weath
 | Prove an engine change alters no outcome | `npm run fingerprint` before and after; output must match |
 | Always-on server (one shared world, saved to `./data`; see `docs/server.md`) | `npm run server` |
 | Engine speed | `npm run perf` |
+| Re-baseline the default world (Fedora; 8 seeds x 10k ticks; writes `docs/experiments/baseline-<date>.txt`) | `bash scripts/baseline.sh` |
 | Check a Proxmox host's capacity (read-only) | `git show origin/main:scripts/proxmox-scout.sh \| ssh root@HOST 'bash -s'` |
 
 `--from` starts every run from a saved world (a file saved from the app), reseeded per seed, so variants are compared from the same evolved state. `--compare` and `--set` take any `SimulationConfig` key (see `src/sim/config.ts`), e.g. `controller=dials,brain`, `sharingEnabled=false,true`, `seasonLength=0,800`.
@@ -244,43 +245,32 @@ Not targets to hardcode: conditions to build so they *can* happen, then watch.
 
   Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection. Hybrid cost built 2026-10-28 (`docs/specs/speciation.md`, `src/sim/speciation.ts`, `hybridIncompatibilityEnabled`, on; see 'Hybrid incompatibility' below). Species detection and the UI are still to do.
 
-## Roadmap (agreed 2026-10-25; build in this order)
+## Roadmap (rewritten 2026-10-29 after the audit; build in this order)
 
-There is no target outcome: new features go in on by default and the world is left to see what happens over time. Measuring a feature against a control is optional. Give each feature a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
+There is no target outcome: new features go in on by default and the world is left to see what happens. The audit found we had built about 12 world features since 2026-10-26 without running their gates, and the 2026-10-26 survival baseline (5 of 8 default worlds extinct by 10k ticks) predates all of them. So **nothing new is built until Tier A is done.** Long runs happen on the user's Fedora machine (this cloud container needs ~5 min for one 1,500-tick fingerprint); results are committed as `docs/experiments/*.txt` with the exact command and commit.
 
-**Phase 0: finish what's in flight, then foundations**
-1. Check the new UI on the S21 itself (touch drag of the sheet, safe areas, frame rate and ticks/s at 10× with ~400 orbs, now with the simulation in a Web Worker). Benchmark the engine there in Termux (`npm run perf`).
-2. ~~Mobility check.~~ Done 2026-10-25: squeezing solves crowding on the merged world; diagonals and leaping cost slightly (see findings). Leaping stays on (all features are on by default).
-3. ~~Event log and overlay layers.~~ Done 2026-10-25 (world events only; overlays one at a time).
-4. ~~Snapshots and resume, then fork.~~ Done 2026-10-25: auto-save and resume, branch points, files, and `npm run experiment -- --from saved.json` (every variant run from the same evolved state). Split-screen skipped for now.
+**Decisions of 2026-10-29:** Tier A approved. DNA Stage 1b (continuous abilities, split diets) and Stage 2 (variation operators) signed off and **on by default** (`dnaContinuousAbilities`, `dnaSplitDiets`, `dnaVariationEnabled`); Stage 2's two unrun arms and the other on/off gates go into A2, and any switch that fails its gate goes back to off. DNA Stage 3 (growable brain) stays off (pooled null) until the brain viewer re-evaluation (C5). `speciesThreshold` is 0.2.
 
-**Phase 1: cheap, high payoff**
-5. ~~Dispersal gene.~~ Built and measured 2026-10-25 (see findings): a small benefit. On by default.
-6. ~~Windfalls.~~ Built and measured 2026-10-25 (see findings): organisms find ~70% of windfall food without signals, so signals still have nothing to say. On by default. Possible follow-up: make windfalls harder to find (shorter-lived, landing outside fertile regions) and run 50,000 ticks.
+**Tier A: stabilise and measure**
+- A1. **Re-baseline the default world** at current head: 8 seeds x 10,000 ticks, brain, immigration off (`bash scripts/baseline.sh` on Fedora; see "Running it"). Reports survival (extinct count, time of extinction), avgPop, leanLow, births, species counts. This sets the extinction rate every later run depends on. *Status: script written; run pending on Fedora.*
+- A2. **Ship-on gates for every ungated switch**, one batch of `--compare <switch>=false,true` on 8 seeds x 10k: `nutrientCycleEnabled`, `weatherEnabled`, `plantDefenseEnabled`+`detoxGeneEnabled`, `predationDefenseEnabled` (toughness, toxicity), `stealthGeneEnabled`, `hybridIncompatibilityEnabled` (+ flat-rate control arm), `growthEnabled`, `growthGeneEnabled`, `hatchMaturityGeneEnabled`, `ageingEnabled` (inert so far), and the DNA toggles above (Stage 2: point-only vs full operators; with vs without `dnaUpkeepPerGene`). Gate = the one `npm run experiment` prints. Failures ship off; results go in `docs/findings.md`. *Not started; needs A1 first.*
+- A3. **Phone and performance**: S21 check (brain viewer, species view, landscape layout, touch targets) and `npm run perf` at ~500 organisms on current head (budget never re-measured since species, growth, many genes and the brain trace were added).
+- A4. **Housekeeping**: this roadmap (done); re-record the default and switch-off fingerprints after A2 settles the defaults; move per-feature sections out of this file into `docs/history.md` (it should be short again); keep `AGENTS.md` index in step.
 
-**Phase 2: first new loops**
-7. ~~Memory registers.~~ Built; on by default. Optional: First check in a long run whether the hidden layer stays idle.
-8. ~~Carrion and a simple bite~~ (built 2026-10-25, with a diet gene in place of `carrionEff`). Still to do from this item: a second plant food type (step 1 of the species goal), and generalising abilities.
-9. Evolving pathogen (density-dependent mortality, visible waves).
+**Tier B: make the species goal testable** (after A1 shows worlds survive)
+- B1. Long server runs on Fedora (100k+ ticks), current defaults, then branches from a saved world.
+- B2. Isolation conditions: regional mutation/physics zones and dynamic geography (rivers, islands, land bridges), plus plant `hue` and an organism `plantHue` sense (old item 10.4) for two food types.
+- B3. Species instrumentation: live phylogeny tree and a mating-based isolation measure compared against chance, so neutral drift is not labelled speciation.
 
-**Phase 3: big coevolution (long runs; needs the server)**
-10. Evolving plants (carrion becomes another food type). **Phase 1 built 2026-10-25, ahead of order at the user's request** (no defence, no ageing). **Plan agreed 2026-10-26** (from the user's second plants spec; reshape the existing plants rather than rewrite them, keep whole food units, keep plants on by default):
-    1. ~~`stateHash` and a small gene registry.~~ Done 2026-10-26 (`src/sim/genes.ts` for plant traits, separate from the organism DNA in `src/sim/dna.ts`; fingerprint unchanged).
-    2. Stage 1 additions: shared gene budget, grazing that can kill with a `regrowth` gene, maximum age, locked-genes mode, per-region gene means and a plant diversity index; recalibrate against classic food.
-    3. Stage 2: plant `defense`, organism `detox` (inherited, with upkeep), a last-bite-yield sense, then the coevolution probe (one tick's plants in another tick's world).
-    4. Stage 3: plant `hue` and an organism `plantHue` sense (a possible route to colour groups splitting).
-    Also still open: plant events in the feed; seed bank and seeds carried by organisms.
-11. Growth and size, then bite.
-12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
+**Tier C: new mechanics, only after A (and B1 if worlds are fragile)**
+- C1. Pheromone fields (advected by the existing wind), then individual recognition.
+- C2. Lifetime plasticity (reward-driven weight updates; do not claim learning before it exists).
+- C3. Evolving pathogen: held back because it adds mortality; decide after A1.
+- C4. Replay scrubber, ethogram, "while you were away" digest.
+- C5. Brain re-evaluation with the viewer (Stage 3, recurrent state, connection cost).
+- Diploid genomes with dominance and costly signals / sexual selection are candidates once B2 exists.
 
-**Phase 4: slow burners on the always-on server**
-13. ~~The always-on Node.js server.~~ Built 2026-10-25 (moved ahead of Phases 2–3). Next: install it on the S21 (`docs/server.md`), then long brain runs (100k+ ticks).
-14. ~~Sexual reproduction and mate preference~~ (mating built 2026-10-26, ahead of order; partner preference is an evolvable brain input). Still to do: name colour groups in a way that scales to species.
-15. Pheromone trails, then individual recognition, then lifetime plasticity.
-
-**Phase 5: polish for the phone**
-16. "While you were away" digest (in the app; no push notifications).
-17. Ethogram, live phylogeny tree, replay scrubber.
+**Parked**: tending, autotroph lineage (conflicts with "energy only from eating"), more visual/UI work, community sharing. The old items 1-17 are superseded: done ones are recorded under "What exists" and in `docs/history.md`; the open ones are carried above (old 1 = A3, 9 = C3, 10.4 = B2, 15 = C1/C2, 17 = B3/C4, 13 "100k+ runs" = B1).
 
 ## Known issues
 

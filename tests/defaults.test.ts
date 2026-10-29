@@ -67,11 +67,11 @@ describe('Default world', () => {
       sexEnabled: true,
       immigrationEnabled: false,
       plantsEnabled: true,
-      // DNA Stage 1 is on; the Stage 1b toggles and Stage 2 stay off until their gates are signed off.
+      // DNA Stage 1, the Stage 1b toggles and Stage 2 are on (the user signed them off on 2026-10-29; docs/decisions.md).
       dnaEnabled: true,
-      dnaContinuousAbilities: false,
-      dnaSplitDiets: false,
-      dnaVariationEnabled: false,
+      dnaContinuousAbilities: true,
+      dnaSplitDiets: true,
+      dnaVariationEnabled: true,
       // DNA Stage 3 (growable brain) stays off until its gate is signed off; its size cap and
       // connection upkeep are pinned (docs/findings.md, Parameter log).
       dnaGrowableBrain: false,
