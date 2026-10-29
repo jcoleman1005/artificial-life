@@ -84,6 +84,10 @@ Values chosen or changed with a behaviour in mind (AGENTS.md, Engineering rules;
 | 2026-10-29 | `thermalPhysicsEnabled` | on (off = the old cold-only rule) | Design decision (thermal physics, `docs/specs/physics.md`): both extremes cost, scaled by body. Off reproduces the previous fingerprint exactly. | No (design decision). |
 | 2026-10-29 | `thermalHeatCoeff`, `thermalHeatThreshold` | 0.4, 0.1 | The heat surcharge is the same size as the cold one (`weatherChillCoeff` 0.4), and the threshold is the plenty-season baseline temperature, so only heat waves cost and the everyday economy is unchanged. Chosen a priori for symmetry and continuity, not to make a behaviour appear. | No (chosen a priori). |
 | 2026-10-29 | `thermalFatInsulation` | 0.5 | Full fat halves the cold surcharge and raises the heat surcharge by half. A round value chosen before any run; the exponents (size^∓1/3, metabolic rate to the first power) are fixed physics, not tuned. | No (chosen a priori). |
+| 2026-10-29 | `terrainEnabled` | on (off = no terrain) | Design decision (terrain fields, `docs/specs/physics.md`). Off reproduces the previous fingerprint exactly. | No (design decision). |
+| 2026-10-29 | `terrainScale`, `terrainThreshold` | 8, 0.5 | Noise lattice step of 8 cells gives patches about as wide as a food region; a 0.5 threshold leaves about half the ground open. Chosen a priori from how the map looks, not to make a behaviour appear. | No (chosen a priori). |
+| 2026-10-29 | `terrainRoughnessCoeff` | 1.0 | The roughest ground doubles a size-1 body's move cost (× √size for bigger ones). A round starting value, chosen before any run. | No (chosen a priori). |
+| 2026-10-29 | `terrainCoverShelter` | 0.6 | Full cover removes 60% of temperature swing and rain and wind exposure: strong enough to matter, never complete. A round starting value, chosen before any run. | No (chosen a priori). |
 
 ## Engine
 

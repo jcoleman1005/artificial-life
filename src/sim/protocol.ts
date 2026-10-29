@@ -11,6 +11,7 @@ import type { HistorySample } from './history';
 import type { WorldEvent } from './events';
 import type { HeatmapKind } from './activity';
 import type { AncestorNode } from './lineage';
+import type { TerrainField, TerrainState } from './terrain';
 export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
   Abilities,
@@ -92,6 +93,8 @@ export interface WorldView {
   readonly eggs: ReadonlyMap<string, EggView>;
   readonly foodRegions: readonly FoodRegion[];
   readonly obstacles: ReadonlySet<string>;
+  /** Roughness and cover per cell (null or absent with terrain off). */
+  readonly terrain?: TerrainField | null;
   readonly weather?: {
     readonly fronts: readonly WeatherFront[];
     getWind(x: number, y: number): { wx: number; wy: number };
@@ -189,6 +192,8 @@ export function isSavedWorld(value: unknown): value is SavedWorld {
 export interface WorldStatic {
   readonly config: SimulationConfig;
   readonly obstacles: readonly string[];
+  /** Terrain fields (absent with terrain off). */
+  readonly terrain?: TerrainState;
   readonly foodRegions: readonly FoodRegion[];
   /** Recent world events, oldest first (the feed starts from these). */
   readonly events: readonly WorldEvent[];

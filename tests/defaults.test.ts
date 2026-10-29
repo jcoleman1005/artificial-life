@@ -24,6 +24,11 @@ describe('Default world', () => {
       predationEnabled: DEFAULT_CONFIG.predationEnabled,
       sexEnabled: DEFAULT_CONFIG.sexEnabled,
       immigrationEnabled: DEFAULT_CONFIG.immigrationEnabled,
+      terrainEnabled: DEFAULT_CONFIG.terrainEnabled,
+      terrainScale: DEFAULT_CONFIG.terrainScale,
+      terrainThreshold: DEFAULT_CONFIG.terrainThreshold,
+      terrainRoughnessCoeff: DEFAULT_CONFIG.terrainRoughnessCoeff,
+      terrainCoverShelter: DEFAULT_CONFIG.terrainCoverShelter,
       ledgerEnabled: DEFAULT_CONFIG.ledgerEnabled,
       thermalPhysicsEnabled: DEFAULT_CONFIG.thermalPhysicsEnabled,
       thermalHeatCoeff: DEFAULT_CONFIG.thermalHeatCoeff,
@@ -65,6 +70,12 @@ describe('Default world', () => {
       sexEnabled: true,
       immigrationEnabled: false,
       // The energy ledger is an observer: on, and a check every 25 ticks.
+      // Terrain fields: on; patches about 8 cells across, half the ground open, rough ground at most doubles a move, full cover removes 60% of weather exposure.
+      terrainEnabled: true,
+      terrainScale: 8,
+      terrainThreshold: 0.5,
+      terrainRoughnessCoeff: 1.0,
+      terrainCoverShelter: 0.6,
       ledgerEnabled: true,
       // Thermal physics: both extremes cost; the heat threshold sits at the plenty baseline so everyday costs are unchanged.
       thermalPhysicsEnabled: true,

@@ -89,6 +89,7 @@ function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
     foodRegionCount: 0,
     controller: 'dials', // these tests exercise the dial policy
     weatherEnabled: false,
+    terrainEnabled: false, // exact move costs: rough ground would add to them (terrain has its own tests)
     ...overrides,
   });
 }

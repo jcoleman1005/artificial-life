@@ -264,6 +264,7 @@ export class SimulationHost {
       kind: 'static',
       config: { ...world.config },
       obstacles: Array.from(world.obstacles),
+      ...(world.getTerrain() ? { terrain: world.getTerrain()!.exportState() } : {}),
       foodRegions: world.foodRegions.map((r) => ({ ...r })),
       events: [...this.events.recentEvents()],
     };

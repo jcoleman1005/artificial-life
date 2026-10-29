@@ -2,6 +2,7 @@ import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/ty
 import { plantHue } from '../sim/plants';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
+import type { TerrainField } from '../sim/terrain';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
@@ -124,6 +125,9 @@ export class CanvasRenderer {
   /** Cell size at zoom 1 (the whole world fits the visible area). */
   private baseCell = 6;
   private cellSize = 6;
+  /** The terrain tint, painted once per field as one pixel per cell and scaled up when drawn. */
+  private terrainLayer: HTMLCanvasElement | null = null;
+  private terrainLayerFor: TerrainField | null = null;
   private colorMode: ColorMode = 'tag';
   // Smooth movement: where each organism was before the latest tick, and how
   // far (0..1) the current frame is through that tick.
@@ -560,6 +564,8 @@ export class CanvasRenderer {
     // in as cells grow (about 2× zoom on a phone).
     const detail = Math.max(0, Math.min(1, (cellSize - 8) / 4));
 
+    this.drawTerrain(ctx, cellSize);
+
     // Fertile regions: soft glows, amber while that region is lean
     for (const region of this.world.foodRegions) {
       const regionLean = regionSeasonAt(this.world.tick, region, config)?.season === 'lean';
@@ -975,6 +981,40 @@ export class CanvasRenderer {
       ctx.arc(cx, cy, Math.max(5, cellSize * 0.5 * sizeScale), 0, TAU);
       ctx.stroke();
     }
+  }
+
+  /** Rough ground as warm brown and sheltered ground as green, smoothed by scaling a one-pixel-per-cell image. */
+  private drawTerrain(ctx: CanvasRenderingContext2D, cellSize: number): void {
+    const terrain = this.world.terrain;
+    if (!terrain) return;
+    if (this.terrainLayerFor !== terrain || !this.terrainLayer) {
+      const layer = document.createElement('canvas');
+      layer.width = terrain.width;
+      layer.height = terrain.height;
+      const lctx = layer.getContext('2d');
+      if (!lctx) return;
+      const image = lctx.createImageData(terrain.width, terrain.height);
+      for (let i = 0; i < terrain.roughness.length; i++) {
+        const a1 = (terrain.roughness[i] / 255) * 0.3; // brown
+        const a2 = (terrain.cover[i] / 255) * 0.26; // green
+        const aOut = a1 + a2 * (1 - a1);
+        const o = i * 4;
+        if (aOut > 0) {
+          const k1 = a1 * (1 - a2);
+          image.data[o] = (70 * a2 + 150 * k1) / aOut;
+          image.data[o + 1] = (150 * a2 + 115 * k1) / aOut;
+          image.data[o + 2] = (100 * a2 + 70 * k1) / aOut;
+        }
+        image.data[o + 3] = Math.round(aOut * 255);
+      }
+      lctx.putImageData(image, 0, 0);
+      this.terrainLayer = layer;
+      this.terrainLayerFor = terrain;
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.terrainLayer, 0, 0, terrain.width * cellSize, terrain.height * cellSize);
+    ctx.restore();
   }
 
   private drawCarrion(c: CarrionPatch, detail: number): void {

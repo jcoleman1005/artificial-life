@@ -80,6 +80,11 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   attackCost: 2,
   bitePowerMin: 0.2,
   sexEnabled: true,
+  terrainEnabled: true, // off reproduces the world without terrain (the control arm)
+  terrainScale: 8, // patches about 8 cells across on the 60×60 grid
+  terrainThreshold: 0.5, // about half of the ground is open
+  terrainRoughnessCoeff: 1.0, // the roughest ground doubles a size-1 body's move cost
+  terrainCoverShelter: 0.6, // full cover removes 60% of the temperature swing and the rain and wind exposure
   ledgerEnabled: true, // observer only; never changes the world
   ledgerCheckInterval: 25, // a check sums the animals' stored energy once; 1 checks every tick (tests)
   immigrationEnabled: false, // watch only the founders and their descendants

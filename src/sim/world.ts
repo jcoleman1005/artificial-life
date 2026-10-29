@@ -1,5 +1,6 @@
 import { LineageTracker, type AncestorNode } from './lineage';
 import { EnergyLedger, type LedgerReport } from './ledger';
+import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor, type TerrainState } from './terrain';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
 import type {
@@ -127,6 +128,8 @@ export interface WorldState {
   readonly weather?: WeatherExportState;
   /** Soil nutrient state (absent in saves from before nutrient cycle, or with it off). */
   readonly soilNutrients?: readonly number[];
+  /** Terrain fields (absent in saves from before terrain, or with it off; such saves load with it off). */
+  readonly terrain?: TerrainState;
 }
 
 /** An organism in a WorldState: its genome as plain numbers, so the state survives JSON. */
@@ -242,6 +245,8 @@ export class World {
   public cellHealth: CellHealth | null = null;
   /** Weather simulation (null when weatherEnabled is off). */
   public weather: WeatherSimulation | null = null;
+  /** Roughness and cover per cell; made on first use while terrainEnabled (see getTerrain). */
+  private terrainField: TerrainField | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -297,6 +302,7 @@ export class World {
     this.fertileList = null;
     this.cellHealth = this.config.overgrazingEnabled ? new CellHealth(this.config.gridWidth * this.config.gridHeight) : null;
     this.weather = this.config.weatherEnabled ? new WeatherSimulation(this.config.gridWidth, this.config.gridHeight) : null;
+    this.terrainField = null;
     this.lineageTracker = new LineageTracker();
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -612,6 +618,7 @@ export class World {
       lineage: this.lineageTracker.exportState(),
       ...(this.weather && this.config.weatherEnabled ? { weather: this.weather.exportState() } : {}),
       ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
+      ...(this.config.terrainEnabled ? { terrain: this.getTerrain()!.exportState() } : {}),
     };
   }
 
@@ -638,6 +645,9 @@ export class World {
     world.nextOrganismSeq = state.nextOrganismSeq;
     // Saves from before a field existed load with its neutral default.
     for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
+    // Saves from before terrain load with it off (their world was made without it).
+    if (!state.terrain && (state.config as Partial<SimulationConfig>).terrainEnabled === undefined) world.config.terrainEnabled = false;
+    world.terrainField = state.terrain ? TerrainField.fromState(state.terrain) : null;
     world.obstacles.clear();
     for (const key of state.obstacles) world.obstacles.add(key);
     world.foodRegions.length = 0;
@@ -1011,6 +1021,7 @@ export class World {
     // Requests to mate, matched up after all actions: a child needs both to ask each other.
     const pendingMatings: { organism: Organism; mateId: string }[] = [];
 
+    const terrain = this.getTerrain();
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
       const startCell = { x: organism.x, y: organism.y };
@@ -1020,7 +1031,9 @@ export class World {
       if (this.weather && this.config.weatherEnabled) {
         const season = seasonAt(this.tick, this.config)?.season ?? null;
         const temp = this.weather.getTemperature(organism.x, organism.y, season);
-        metabolism *= thermalUpkeepFactor(organism, temp, this.config);
+        // Cover shelters a body from the swing in temperature.
+        const felt = terrain ? temp * coverExposure(terrain.coverAt(organism.x, organism.y), this.config) : temp;
+        metabolism *= thermalUpkeepFactor(organism, felt, this.config);
       }
       // Resting saves upkeep in proportion to torpor depth.
       if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);
@@ -1178,15 +1191,21 @@ export class World {
           );
           if (this.weather && this.config.weatherEnabled) {
             const rain = this.weather.getRain(organism.x, organism.y);
-            const mudDrag = 1 + this.config.weatherMudCoeff * rain;
+            const exposure = terrain ? coverExposure(terrain.coverAt(organism.x, organism.y), this.config) : 1;
+            const mudDrag = 1 + this.config.weatherMudCoeff * rain * exposure;
             const wind = this.weather.getWind(organism.x, organism.y);
             const target = chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined);
             const dx = target ? target.x - organism.x : 0;
             const dy = target ? target.y - organism.y : 0;
             const dist = Math.hypot(dx, dy);
             const align = dist > 0 ? (dx * wind.wx + dy * wind.wy) / dist : 0;
-            const windMultiplier = Math.max(0.5, 1.0 - this.config.weatherWindCoupling * align);
+            const windMultiplier = Math.max(0.5, 1.0 - this.config.weatherWindCoupling * align * exposure);
             cost *= (mudDrag * windMultiplier);
+          }
+          if (terrain) {
+            // Rough ground costs more to enter, more for a larger footprint.
+            const entered = chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined);
+            if (entered) cost *= roughnessMoveFactor(terrain.roughnessAt(entered.x, entered.y), sizeOf(organism, this.config), this.config);
           }
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
@@ -1642,6 +1661,15 @@ export class World {
     const stored = Math.min(room, surplus * this.config.fatStoreEfficiency);
     organism.fat = (organism.fat ?? 0) + stored;
     return stored;
+  }
+
+  /** The terrain fields, made on first use (from the world's seed) while terrainEnabled; null when it is off. */
+  public getTerrain(): TerrainField | null {
+    if (!this.config.terrainEnabled) return null;
+    if (!this.terrainField || this.terrainField.width !== this.config.gridWidth || this.terrainField.height !== this.config.gridHeight) {
+      this.terrainField = generateTerrain(this.config);
+    }
+    return this.terrainField;
   }
 
   /** Energy the animals hold: organisms (energy and fat), eggs, and carrion. The ledger's system. */

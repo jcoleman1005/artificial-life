@@ -572,6 +572,11 @@ export interface SimulationConfig {
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
   sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
+  terrainEnabled: boolean; // Per-cell roughness and cover from seeded noise (docs/decisions.md, Terrain fields); off draws nothing and changes nothing
+  terrainScale: number; // Cells per noise lattice step: larger gives broader patches
+  terrainThreshold: number; // Noise below this is open ground (0..1); higher means less rough and sheltered ground
+  terrainRoughnessCoeff: number; // Extra move cost entering a fully rough cell, for a size-1 body (× √size for larger ones)
+  terrainCoverShelter: number; // Share of temperature swing and rain/wind exposure a fully covered cell removes (0..1)
   ledgerEnabled: boolean; // Observer: balance the energy the animals hold every ledgerCheckInterval ticks (docs/decisions.md, Energy ledger)
   ledgerCheckInterval: number; // Ticks between ledger checks; flows are summed every tick, stored energy only at a check
   immigrationEnabled: boolean; // Newcomers arrive during the run (off: only the founders and their descendants)

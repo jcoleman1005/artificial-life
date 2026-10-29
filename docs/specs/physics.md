@@ -16,7 +16,7 @@ Each line below is marked **Built** (in the engine today), **Decided** (agreed, 
 | **Size** | One body-scale number (founder = 1) that stands in for mass. Sets cap, costs, corpse energy and, later, footprint and wound ceiling. | `organism.size` (`sizeGeneEnabled`) | Built |
 | **Wound** | Accumulated damage as a single scalar: raises upkeep, impairs movement, heals only by spending energy, kills above a size-scaled ceiling. | new optional field | Decided |
 | **Time** | How often a body acts. Today every body acts once per tick. Tempo derives it from metabolic rate and size, capped at 2 per tick. | tick loop | Decided |
-| **Space** | One body per cell. A derived footprint radius (about √size) draws large bodies overlapping and drives crowding pressure; size gates squeeze and leap. Per-cell terrain fields (roughness, cover) vary the ground. | grid, renderer, terrain fields | Decided |
+| **Space** | One body per cell. A derived footprint radius (about √size) draws large bodies overlapping and drives crowding pressure; size gates squeeze and leap. Per-cell terrain fields (roughness, cover) vary the ground. | grid, renderer, terrain fields | Footprint Decided; terrain fields Built (2026-10-29) |
 | **Heat** | Local temperature from season and weather fronts. Cold and heat both cost upkeep, scaled by body shape (size^(∓1/3)), fat and metabolic rate. | `weather.ts`, `thermalUpkeepFactor` | Built (2026-10-29) |
 | **Matter** | Soil nutrients cycling between plants, animals, carrion and soil. Not energy, but energy-bearing things return to it. | `nutrientCycle`, `depositNutrients` | Built |
 | **Information** | What a body can sense and remember: sensing radius, signals, memory span, brain inputs. Costs upkeep; limited to local senses plus signals. | `sensors.ts`, `brain.ts` | Built (line of sight Decided) |
@@ -36,6 +36,7 @@ Constants are today's values in `src/sim/config.ts`. A law is a scaling rule, no
 | Thermal | Upkeep × cold `1 + 0.4·max(0,−T)·size^(−1/3)·(1 − 0.5·fatRatio)/rate`, or heat `1 + 0.4·max(0,T−0.1)·size^(1/3)·(1 + 0.5·fatRatio)·rate`; T = season ±0.1 plus fronts; a founder body pays the old cold cost | Built (2026-10-29, `thermalUpkeepFactor`) |
 | Food yield | `25 × (1 − 0.6 × carnivory) × digestive efficiency`, cut by plant defence unless detox covers it; malaise `8 × (unneutralised − 0.3)` | Built |
 | Corpse | Carrion = `10 × size + 0.7 × energy held`; a meal is `taken × carnivory × digestion × meat efficiency`, bite cap 30; eating a newborn must return less than making it | Built (size scaling 2026-10-28) |
+| Terrain | Entering a cell costs `× (1 + 1.0 × roughness × √size)`; cover scales temperature felt, and rain and wind exposure, by `1 − 0.6 × cover` | Built (2026-10-29, `src/sim/terrain.ts`) |
 | Birth | Child energy = `floor(energy × investment)`; plus tax 5 and egg extra `3 × eggAllocation`; cooldown `12 / metabolicRate` | Built |
 | Matter return | 0.5% of spent energy to soil; corpses and plants return a share on decay | Built |
 | Kill chance | Attacker's energy share × `(0.2 + 0.8 × carnivory)` | Built; to be replaced by the combat function |
@@ -89,7 +90,7 @@ Reopened 2026-10-29 as places gene ideas will need. Each lists what the lever wo
 - *Unlocks:* jaw, gut and gape genes; grazers vs browsers; large and small animals eating the same plant differently.
 - *Decide:* bite scaling only, or handling time too; whether yield depends on bite size.
 
-**5.3 Terrain fields** (Decided 2026-10-29, not built)
+**5.3 Terrain fields** (Built 2026-10-29: roughness and cover; brain inputs, wetness and dynamic terrain still open)
 - *Lever:* continuous per-cell fields instead of named types. Version 1 has **roughness** (raises the cost of entering a cell, scaled by footprint) and **cover** (shelter: cuts thermal swing and rain/wind exposure, partly blocks sight). Generated once from smooth seeded noise, independent of the food regions, static for the run. Today a cell is open or wall, and walls stay.
 - *Unlocks:* habitat specialists, cover and ambush, burrowers, camouflage, cold shelter, and the habitat split that could push colour groups into separate species.
 - *Still open:* a wetness field tied to the weather moisture baseline, dynamic terrain (rivers, fire), and which body-dependent costs besides footprint apply.

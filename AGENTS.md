@@ -39,9 +39,9 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Thermal physics (2026-10-29, built; `thermalUpkeepFactor`, `thermalPhysicsEnabled`): cold and heat both cost, scaled by size^(∓1/3), fat and metabolic rate; no thermal gene; switch off is the old cold-only rule bit-identically.
 - Line of sight (2026-10-28, decided, conditional on a perf budget, not built): walls and bodies block sight inside the sensing window; `lineOfSightEnabled` switch; weather coupling is held.
 - Growth (2026-10-29, decided, not built): born small, grow toward the genetic size by spending energy; `growthEnabled` switch; senescence deferred.
-- Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger (built), optimisation, baseline runs first, re-rank after; terrain fields decided (rank 4b); weather coupling, food physics and the signal layer are open hook points.
+- Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger, thermal and terrain built; optimisation, baseline runs next, re-rank after; weather coupling, food physics and the signal layer are open hook points.
 - Physics contract (2026-10-29; `docs/specs/physics.md`): quantities, laws and a gene-fit test every new gene must pass; weather coupling, food physics, terrain, signal layer and senescence are open hook points.
-- Terrain fields (2026-10-29, decided, not built): continuous per-cell roughness and cover from seeded noise independent of food regions; `terrainEnabled` switch; two brain inputs batched with wound load; wetness, dynamic terrain later.
+- Terrain fields (2026-10-29, built; `src/sim/terrain.ts`, `terrainEnabled`): per-cell roughness (move cost × √size) and cover (shelters temperature, rain and wind) from seeded noise independent of food regions; switch off is bit-identical; brain inputs batched with wound load (not built); wetness and dynamic terrain later.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
