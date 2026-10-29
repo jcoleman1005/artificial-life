@@ -1,6 +1,6 @@
 # Decision for approval: the persistent scent layer
 
-_Status: **Proposed 2026-10-29, awaiting the user's approval. Nothing is built.** Follows [`docs/specs/physics.md`](physics.md) (hook point 5.4) and [`AGENTS.md`](../../AGENTS.md). Not to be confused with the existing signals (`SIGNAL`: an instant, radius-limited call that leaves nothing behind)._
+_Status: **Approved 2026-10-29 with the recommended choice on all four open questions (two channels, intensity plus signature; passive deposit now, a deliberate mark later; half-life about 35 ticks as a setting; drift with the weather wind). Not built.** Follows [`docs/specs/physics.md`](physics.md) (hook point 5.4) and [`AGENTS.md`](../../AGENTS.md). Not to be confused with the existing signals (`SIGNAL`: an instant, radius-limited call that leaves nothing behind)._
 
 ## What it is
 
@@ -52,9 +52,9 @@ It does not, for the passive trace: scent is not energy, so nothing is added to 
 
 Ingredients, not behaviour. A scent layer is not a trail, a territory or a colony: those would have to emerge in organisms that can sense scent, and we have no evidence yet that they will. The active mark, dig or build action is still not possible: it needs new brain inputs and a new action.
 
-## Open choices (asked in the conversation)
+## Choices made (2026-10-29)
 
-1. Channels: intensity only, intensity plus signature, or two independent intensities.
-2. Deposit: passive, deliberate only (later), or passive now and deliberate later.
-3. Decay and reach: half-life about 35 ticks, about 150 ticks, or a setting with 35 as the default.
-4. Wind: scent drifts with the wind, or ignores it.
+1. Channels: intensity plus signature (the depositor's hue tag; it does not drift with the wind).
+2. Deposit: passive now; a deliberate, energy-costing mark later, with the brain upgrade.
+3. Decay: half-life about 35 ticks (`scentDecay` 0.98), exposed as a setting.
+4. Wind: scent drifts with the weather wind.
