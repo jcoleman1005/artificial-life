@@ -90,7 +90,7 @@ export class PlaybackPill {
   private readonly fasterBtn: HTMLButtonElement;
   private readonly onSpeedChange: (speedMultiplier: number) => void;
   private readonly tickEl: HTMLElement;
-  private speedIndex = SPEEDS.indexOf(1);
+  private speedIndex = SPEEDS.indexOf(0.5);
 
   constructor(container: HTMLElement, callbacks: PlaybackCallbacks) {
     container.innerHTML = `
@@ -98,7 +98,7 @@ export class PlaybackPill {
       <button type="button" class="pill-btn pill-step" aria-label="Step one tick">${STEP_ICON}</button>
       <span class="pill-speed-group" role="group" aria-label="Speed">
         <button type="button" class="pill-btn pill-slower" aria-label="Slower">${SLOWER_ICON}</button>
-        <span class="pill-speed" aria-live="polite">1×</span>
+        <span class="pill-speed" aria-live="polite">½×</span>
         <button type="button" class="pill-btn pill-faster" aria-label="Faster">${FASTER_ICON}</button>
       </span>
       <span class="pill-tick" aria-live="off">t 0</span>

@@ -264,7 +264,7 @@ function updateHistoryWanted(): void {
 // 3. Playback state. The worker keeps time and runs the ticks; the page only
 // draws each frame it sends, gliding organisms over the time until the next.
 let isRunning = false;
-let speedMultiplier = 1;
+let speedMultiplier = 0.5;
 const BASE_TICKS_PER_SECOND = 6;
 
 // Glide from the previous frame's positions over this long.
@@ -279,6 +279,7 @@ let frameGapMs = 0;
 // modest rate; the canvas still redraws every frame.
 const PANEL_REFRESH_MS = 200;
 let lastPanelRefresh = 0;
+let panelsDirty = true;
 let needsRender = true;
 
 /** When this page last changed playback itself; frames sent before that may still say otherwise. */
@@ -318,6 +319,7 @@ function onFrame(fromStep: boolean): void {
   renderer.setPace(fromStep ? STEP_ANIMATION_MS : frameGapMs);
   glideEased = fromStep;
   needsRender = true;
+  panelsDirty = true;
   if (!isRunning) refreshPanels();
 }
 
@@ -348,6 +350,8 @@ function selectedForDisplay(): { org: OrganismView; detail: Organism | null; ali
 }
 
 function refreshPanels(): void {
+  panelsDirty = false;
+  lastPanelRefresh = performance.now();
   // If the selected egg hatched, transition immediately to following the live organism
   if (selectedEggId && sim.organisms.has(selectedEggId)) {
     const org = sim.organisms.get(selectedEggId)!;
@@ -365,8 +369,12 @@ function refreshPanels(): void {
   const status = statusText();
   settingsView.setStatus(status);
 
-  const shown = selectedEggId ? null : selectedForDisplay();
-  if (selectedEggId && lastSelectedEgg) {
+  const shown = selectedEggId || selectedPlantId ? null : selectedForDisplay();
+  if (selectedPlantId) {
+    const livePlant = findPlant(selectedPlantId);
+    if (livePlant) lastPlantPatch = livePlant;
+    if (lastPlantPatch) card.renderPlant(lastPlantPatch, sim.tick, livePlant !== undefined);
+  } else if (selectedEggId && lastSelectedEgg) {
     const eggLive = sim.eggs.get(selectedEggId);
     if (eggLive) lastSelectedEgg = eggLive;
     card.renderEgg(lastSelectedEgg, sim.config, nameOf, eggLive !== undefined);
@@ -400,7 +408,6 @@ function refreshPanels(): void {
       if (selectedPlantId && lastPlantPatch) {
         brainView.update(null, sim.tick);
         inspectorView.renderPlant(lastPlantPatch, sim.tick, plantPatch !== undefined);
-        lastPanelRefresh = performance.now();
         return;
       }
       if (selectedEggId && lastSelectedEgg) {
@@ -419,7 +426,6 @@ function refreshPanels(): void {
           eggLive !== undefined,
           sim.tick
         );
-        lastPanelRefresh = performance.now();
         return;
       }
       const detail = shown?.detail;
@@ -433,7 +439,6 @@ function refreshPanels(): void {
       if (detail && shown.alive) $('#inspector-container').insertAdjacentHTML('afterbegin', selectedSpeciesHTML(sim.getSpecies(), sim.getSelectedSpecies()));
     }
   }
-  lastPanelRefresh = performance.now();
 }
 
 const pill = new PlaybackPill($('#playback'), {
@@ -636,7 +641,7 @@ function loop(timestamp: number): void {
   if (isRunning || glide < 1 || needsRender || renderer.isAnimating()) {
     renderer.render(glide, glideEased);
   }
-  if (isRunning && timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) refreshPanels();
+  if (isRunning && panelsDirty && timestamp - lastPanelRefresh >= PANEL_REFRESH_MS) refreshPanels();
   needsRender = false;
   requestAnimationFrame(loop);
 }
