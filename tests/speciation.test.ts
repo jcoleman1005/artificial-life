@@ -42,6 +42,8 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
 /** An empty world where nothing costs energy, so only the mating is measured. */
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed: 'speciation', gridWidth: 12, gridHeight: 12, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0,
     immigrationInterval: 0, seasonLength: 0, foodRegionCount: 0, tickMetabolismCost: 0, carryUpkeep: 0, abilityUpkeep: 0,
     memoryEnabled: false, windfallsEnabled: false, signalsEnabled: false, reproductionThreshold: 40,

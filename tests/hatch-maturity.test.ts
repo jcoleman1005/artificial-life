@@ -64,7 +64,7 @@ describe('Hatch maturity gene (trait 56)', () => {
 
   it('is inherited by a clone (legacy and DNA), and a newborn starts at its own value; mutation is one step', () => {
     for (const dnaEnabled of [false, true]) {
-      const w = new World({ seed: 9, initialOrganisms: 2, dnaEnabled, traitMutationRate: 0 });
+      const w = new World({ seed: 9, initialOrganisms: 2, dnaEnabled, dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, traitMutationRate: 0 });
       const parent = withHatch(w, [...w.organisms.values()][0], 0.7);
       const kid = priv(w).makeChild(parent, null, { x: 1, y: 1 }, 30);
       expect(kid.hatchMaturity).toBe(0.7);

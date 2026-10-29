@@ -251,7 +251,7 @@ describe('Growth duration gene (trait 55)', () => {
 
   it('is inherited by a clone (legacy and DNA), mutates by one step and stays within the range', () => {
     for (const dnaEnabled of [false, true]) {
-      const w = new World({ seed: 9, initialOrganisms: 2, dnaEnabled, traitMutationRate: 0 });
+      const w = new World({ seed: 9, initialOrganisms: 2, dnaEnabled, dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, traitMutationRate: 0 });
       const [p] = [...w.organisms.values()];
       const parent: Organism = { ...p, growthDuration: 260 };
       if (dnaEnabled) (parent as { genome?: Uint32Array }).genome = encodeOrganismDNA(phenotypeOf(parent), w.config);

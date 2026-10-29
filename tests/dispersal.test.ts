@@ -16,6 +16,8 @@ const NEUTRAL: PolicyWeights = {
 /** A parent at (10, 10) keen to reproduce, in an empty world where only births cost energy. */
 function birthScene(dispersal: number, overrides: Partial<SimulationConfig> = {}, seed: string | number = 'disperse') {
   const world = new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed,
     gridWidth: 21,
     gridHeight: 21,

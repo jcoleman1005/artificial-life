@@ -69,6 +69,8 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
  */
 function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed: 3,
     gridWidth: 10,
     gridHeight: 10,

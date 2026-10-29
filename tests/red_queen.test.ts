@@ -9,6 +9,8 @@ import type { Organism, PlantGenome, SimulationConfig } from '../src/sim/types';
 
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed: 'redqueen',
     gridWidth: 20,
     gridHeight: 20,

@@ -89,6 +89,8 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
  */
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed: 'predation',
     gridWidth: 12,
     gridHeight: 12,
@@ -120,8 +122,8 @@ const offered = (o: Organism) => o.recentHistory[0].scores.map((s) => s.action.t
 
 describe('Diet', () => {
   it('trades plant energy for carrion energy', () => {
-    // Meat-digestion gene off: isolates the diet trade-off itself (carnivoreEfficiency is tested in tier1_genes).
-    const config = { ...DEFAULT_CONFIG, foodEnergyYield: 25, carrionBite: 30, dietTradeoff: 0.6, carnivoreGeneEnabled: false };
+    // Meat-digestion gene off: isolates the diet trade-off itself (carnivoreEfficiency is tested in tier1_genes). Split diets off (2026-10-29 default): they replace this single-axis trade-off.
+    const config = { ...DEFAULT_CONFIG, foodEnergyYield: 25, carrionBite: 30, dietTradeoff: 0.6, carnivoreGeneEnabled: false, dnaSplitDiets: false };
     expect(plantYield({ carnivory: 0 }, config)).toBe(25);
     expect(carrionYield({ carnivory: 0 }, config)).toBe(0);
     expect(plantYield({ carnivory: 1 }, config)).toBeCloseTo(10);

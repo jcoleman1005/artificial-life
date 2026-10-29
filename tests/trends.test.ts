@@ -16,10 +16,12 @@ import { isSplit } from '../src/ui/history-view';
 import { metabolismHue, reproStrategyHue } from '../src/render/renderer';
 import type { Organism } from '../src/sim/types';
 
+// Every world here sets the three 2026-10-29 DNA defaults (continuous abilities, split diets, variation) off, so each test isolates its own mechanism on the legacy costs.
+
 const config = createConfig({ seed: 'trends' });
 
 function run(ticks: number, sampleEveryTick: boolean): World {
-  const w = new World({ seed: 'trends' });
+  const w = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'trends' });
   for (let t = 0; t < ticks; t++) {
     w.step();
     if (sampleEveryTick) {
@@ -98,7 +100,7 @@ describe('Colour modes', () => {
 
 describe('Genome dosage bars', () => {
   function withGenes(extra: [number, number][]): Organism {
-    const w = new World({ seed: 'bars' });
+    const w = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'bars' });
     const o = Array.from(w.organisms.values())[0];
     const view = new DataView(new ArrayBuffer(8));
     const more = new Uint32Array(extra.length * GENE_WORDS);
@@ -113,7 +115,7 @@ describe('Genome dosage bars', () => {
   }
 
   it('shows a copied gene as ×2 and a gene the world does not read as silent', () => {
-    const w = new World({ seed: 'bars', metabolismGeneEnabled: true });
+    const w = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'bars', metabolismGeneEnabled: true });
     const dup = withGenes([[geneKey(GeneClass.trait, TraitId.carnivory), 0.5]]);
     const row = genomeTraitRows(dup, w.config).find((r) => r.label === 'Meat eating')!;
     expect(row.copies).toBe(2);
