@@ -97,13 +97,13 @@ describe('Default world', () => {
       terrainThreshold: 0.5,
       terrainRoughnessCoeff: 1.0,
       // Terrain wear: a path takes a few hundred crossings; worn ground closes most of the gap in about 500 ticks.
-      // Dynamic fertility: on; about a thousand ticks to rebuild, wear wear ten times the first values after the probe (still about five times gentler per bite than overgrazing), capped at the disc value.
+      // Dynamic fertility: on; about a thousand ticks to rebuild, wear wear three times the first values (about 17 times gentler per bite than overgrazing), capped at the disc value.
       fertilityDynamicEnabled: true,
       fertilityInterval: 10,
       fertilityRebuildRate: 0.002,
       fertilityMoistureRate: 0.001,
-      fertilityGrazeWear: 0.004,
-      fertilityTrampleWear: 0.001,
+      fertilityGrazeWear: 0.0012,
+      fertilityTrampleWear: 0.0003,
       fertilityMax: 1.0,
       terrainWearEnabled: true,
       terrainTrampleRoughness: 0.005,

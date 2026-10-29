@@ -41,11 +41,11 @@ Median per-seed `avgPop` ratio (on / off) >= 0.8, `leanLow` ratio >= 0.8 (the sc
 
 First probe (wear 0.0004 per bite, 0.0001 per move): bites are rare (0.007 to 0.017 per disc cell per tick on average), so disc fertility only fell from 1.0 to about 0.93; margin cells rose (up to 0.75 to 0.83 in places; 185 to 1,100 cells above 0.25); the fertility centroid moved 0.6 to 2.6 cells.
 
-The wear was then raised ten times (0.004 per bite, 0.001 per move; the values now in `config.ts`), after a second probe of three strengths on the same seeds. At tick 2,000 (first-value baseline 682 / 655 / 609 organisms): x10 gave 865 / 536 / 469 with 11 to 15% of disc cells below 0.8; x30 (0.012 / 0.003) gave 410 / 376 / 459, about 36% fewer; x75 (0.03 / 0.006) gave 159 / 113 / 111, about 80% fewer (the overgrazing crash). The fertility centroid moved about 1 to 2 cells at every strength, so stronger wear dents the zones without moving them; movement has to come from the rebuild.
+The wear was then screened again on the merged world (main's growth, ageing and the rest), on the same seeds. At tick 2,000, summed over three seeds: fertility off 2,066 organisms; original gentle wear (0.0004 / 0.0001) 1,910; x3 (0.0012 / 0.0003, the values now in `config.ts`) 2,031; x5 1,829; x10 (0.004 / 0.001) 1,439; x30 (0.012 / 0.003) 597. In the merged world stronger wear costs population sooner than it dents the zones (mean disc fertility 0.90 to 0.93 at x3, 0.85 to 0.86 at x10). Stronger wear deepens the dents inside the zones without moving them; movement has to come from the rebuild.
 
-To find where wear starts to cost population at 8 x 10,000, add these two arms to the five-arm command (the original gentle wear, and three times the current one):
+To find where wear starts to cost population at 8 x 10,000, add these two arms to the five-arm command (the original gentle wear, and ten times the original, which cost about 30% population in the merged-world probe):
 ```
---arm gentleWear=fertilityDynamicEnabled:true,fertilityGrazeWear:0.0004,fertilityTrampleWear:0.0001 --arm strongWear=fertilityDynamicEnabled:true,fertilityGrazeWear:0.012,fertilityTrampleWear:0.003
+--arm gentleWear=fertilityDynamicEnabled:true,fertilityGrazeWear:0.0004,fertilityTrampleWear:0.0001 --arm strongWear=fertilityDynamicEnabled:true,fertilityGrazeWear:0.004,fertilityTrampleWear:0.001
 ```
 
-One more lead: on the fingerprint seed ('2', default world) at tick 1,500 the current default has 542 / 533 organisms (dials / brain) against 772 / 723 with fertility off, and 778 / 607 with the original gentle wear. One seed, so only a reason to read the `avgPop` per seed (not just the median) when the results come back.
+Read `avgPop` per seed, not just the median, when the results come back: the seeds swing a lot.

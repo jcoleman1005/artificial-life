@@ -88,8 +88,8 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   fertilityInterval: 10,
   fertilityRebuildRate: 0.002, // about 86% of the gap in ~1,000 ticks
   fertilityMoistureRate: 0.001, // gentle: one storm passage is worth 5-10% of the gap
-  fertilityGrazeWear: 0.004, // raised ten times from 0.0004 after the probe (bites are rare); 0.012 already cost population in the probe
-  fertilityTrampleWear: 0.001, // raised ten times from 0.0001, same reason
+  fertilityGrazeWear: 0.0012, // three times the first value (0.0004); ×5 and above cost population in the merged world (docs/findings.md)
+  fertilityTrampleWear: 0.0003, // three times the first value (0.0001)
   fertilityMax: 1.0, // no hot spots above the disc value
   terrainWearEnabled: true, // off keeps the terrain as first made (the control arm)
   terrainTrampleRoughness: 0.005, // a path takes a few hundred crossings to wear down
