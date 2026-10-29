@@ -16,7 +16,7 @@ Each line below is marked **Built** (in the engine today), **Decided** (agreed, 
 | **Size** | One body-scale number (founder = 1) that stands in for mass. Sets cap, costs, corpse energy and, later, footprint and wound ceiling. | `organism.size` (`sizeGeneEnabled`) | Built |
 | **Wound** | Accumulated damage as a single scalar: raises upkeep, impairs movement, heals only by spending energy, kills above a size-scaled ceiling. | new optional field | Decided |
 | **Time** | How often a body acts. Today every body acts once per tick. Tempo derives it from metabolic rate and size, capped at 2 per tick. | tick loop | Decided |
-| **Space** | One body per cell. A derived footprint radius (about √size) draws large bodies overlapping and drives crowding pressure; size gates squeeze and leap. | grid, renderer | Decided |
+| **Space** | One body per cell. A derived footprint radius (about √size) draws large bodies overlapping and drives crowding pressure; size gates squeeze and leap. Per-cell terrain fields (roughness, cover) vary the ground. | grid, renderer, terrain fields | Decided |
 | **Heat** | Local temperature from season and weather fronts. Cold costs energy today; the decision makes heat cost too, scaled by body shape, fat and metabolic rate. | `weather.ts`, `metabolismCost` | Partly built (cold only) |
 | **Matter** | Soil nutrients cycling between plants, animals, carrion and soil. Not energy, but energy-bearing things return to it. | `nutrientCycle`, `depositNutrients` | Built |
 | **Information** | What a body can sense and remember: sensing radius, signals, memory span, brain inputs. Costs upkeep; limited to local senses plus signals. | `sensors.ts`, `brain.ts` | Built (line of sight Decided) |
@@ -61,9 +61,9 @@ Worked examples (illustrations of the test, not plans):
 | Strong jaw | Wound (dealt), energy | Larger force in combat; bigger bites | Upkeep ∝ size^0.75 and a food-handling cost | Bite size (Open: food physics) |
 | Long legs | Time | More actions per tick | More upkeep, higher move cost | None once tempo exists |
 | Cold tolerance | Heat | Lower cold upkeep | Fat or size (insulation vs surface-area-to-volume) | None once thermal physics exists |
-| Burrowing | Space, heat, information | Hidden from sight, shelter from weather | Move cost, energy to dig | Terrain (Open) |
+| Burrowing | Space, heat, information | Hidden from sight, shelter from weather | Move cost, energy to dig | Terrain cover (Decided) |
 | Camouflage | Information | Reduces how far a hunter sees | Upkeep | Line of sight (Decided) |
-| Gliding or flight | Space, time | Crosses obstacles, long dispersal | Large upkeep ∝ size | Terrain and a 3D-ish movement rule (Open) |
+| Gliding or flight | Space, time | Crosses roughness and obstacles, long dispersal | Large upkeep ∝ size | A rule for ignoring roughness (extends terrain fields) |
 | Venom | Wound (dealt) | Damage over time | Energy to make it, detox race | Wound over time (part of wound load) |
 | Pheromone trail | Information, matter | Persistent signal in cells | Energy per deposit | A persistent signal layer (Open) |
 
@@ -89,10 +89,10 @@ Reopened 2026-10-29 as places gene ideas will need. Each lists what the lever wo
 - *Unlocks:* jaw, gut and gape genes; grazers vs browsers; large and small animals eating the same plant differently.
 - *Decide:* bite scaling only, or handling time too; whether yield depends on bite size.
 
-**5.3 Terrain types** (was undecided)
-- *Lever:* cells carry a type (open, rough, water, burrowable, cover) with a movement cost, a shelter value for heat and sight, and food suitability. Today a cell is open or wall.
-- *Unlocks:* habitat specialists, cover and ambush, burrowers, swimmers, climbers, and the habitat split that could push colour groups into separate species.
-- *Decide:* a small fixed set of types, how they are generated, whether they change over time (rivers, fire), and which costs depend on body (size, footprint).
+**5.3 Terrain fields** (Decided 2026-10-29, not built)
+- *Lever:* continuous per-cell fields instead of named types. Version 1 has **roughness** (raises the cost of entering a cell, scaled by footprint) and **cover** (shelter: cuts thermal swing and rain/wind exposure, partly blocks sight). Generated once from smooth seeded noise, independent of the food regions, static for the run. Today a cell is open or wall, and walls stay.
+- *Unlocks:* habitat specialists, cover and ambush, burrowers, camouflage, cold shelter, and the habitat split that could push colour groups into separate species.
+- *Still open:* a wetness field tied to the weather moisture baseline, dynamic terrain (rivers, fire), and which body-dependent costs besides footprint apply.
 
 **5.4 Persistent signal layer**
 - *Lever:* cells hold a decaying signal value (trails, scent marks) that bodies can deposit and sense, drifting with wind.

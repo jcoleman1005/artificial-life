@@ -190,6 +190,7 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 | 2 | Single-thread engine optimisation pass (garbage collection, brain scoring), proven by an unchanged fingerprint | The phone has almost no headroom; this buys it for everything below | negative (a saving) | Prompt written for agy; not yet run |
 | 3 | Long baseline runs on the server (100k+ ticks) with the existing genes; re-run the Termux benchmark on the optimised branch | Shows which genes drift and where selection is weak, so ranks 5–10 are chosen by evidence, not taste | none | To do (needs the server installed; roadmap item 13) |
 | 4 | Thermal physics: cold and heat cost, scaled by surface-area-to-volume, fat and metabolic rate | Replaces an existing per-organism rule, so the cost is about zero; gives size a downside and regions different niches (species goal) | ~0 | Decided |
+| 4b | Terrain fields: roughness and cover from seeded noise, independent of food (`terrainEnabled`); two brain inputs batched with wound load | Cover feeds thermal physics and line of sight; roughness gives footprint a mechanical effect; the habitat lever for the species goal | small (a cell lookup per move and sense) | Decided 2026-10-29 |
 | 5 | Growth: born small, grow to the genetic size by spending energy | One extra state value; makes size a trajectory; needed before footprint and wound ceilings mean much | small | Decided |
 | 6 | Footprint space rule: derived radius, overlap crowding, size-gated squeeze and leap | Reuses the sensing pass; gives growth a visible and mechanical effect | small; measure | Decided |
 | 7 | Wound load (one scalar, upkeep, impairment, energy-paid healing, size-scaled ceiling) | Foundation for combat; one append-only brain input, so batch it with any other new brain input in a single `upgradeBrain` | small, one input | Decided |
@@ -200,8 +201,8 @@ Ranked by protection, phone cost and what each unlocks. The decisions themselves
 **Open hook points (reopened 2026-10-29; decide with `docs/specs/physics.md` section 5, slot in after rank 3):**
 - Weather acting through the body (rain drag, headwind, shape-scaled heat).
 - Food physics (bite size by body mass, carry as a mass limit, handling time).
-- Terrain types (movement cost, shelter, habitat); the likely precondition for habitat specialisation and the colour-group split.
 - Persistent signal layer (pheromone trails; roadmap item 15).
+- Terrain: fields decided 2026-10-29 (rank 4b); wetness and dynamic terrain still open.
 - Senescence (declining wound ceiling and healing with age): deferred until growth is built.
 
 **Re-rank rule:** after rank 3, reorder ranks 4–10 by what the long runs show. Do not build anything from rank 9 or 10 on the phone profile before the Termux benchmark is repeated on the optimised branch.
