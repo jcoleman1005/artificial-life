@@ -5,7 +5,9 @@ import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import { speciesHue } from '../sim/species';
 import type { HeatmapKind } from '../sim/activity';
 import { TERRAIN_FULL, type TerrainField } from '../sim/terrain';
-import { ELEVATION_FULL, type ElevationField } from '../sim/elevation';
+import { type ElevationField } from '../sim/elevation';
+import { paintTerrain } from './terrain-paint';
+import { paintElevation } from './elevation-paint';
 import { ecologicalSeasonAt, regionEcologicalSeasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
@@ -607,8 +609,8 @@ export class CanvasRenderer {
     // in as cells grow (about 2× zoom on a phone).
     const detail = Math.max(0, Math.min(1, (cellSize - 8) / 4));
 
-    this.drawElevation(ctx, cellSize);
     this.drawTerrain(ctx, cellSize);
+    this.drawElevation(ctx, cellSize);
 
     // Fertile regions: soft glows matching each region's ecological season
     for (const region of this.world.foodRegions) {
@@ -626,8 +628,8 @@ export class CanvasRenderer {
             : s === 'Summer'
               ? '250, 204, 21' // radiant sunlight gold (Summer)
               : '110, 231, 183'; // fresh mint emerald (Spring)
-      glow.addColorStop(0, `rgba(${c}, 0.20)`);
-      glow.addColorStop(0.6, `rgba(${c}, 0.08)`);
+      glow.addColorStop(0, `rgba(${c}, 0.12)`);
+      glow.addColorStop(0.6, `rgba(${c}, 0.05)`);
       glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
@@ -641,6 +643,11 @@ export class CanvasRenderer {
     }
 
     // Rocks: rounded grey blocks, filled as one path
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    ctx.shadowBlur = cellSize * 0.35;
+    ctx.shadowOffsetX = cellSize * 0.1;
+    ctx.shadowOffsetY = cellSize * 0.16;
     ctx.fillStyle = '#2b3542';
     ctx.beginPath();
     const inset = Math.max(0.5, cellSize * 0.07);
@@ -653,6 +660,7 @@ export class CanvasRenderer {
       ctx.roundRect(ox * cellSize + inset, oy * cellSize + inset, cellSize - inset * 2, cellSize - inset * 2, corner);
     }
     ctx.fill();
+    ctx.restore();
 
     // Food: plants (leaves in their strategy's colour, berries for edible
     // units), or berry clusters on a faint disc
@@ -1206,79 +1214,37 @@ export class CanvasRenderer {
   }
 
   /**
-   * Water and relief: ocean and lakes in blues that darken with depth, shallow water and rivers pale teal, and on
-   * land a soft hillshade (lit from the north-west) with higher ground greyer and a pale rim along the shore.
+   * Water and relief, painted once (the field is static; see elevation-paint.ts) at 10 pixels a cell and scaled when
+   * drawn: opaque water darker with depth, ocean bluer than rivers and lakes, a pale coast, and on land a soft
+   * hillshade with bare rock where the ground is steep. It goes over the terrain, which leaves water cells clear.
    */
   private drawElevation(ctx: CanvasRenderingContext2D, cellSize: number): void {
     const field = this.world.elevation;
     if (!field) return;
     if (this.elevationLayerFor !== field || !this.elevationLayer) {
-      const { width, height } = field;
+      const painted = paintElevation(
+        {
+          width: field.width,
+          height: field.height,
+          elevation: field.elevation,
+          water: field.water,
+          seaLevel: field.seaLevel,
+          deepThreshold: this.world.config.elevationDeepThreshold,
+        },
+        10
+      );
       const layer = document.createElement('canvas');
-      layer.width = width;
-      layer.height = height;
+      layer.width = painted.width;
+      layer.height = painted.height;
       const lctx = layer.getContext('2d');
       if (!lctx) return;
-      const image = lctx.createImageData(width, height);
-      const deepAt = this.world.config.elevationDeepThreshold;
-      const h = (x: number, y: number) => field.elevation[Math.max(0, Math.min(height - 1, y)) * width + Math.max(0, Math.min(width - 1, x))] / ELEVATION_FULL;
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const i = y * width + x;
-          const o = i * 4;
-          const depth = field.depth01(i);
-          if (depth > 0) {
-            if (depth >= deepAt) {
-              const t = Math.min(1, (depth - deepAt) / (1 - deepAt));
-              image.data[o] = 28 - 18 * t;
-              image.data[o + 1] = 92 - 56 * t;
-              image.data[o + 2] = 150 - 60 * t;
-              image.data[o + 3] = 235;
-            } else {
-              image.data[o] = 74;
-              image.data[o + 1] = 160;
-              image.data[o + 2] = 178;
-              image.data[o + 3] = 205;
-            }
-            continue;
-          }
-          // Land: hillshade from the slope toward the north-west, and greyer as it rises above the lowland.
-          const shade = (h(x - 1, y - 1) - h(x + 1, y + 1)) * 6;
-          const up = field.upland01(i);
-          const light = shade > 0;
-          image.data[o] = light ? 255 : 0;
-          image.data[o + 1] = light ? 255 : 0;
-          image.data[o + 2] = light ? 255 : 10;
-          const hill = Math.min(0.28, Math.abs(shade) * 0.5);
-          // Shore: a pale rim on land next to water.
-          let shore = 0;
-          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx >= 0 && ny >= 0 && nx < width && ny < height && field.isWater(ny * width + nx)) shore = 0.22;
-          }
-          if (shore > 0 && hill < 0.1) {
-            image.data[o] = 226;
-            image.data[o + 1] = 214;
-            image.data[o + 2] = 168;
-            image.data[o + 3] = Math.round(shore * 255);
-          } else {
-            image.data[o + 3] = Math.round(Math.min(0.5, hill + up * 0.22) * 255);
-            if (!light) {
-              image.data[o] = 40 + 60 * up;
-              image.data[o + 1] = 44 + 54 * up;
-              image.data[o + 2] = 60 + 40 * up;
-            }
-          }
-        }
-      }
-      lctx.putImageData(image, 0, 0);
+      lctx.putImageData(new ImageData(painted.data, painted.width, painted.height), 0, 0);
       this.elevationLayer = layer;
       this.elevationLayerFor = field;
     }
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.elevationLayer!, 0, 0, field.width * cellSize, field.height * cellSize);
+    ctx.drawImage(this.elevationLayer, 0, 0, field.width * cellSize, field.height * cellSize);
     ctx.restore();
   }
 
@@ -1304,58 +1270,21 @@ export class CanvasRenderer {
 
   private buildTerrainLayer(terrain: TerrainField, emphasis: boolean): void {
     const { width, height } = terrain;
-    const px = 8; // image pixels per cell
+    const px = 12; // image pixels per cell
     const layer = document.createElement('canvas');
     layer.width = width * px;
     layer.height = height * px;
     const lctx = layer.getContext('2d');
     if (!lctx) return;
-    const tintAlpha = emphasis ? 1.7 : 1;
 
-    // Smooth tints, one pixel a cell and scaled up: rough ground brown, cover green, worn ground pale.
-    const tint = document.createElement('canvas');
-    tint.width = width;
-    tint.height = height;
-    const tctx = tint.getContext('2d');
-    const wornCanvas = document.createElement('canvas');
-    wornCanvas.width = width;
-    wornCanvas.height = height;
-    const wctx = wornCanvas.getContext('2d');
-    if (!tctx || !wctx) return;
-    const image = tctx.createImageData(width, height);
-    const wornImage = wctx.createImageData(width, height);
-    let worn = 0;
-    for (let i = 0; i < terrain.roughness.length; i++) {
-      const sea = this.world.elevation?.isWater(i) ?? false; // no ground tint under water
-      const a1 = sea ? 0 : Math.min(0.9, (terrain.roughness[i] / TERRAIN_FULL) * 0.3 * tintAlpha); // brown
-      const a2 = sea ? 0 : Math.min(0.9, (terrain.cover[i] / TERRAIN_FULL) * 0.26 * tintAlpha); // green
-      const aOut = a1 + a2 * (1 - a1);
-      const o = i * 4;
-      if (aOut > 0) {
-        const k1 = a1 * (1 - a2);
-        image.data[o] = (70 * a2 + 150 * k1) / aOut;
-        image.data[o + 1] = (150 * a2 + 115 * k1) / aOut;
-        image.data[o + 2] = (100 * a2 + 70 * k1) / aOut;
-      }
-      image.data[o + 3] = Math.round(aOut * 255);
-      const wear = terrain.wear01(i);
-      if (wear > 0.02) worn++;
-      wornImage.data[o] = 236;
-      wornImage.data[o + 1] = 218;
-      wornImage.data[o + 2] = 168;
-      // A square root, so mild wear (most worn cells) still shows against ground that has not been used.
-      wornImage.data[o + 3] = Math.round(Math.min(1, Math.sqrt(wear) * (emphasis ? 0.9 : 0.62)) * 255);
-    }
-    tctx.putImageData(image, 0, 0);
-    wctx.putImageData(wornImage, 0, 0);
-    lctx.imageSmoothingEnabled = true;
-    lctx.drawImage(tint, 0, 0, layer.width, layer.height);
-    lctx.drawImage(wornCanvas, 0, 0, layer.width, layer.height);
-    this.terrainWorn = worn;
+    // Ground: painted per pixel (see terrain-paint.ts), continuous rather than a tint a cell.
+    const painted = paintTerrain(terrain, px, emphasis, this.world.elevation?.water);
+    lctx.putImageData(new ImageData(painted.data, painted.width, painted.height), 0, 0);
+    this.terrainWorn = painted.worn;
 
     // Texture: pebbles on rough ground and tufts on covered ground, a few a cell and fewer as the ground wears.
-    const markAlpha = emphasis ? 0.9 : 0.5;
-    lctx.fillStyle = `rgba(112, 92, 66, ${markAlpha})`;
+    const markAlpha = emphasis ? 0 : 0.55;
+    lctx.fillStyle = `rgba(150, 128, 98, ${markAlpha})`;
     lctx.beginPath();
     for (let i = 0; i < terrain.roughness.length; i++) {
       if (this.world.elevation?.isWater(i)) continue; // no pebbles or tufts on water
@@ -1374,7 +1303,7 @@ export class CanvasRenderer {
       }
     }
     lctx.fill();
-    lctx.strokeStyle = `rgba(104, 196, 132, ${markAlpha})`;
+    lctx.strokeStyle = `rgba(138, 214, 150, ${markAlpha})`;
     lctx.lineWidth = 0.9;
     lctx.lineCap = 'round';
     lctx.beginPath();
@@ -1468,12 +1397,12 @@ export class CanvasRenderer {
       ctx.textBaseline = 'middle';
       ctx.fillText(label, x + sx + 17, y + 17);
     };
-    swatch(10, 'rgb(150, 115, 70)', 'Rough');
-    swatch(72, 'rgb(70, 150, 100)', 'Cover');
-    swatch(134, 'rgb(236, 218, 168)', 'Worn');
+    swatch(10, 'rgb(224, 150, 62)', 'Rough');
+    swatch(72, 'rgb(80, 205, 110)', 'Cover');
+    swatch(134, 'rgb(255, 240, 190)', 'Worn');
     ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
     ctx.font = '11px system-ui, sans-serif';
-    ctx.fillText(`${this.terrainWorn} cells worn by use`, x + 10, y + 37);
+    ctx.fillText(`Lines every quarter · ${this.terrainWorn} worn`, x + 10, y + 37);
     ctx.restore();
   }
 
