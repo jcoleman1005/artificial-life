@@ -1,5 +1,6 @@
 import type { PRNG } from './prng';
 import type { Organism, SimulationConfig } from './types';
+import { bodyScaleOf } from './growth';
 
 /**
  * Life-history genes: when to reproduce, how much to put into a child, how
@@ -33,6 +34,8 @@ export type LifeField =
   | 'digestiveEfficiency'
   | 'carnivoreEfficiency'
   | 'detox'
+  | 'growthDuration'
+  | 'hatchMaturity'
   | 'toughness'
   | 'toxicity'
   | 'stealth';
@@ -160,6 +163,26 @@ export const LIFE_GENES: readonly LifeGene[] = [
     max: (c) => c.detoxMax,
   },
   {
+    // Fed ticks to grow up. Only meaningful (and only carried) while growth is on.
+    field: 'growthDuration',
+    traitId: 55,
+    enabled: (c) => c.growthEnabled && c.growthGeneEnabled,
+    founder: (c) => c.growthDurationFounder,
+    step: (c) => c.growthDurationStep,
+    min: (c) => c.growthDurationMin,
+    max: (c) => c.growthDurationMax,
+  },
+  {
+    // Maturity a newborn starts at (docs/specs/hatch-maturity.md). Founders carry the world's hatchMaturity.
+    field: 'hatchMaturity',
+    traitId: 56,
+    enabled: (c) => c.growthEnabled && c.hatchMaturityGeneEnabled,
+    founder: (c) => c.hatchMaturity,
+    step: (c) => c.hatchMaturityStep,
+    min: (c) => c.hatchMaturityMin,
+    max: (c) => c.hatchMaturityMax,
+  },
+  {
     field: 'toughness',
     traitId: 52,
     enabled: (c) => c.toughnessGeneEnabled,
@@ -251,8 +274,9 @@ export function inheritLife(parent: Readonly<Organism>, config: Readonly<Simulat
 export const sizeOf = (o: Readonly<Pick<Organism, 'size'>>, c: Readonly<SimulationConfig>): number =>
   c.sizeGeneEnabled ? (o.size ?? 1) : 1;
 
-export const maxEnergyOf = (o: Readonly<Pick<Organism, 'size'>>, c: Readonly<SimulationConfig>): number =>
-  c.maxEnergy * sizeOf(o, c);
+/** Energy capacity: the adult size gene's, times body scale while growing (1 when grown or with growth off). */
+export const maxEnergyOf = (o: Readonly<Pick<Organism, 'size' | 'maturity'>>, c: Readonly<SimulationConfig>): number =>
+  c.maxEnergy * sizeOf(o, c) * bodyScaleOf(o, c);
 
 export const sensingRadiusOf = (o: Readonly<Pick<Organism, 'sensingRadius'>>, c: Readonly<SimulationConfig>): number =>
   c.sensingGeneEnabled ? (o.sensingRadius ?? c.sensingRadius) : c.sensingRadius;

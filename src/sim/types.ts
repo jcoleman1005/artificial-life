@@ -329,6 +329,12 @@ export interface Organism {
   readonly carnivoreEfficiency?: number;
   /** Toxin detoxification efficiency (detoxGeneEnabled), 0..1. Neutralizes plant chemical defenses; charges metabolic upkeep. */
   readonly detox?: number;
+  /** Fed ticks to grow from maturity 0 to 1 (growthGeneEnabled with growthEnabled). Faster growth pays more heat in total; slower leaves the body small and unable to breed for longer. */
+  readonly growthDuration?: number;
+  /** Maturity this organism's own newborns would start at (hatchMaturityGeneEnabled with growthEnabled), 0..1. A more developed newborn costs more of the parent's pool to launch. */
+  readonly hatchMaturity?: number;
+  /** How grown the body is, 0..1 (state; only with growthEnabled; absent means grown, as in saves from before growth). */
+  maturity?: number;
   /** Prey body armor / toughness (toughnessGeneEnabled), 0..1. Reduces attacker bite kill chance; charges mass upkeep. */
   readonly toughness?: number;
   /** Chemical defense / tissue toxicity (toxicityGeneEnabled), 0..1. Inflicts acute malaise on attacking predators and scavengers. */
@@ -722,6 +728,35 @@ export interface SimulationConfig {
   detoxMin: number;
   detoxMax: number;
   detoxUpkeepRate: number;
+  growthEnabled: boolean; // Organisms hatch small, grow to adult size if fed, and can only breed once mature (docs/specs/growth.md)
+  hatchMaturity: number; // Maturity of a newborn or hatchling, 0..1
+  hatchScale: number; // Body scale at maturity 0 (scale = hatchScale + (1 - hatchScale) × maturity)
+  growthTicks: number; // Fed ticks from maturity 0 to 1 (the fixed duration when the gene is off; the reference duration for the heat cost when it is on)
+  growthEnergyFloor: number; // Growth stalls while energy is below this fraction of the current maximum
+  growthCostPerTick: number; // Energy paid (as heat) on each tick that adds growth, at duration growthTicks
+  matureAt: number; // Maturity at which REPRODUCE and MATE become legal
+  growthGeneEnabled: boolean; // With growth: the duration is an inherited gene (trait 55) instead of the fixed growthTicks
+  growthDurationFounder: number; // Founders' growth duration
+  growthDurationMin: number;
+  growthDurationMax: number;
+  growthDurationStep: number; // Size of one mutation step
+  growthDurationCostExponent: number; // Heat per growing tick = growthCostPerTick × (growthTicks / duration)^exponent; above 1, faster growth costs more in total
+  hatchMaturityGeneEnabled: boolean; // With growth: newborn maturity is an inherited gene (trait 56) instead of the fixed hatchMaturity; launch cost scales with it
+  hatchMaturityMin: number;
+  hatchMaturityMax: number;
+  hatchMaturityStep: number; // Size of one mutation step; founders start at hatchMaturity
+  ageingEnabled: boolean; // Upkeep rises with age past senescenceAge, and organisms die of old age at maxAge
+  senescenceAge: number; // Age (ticks) at which upkeep starts to rise
+  senescenceRate: number; // Upkeep multiplier added per tick past senescenceAge
+  maxAge: number; // Age (ticks) at which an organism dies of old age
+  speciesEnabled: boolean; // Observer: detect and name species (clusters in genome); never changes the world
+  speciesInterval: number; // Ticks between species runs
+  speciesThreshold: number; // Distance (0..1) within which an organism belongs to a species representative
+  speciesMinSize: number; // Members a distinct cluster needs to become a species
+  speciesPersistTicks: number; // Ticks a cluster must stay distinct to become a species
+  speciesExtinctTicks: number; // Ticks with no members before a species is extinct
+  speciesBrainWeight: number; // Largest share of the distance the brain can contribute
+  speciesTagWeight: number; // Share of the distance from the hue tag
   // Red Queen Phase 2: Predator–Prey Arms Race
   predationDefenseEnabled: boolean; // Master switch for involuntary death cries and uncoupled carrion scent
   toughnessGeneEnabled: boolean; // Prey armor evolves (reduces bite kill chance, charges mass upkeep)
@@ -833,6 +868,8 @@ export interface WorldMetrics {
   overgrazing: OvergrazingMetrics | null;
   /** Life-history genes, or null when none is on. */
   life: LifeMetrics | null;
+  /** Growth and ageing, or null when both are off. */
+  growth: GrowthMetrics | null;
   /** Weather conditions, or null when weather is off. */
   weather: WeatherMetrics | null;
   /** Soil nutrient cycle metrics, or null when nutrient cycle is off. */
@@ -857,6 +894,22 @@ export interface WeatherMetrics {
   windAngle: number;
 }
 
+/** Growth and ageing: how grown the population is, and what it has cost. */
+export interface GrowthMetrics {
+  /** Mean maturity (1 with growth off) and the share below matureAt (cannot breed yet). */
+  meanMaturity: number;
+  juvenileFraction: number;
+  /** Share of the living past senescenceAge (0 with ageing off), and the mean age of the living. */
+  senescentFraction: number;
+  meanAge: number;
+  /** Deaths at maxAge so far, and the mean lifespan of all who have died (0 before the first death). */
+  deathsOldAgeTotal: number;
+  meanLifespan: number;
+  /** Energy paid as heat to grow, and newborn energy lost above a small body's capacity, so far. */
+  growthHeatTotal: number;
+  growthEnergyLostTotal: number;
+}
+
 /** Population means of the life-history genes that are switched on, and egg/rest/fat counts. */
 export interface LifeMetrics {
   reproThreshold: number | null;
@@ -872,6 +925,8 @@ export interface LifeMetrics {
   digestiveEfficiency: number | null;
   carnivoreEfficiency: number | null;
   detox: number | null;
+  growthDuration: number | null;
+  hatchMaturity: number | null;
   toughness: number | null;
   toxicity: number | null;
   stealth: number | null;

@@ -1,9 +1,11 @@
 import { World } from './world';
 import type { SavedWorld } from './protocol';
 import { WorldEventDetector, type WorldEvent } from './events';
+import { SpeciesTracker } from './species';
 import { ActivityMaps, type HeatmapKind } from './activity';
 import { toOrganismView, type EggView, type FromWorker, type PanelData, type ToWorker } from './protocol';
 import type { Egg, Organism, SimulationConfig } from './types';
+import { traceBrain } from './brain-trace';
 
 /** How often panel data (metrics, history, the selected organism) is sent while running. */
 export const PANEL_INTERVAL_MS = 200;
@@ -70,6 +72,7 @@ export class SimulationHost {
   // Observers of the world (they never change it): world events and heatmaps.
   private events = new WorldEventDetector();
   private activity!: ActivityMaps;
+  private species = new SpeciesTracker();
   /** Events found since the last frame was sent. */
   private pendingEvents: WorldEvent[] = [];
   private readonly tickTimes: number[] = [];
@@ -179,6 +182,15 @@ export class SimulationHost {
       case 'load':
         this.load(message.saved, viewer);
         break;
+      case 'inspectBrain':
+        // Observer: reads the world, changes nothing (traceBrain draws from its own PRNG).
+        viewer?.post({
+          kind: 'brainTrace',
+          requestId: message.requestId,
+          organismId: message.organismId,
+          trace: traceBrain(this.world, message.organismId),
+        });
+        break;
     }
   }
 
@@ -209,6 +221,7 @@ export class SimulationHost {
       savedAt: new Date().toISOString(),
       world: this.world.exportState(),
       events: [...this.events.recentEvents()],
+      species: this.species.exportState(),
     };
   }
 
@@ -228,6 +241,9 @@ export class SimulationHost {
     this.events = new WorldEventDetector();
     this.events.resume(world, saved.events);
     this.activity = new ActivityMaps(world.config.gridWidth, world.config.gridHeight);
+    this.species = new SpeciesTracker();
+    this.species.restore(saved.species);
+    this.species.observe(world); // rebuilds when the save has none (or when a run is due); events are not reported
     this.pendingEvents = [];
     this.tickTimes.length = 0;
     for (const v of this.viewers.values()) v.selectedId = null;
@@ -240,12 +256,15 @@ export class SimulationHost {
     this.world.step();
     this.pendingEvents.push(...this.events.observe(this.world));
     this.activity.observe(this.world);
+    this.pendingEvents.push(...this.events.record(this.species.observe(this.world), this.world.tick));
   }
 
   private resetObservers(): void {
     this.events = new WorldEventDetector();
     this.events.observe(this.world); // starting state, e.g. groups already large
     this.activity = new ActivityMaps(this.world.config.gridWidth, this.world.config.gridHeight);
+    this.species = new SpeciesTracker();
+    this.species.observe(this.world); // the founders' species; no events at the start
     this.pendingEvents = [];
   }
 
@@ -276,10 +295,12 @@ export class SimulationHost {
     const { world } = this;
     const now = this.env.now();
     while (this.tickTimes.length > 0 && now - this.tickTimes[0] > 1000) this.tickTimes.shift();
+    const organisms = Array.from(world.organisms.values());
     return {
       kind: 'frame',
       tick: world.tick,
-      organisms: Array.from(world.organisms.values(), toOrganismView),
+      organisms: organisms.map(toOrganismView),
+      ...(world.config.speciesEnabled ? { speciesIds: organisms.map((o) => this.species.speciesIdOf(o, world.config)) } : {}),
       foodPatches: Array.from(world.foodPatches.values(), (p) => ({ ...p })),
       carrion: Array.from(world.carrion.values(), (c) => ({ ...c })),
       eggs: Array.from(world.eggs.values(), toEggView),
@@ -321,9 +342,19 @@ export class SimulationHost {
       selected: withoutCircuit(selectedOrg),
       ...(viewer.selectedId ? { selectedAncestry: this.world.getAncestry(viewer.selectedId) } : {}),
       ...(viewer.wantsHistory ? { history: this.world.history.getSamples() } : {}),
+      ...(this.world.config.speciesEnabled ? this.speciesPanel(viewer) : {}),
       ...(viewer.heatmap ? { heatmap: { kind: viewer.heatmap, cells: this.activity.snapshot(viewer.heatmap, this.world) } } : {}),
     };
     return { ...base, panels };
+  }
+
+  private speciesPanel(viewer: Viewer): Pick<PanelData, 'species' | 'selectedSpecies'> {
+    const { world } = this;
+    const own = viewer.selectedId ? world.getOrganism(viewer.selectedId) : undefined;
+    return {
+      species: this.species.snapshot(world.tick, viewer.wantsHistory),
+      selectedSpecies: own ? this.species.distanceToRepresentative(own, world.config) : null,
+    };
   }
 
   private postFrame(fromStep: boolean, withPanels: boolean): void {

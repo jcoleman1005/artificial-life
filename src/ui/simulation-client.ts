@@ -2,6 +2,7 @@ import { DEFAULT_CONFIG } from '../sim/config';
 import type { HistorySample } from '../sim/history';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
+import type { BrainTrace } from '../sim/brain-trace';
 import type {
   AncestorNode,
   EggView,
@@ -12,6 +13,7 @@ import type {
   ToWorker,
   WorldView,
 } from '../sim/protocol';
+import type { SpeciesSnapshot } from '../sim/species';
 import type { CarrionPatch, DeathPulse, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
 
 export interface ClientEvents {
@@ -97,6 +99,10 @@ export class SimulationClient implements WorldView {
   /** Resolves once the world's location is known and commands can flow. */
   public readonly ready: Promise<void>;
 
+  /** Species of each organism in the latest frame (organism id -> species id; 0 or absent: none). */
+  private speciesIds = new Map<string, number>();
+  private speciesSnapshot: SpeciesSnapshot | null = null;
+  private selectedSpeciesInfo: { speciesId: number; distance: number } | null = null;
   private selectedId: string | null = null;
   private metrics: WorldMetrics | null = null;
   private selectedDetail: Organism | null = null;
@@ -110,6 +116,7 @@ export class SimulationClient implements WorldView {
   private nextRequestId = 1;
   private readonly pendingCsv = new Map<number, (csv: string) => void>();
   private readonly pendingSaves = new Map<number, (saved: SavedWorld) => void>();
+  private readonly pendingTraces = new Map<number, (trace: BrainTrace | null) => void>();
   private transport: ((message: ToWorker) => void) | null = null;
   /** Commands sent before the transport is up. */
   private readonly queue: ToWorker[] = [];
@@ -187,6 +194,8 @@ export class SimulationClient implements WorldView {
         this.foodRegions = message.foodRegions;
         this.worldEvents = [...message.events];
         this.heatmap = null;
+        this.speciesIds = new Map();
+        this.speciesSnapshot = null;
         this.events.reset();
         break;
       case 'frame': {
@@ -228,6 +237,7 @@ export class SimulationClient implements WorldView {
         } else {
           this.weather = null;
         }
+        this.speciesIds = message.speciesIds ? new Map(message.organisms.map((o, i) => [o.id, message.speciesIds![i]])) : new Map();
         this.ticksPerSecond = message.ticksPerSecond;
         this.running = message.running;
         this.targetTicksPerSecond = message.targetTicksPerSecond;
@@ -252,6 +262,10 @@ export class SimulationClient implements WorldView {
         this.pendingSaves.get(message.requestId)?.(message.saved);
         this.pendingSaves.delete(message.requestId);
         break;
+      case 'brainTrace':
+        this.pendingTraces.get(message.requestId)?.(message.trace);
+        this.pendingTraces.delete(message.requestId);
+        break;
       case 'error':
         this.events.error(message.message);
         break;
@@ -264,6 +278,8 @@ export class SimulationClient implements WorldView {
     this.selectedAncestry = panels.selectedAncestry ?? [];
     if (panels.history) this.history = panels.history;
     this.heatmap = panels.heatmap ?? null;
+    if (panels.species) this.speciesSnapshot = panels.species;
+    this.selectedSpeciesInfo = panels.selectedSpecies ?? null;
   }
 
   // Commands
@@ -328,6 +344,14 @@ export class SimulationClient implements WorldView {
       this.send({ kind: 'save', requestId });
     });
   }
+  /** How an organism would decide right now (read-only; null if it is gone). Works in the worker and on the server. */
+  public inspectBrain(organismId: string): Promise<BrainTrace | null> {
+    const requestId = this.nextRequestId++;
+    return new Promise((resolve) => {
+      this.pendingTraces.set(requestId, resolve);
+      this.send({ kind: 'inspectBrain', requestId, organismId });
+    });
+  }
   /** Replace the world with a saved one; it arrives paused. */
   public load(saved: SavedWorld): void {
     this.selectedId = null;
@@ -354,6 +378,18 @@ export class SimulationClient implements WorldView {
   }
   public getMetrics(): WorldMetrics | null {
     return this.metrics;
+  }
+  /** The species an organism belongs to in the latest frame (0: none or unknown). */
+  public speciesOf(organismId: string): number {
+    return this.speciesIds.get(organismId) ?? 0;
+  }
+  /** The latest species list (the count history only while the Trends tab is showing); null with species off. */
+  public getSpecies(): SpeciesSnapshot | null {
+    return this.speciesSnapshot;
+  }
+  /** The selected organism's species and its distance to that species' representative. */
+  public getSelectedSpecies(): { speciesId: number; distance: number } | null {
+    return this.selectedSpeciesInfo;
   }
   public getHistorySamples(): readonly HistorySample[] {
     return this.history;

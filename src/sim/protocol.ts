@@ -26,6 +26,8 @@ import type {
   WorldMetrics,
 } from './types';
 import type { WorldState } from './world';
+import type { BrainTrace } from './brain-trace';
+import type { SpeciesSnapshot, SpeciesState } from './species';
 
 /** What an organism did on its latest tick, as much as drawing needs. */
 export interface ActionView {
@@ -57,6 +59,11 @@ export interface OrganismView {
   readonly digestiveEfficiency?: number;
   readonly carnivoreEfficiency?: number;
   readonly detox?: number;
+  /** Fed ticks to grow up (growth gene), and how grown the body is, 0..1 (growthEnabled; absent means grown). */
+  readonly growthDuration?: number;
+  /** Maturity this organism's newborns start at (hatch maturity gene). */
+  readonly hatchMaturity?: number;
+  readonly maturity?: number;
   readonly toughness?: number;
   readonly toxicity?: number;
   readonly stealth?: number;
@@ -129,6 +136,9 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.digestiveEfficiency !== undefined ? { digestiveEfficiency: org.digestiveEfficiency } : {}),
     ...(org.carnivoreEfficiency !== undefined ? { carnivoreEfficiency: org.carnivoreEfficiency } : {}),
     ...(org.detox !== undefined ? { detox: org.detox } : {}),
+    ...(org.growthDuration !== undefined ? { growthDuration: org.growthDuration } : {}),
+    ...(org.hatchMaturity !== undefined ? { hatchMaturity: org.hatchMaturity } : {}),
+    ...(org.maturity !== undefined ? { maturity: org.maturity } : {}),
     ...(org.toughness !== undefined ? { toughness: org.toughness } : {}),
     ...(org.toxicity !== undefined ? { toxicity: org.toxicity } : {}),
     ...(org.stealth !== undefined ? { stealth: org.stealth } : {}),
@@ -175,7 +185,9 @@ export type ToWorker =
   /** Ask for the whole world as a SavedWorld. */
   | { readonly kind: 'save'; readonly requestId: number }
   /** Replace the world with a saved one (paused). */
-  | { readonly kind: 'load'; readonly saved: SavedWorld };
+  | { readonly kind: 'load'; readonly saved: SavedWorld }
+  /** Read-only: how an organism would decide right now (answered with `brainTrace`). Observer; changes nothing. */
+  | { readonly kind: 'inspectBrain'; readonly requestId: number; readonly organismId: string };
 
 /** A saved world, as kept in the browser or written to a file. */
 export interface SavedWorld {
@@ -186,6 +198,8 @@ export interface SavedWorld {
   readonly world: WorldState;
   /** The event feed at the time, so it carries on after resuming. */
   readonly events: readonly WorldEvent[];
+  /** The species tracker's state (observer; older saves lack it and the species are rebuilt). */
+  readonly species?: SpeciesState;
 }
 
 /** Checks the outer shape of a loaded file before handing it to the worker. */
@@ -221,6 +235,8 @@ export type FromWorker =
         readonly fronts: readonly WeatherFront[];
         readonly wind: { readonly wx: number; readonly wy: number };
       };
+      /** Species id of each organism, in the same order as `organisms` (0: none; absent with speciesEnabled off or from older servers). */
+      readonly speciesIds?: readonly number[];
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
       /** Whether the world is playing, and at what speed (another viewer may have changed them). */
@@ -237,6 +253,8 @@ export type FromWorker =
   | { readonly kind: 'config'; readonly config: SimulationConfig }
   | { readonly kind: 'csv'; readonly requestId: number; readonly csv: string }
   | { readonly kind: 'saved'; readonly requestId: number; readonly saved: SavedWorld }
+  /** The answer to `inspectBrain` (trace is null if that organism is not alive). */
+  | { readonly kind: 'brainTrace'; readonly requestId: number; readonly organismId: string; readonly trace: BrainTrace | null }
   /** A load failed (bad or incompatible file); the current world is kept. */
   | { readonly kind: 'error'; readonly message: string };
 
@@ -250,4 +268,8 @@ export interface PanelData {
   readonly history?: readonly HistorySample[];
   /** The heatmap the page is showing (one value per cell, row by row), only when asked for. */
   readonly heatmap?: { readonly kind: HeatmapKind; readonly cells: Float32Array };
+  /** Species list (and, with history, the count series for the stacked chart); absent with speciesEnabled off. */
+  readonly species?: SpeciesSnapshot;
+  /** The selected organism's species and its distance to that species' representative. */
+  readonly selectedSpecies?: { readonly speciesId: number; readonly distance: number } | null;
 }

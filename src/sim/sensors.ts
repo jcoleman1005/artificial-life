@@ -10,6 +10,7 @@ import { isParentOf } from './family';
 import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
 import { fatRoom, maxEnergyOf, sensingRadiusOf, thresholdOf } from './lifehistory';
+import { carryCapacityOf, isMature } from './growth';
 
 const NEARBY: number[] = [];
 
@@ -283,10 +284,10 @@ export function senseEnvironment(
   const meatYield = carrionYield(organism, config);
   const canEatCarrion =
     currentCellCarrion > 0 && meatYield >= 1 && (energy <= maxEnergy - meatYield || fatRoom(organism, config) >= 1);
-  const canPickUp = currentCellFood > 0 && carriedFood < organism.carryCapacity;
+  const canPickUp = currentCellFood > 0 && carriedFood < carryCapacityOf(organism, config);
 
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
-  let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0);
+  let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0) && isMature(organism, config);
   if (canReproduce) {
     const open = (nx: number, ny: number) =>
       nx >= 0 && nx < snapshot.gridWidth && ny >= 0 && ny < snapshot.gridHeight && snapshot.obstacleGrid[ny * width + nx] === 0;

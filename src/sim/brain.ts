@@ -2,6 +2,7 @@ import type { PRNG } from './prng';
 import { isDiagonalMove, isLeapAction, isMoveAction, unitDirectionOf } from './directions';
 import { carrionYield } from './traits';
 import { thresholdOf } from './lifehistory';
+import { carryCapacityOf, maturityOf } from './growth';
 import type {
   ActionScore,
   LegalAction,
@@ -85,12 +86,31 @@ export const BRAIN_INPUTS = [
   'moveWindAlignment',
   // Red Queen: Trophic feedback (append-only)
   'lastBiteYield',
+  // Growth (growthEnabled, append-only): how grown the body is, 0..1 (1 when grown, and with growth off).
+  'maturity',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
 
 export const BASE_BRAIN_INPUT_COUNT = 52;
 export const BRAIN_INPUT_COUNT = BRAIN_INPUTS.length;
+/** Index of the first weather input, and of the plant-defense and growth inputs (each appended in turn). */
+const WEATHER_INPUT_START = BASE_BRAIN_INPUT_COUNT;
+const DEFENSE_INPUT_START = BASE_BRAIN_INPUT_COUNT + 3;
+export const MATURITY_INPUT = BRAIN_INPUTS.indexOf('maturity');
+
+/**
+ * Whether input i has weights in a world with this config. Brains always have
+ * all BRAIN_INPUT_COUNT inputs; an input whose feature switch is off gets zero
+ * weights that are never drawn, mutated or encoded as genes, so that world is
+ * bit-identical to one built before the input existed. (No config: all active.)
+ */
+export function brainInputActive(i: number, config?: Readonly<Pick<SimulationConfig, 'weatherEnabled' | 'plantDefenseEnabled' | 'growthEnabled'>>): boolean {
+  if (i < WEATHER_INPUT_START) return true;
+  if (i < DEFENSE_INPUT_START) return config?.weatherEnabled !== false;
+  if (i < MATURITY_INPUT) return config?.plantDefenseEnabled !== false;
+  return config?.growthEnabled !== false;
+}
 export const BRAIN_HIDDEN = 6;
 export const WEIGHT_LIMIT = 40;
 
@@ -168,18 +188,10 @@ export const HEAD_START_SKIP: readonly number[] = BRAIN_INPUTS.map((name) => HEA
 
 export function createHeadStartBrain(prng: PRNG, config?: Readonly<SimulationConfig>): Brain {
   const small = () => Number(prng.nextGaussian(0, 0.1).toFixed(4));
-  const weatherOn = config?.weatherEnabled !== false;
-  const plantDefenseOn = config?.plantDefenseEnabled !== false;
   const hidden: number[] = [];
   for (let h = 0; h < BRAIN_HIDDEN; h++) {
-    for (let i = 0; i < BASE_BRAIN_INPUT_COUNT; i++) {
-      hidden.push(small());
-    }
-    for (let i = BASE_BRAIN_INPUT_COUNT; i < 55; i++) {
-      hidden.push(weatherOn ? small() : 0);
-    }
-    for (let i = 55; i < BRAIN_INPUT_COUNT; i++) {
-      hidden.push(plantDefenseOn ? small() : 0);
+    for (let i = 0; i < BRAIN_INPUT_COUNT; i++) {
+      hidden.push(brainInputActive(i, config) ? small() : 0);
     }
   }
   return {
@@ -218,16 +230,12 @@ export function mutateWeight(w: number, config: Readonly<SimulationConfig>, prng
 /** A child's brain: each weight mutates with probability brainMutationRate. */
 export function mutateBrain(parent: Brain, config: Readonly<SimulationConfig>, prng: PRNG): Brain {
   const weatherOn = config.weatherEnabled !== false;
+  const growthOn = config.growthEnabled !== false;
   const mutate = (w: number): number => mutateWeight(w, config, prng);
-  const skip = parent.skip.map((w, i) => {
-    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return w;
-    return mutate(w);
-  });
-  const hidden = parent.hidden.map((w, k) => {
-    const i = k % BRAIN_INPUT_COUNT;
-    if (i >= BASE_BRAIN_INPUT_COUNT && !weatherOn) return w;
-    return mutate(w);
-  });
+  // Appended inputs are frozen while weather is off (as before); the growth input also while growth is off.
+  const frozen = (i: number): boolean => i >= BASE_BRAIN_INPUT_COUNT && (!weatherOn || (i === MATURITY_INPUT && !growthOn));
+  const skip = parent.skip.map((w, i) => (frozen(i) ? w : mutate(w)));
+  const hidden = parent.hidden.map((w, k) => (frozen(k % BRAIN_INPUT_COUNT) ? w : mutate(w)));
   return {
     skip,
     hidden,
@@ -320,10 +328,10 @@ function fillBrainFeatures(
   out[o++] = isGive ? 1 : 0; // isGive
   out[o++] = type === 'REST' ? 1 : 0; // isRest
   out[o++] = sensed.energyRatio; // energy
-  out[o++] = sensed.carriedFood / Math.max(1, organism.carryCapacity); // carried
+  out[o++] = sensed.carriedFood / Math.max(1, carryCapacityOf(organism, config)); // carried
   out[o++] = Math.min(1, sensed.surroundingOrganismCount / 8); // crowding
   out[o++] = type === 'EAT' ? hunger : 0; // eatHunger
-  out[o++] = type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, organism.carryCapacity) : 0; // pickUpRoom
+  out[o++] = type === 'PICK_UP' ? 1 - sensed.carriedFood / Math.max(1, carryCapacityOf(organism, config)) : 0; // pickUpRoom
   out[o++] = isReproduce ? Math.max(0, organism.energy - threshold) / headroom : 0; // reproFullness
   out[o++] = isGive && !action.recipientIsChild ? need : 0; // giveNeed
   out[o++] = isGive && !action.recipientIsChild ? need * (action.recipientSimilarity ?? 0) : 0; // giveNeedAlike
@@ -371,6 +379,7 @@ function fillBrainFeatures(
       ? (dx * sensed.weatherWind.wx + dy * sensed.weatherWind.wy) / Math.max(1, Math.hypot(dx, dy))
       : 0; // moveWindAlignment
   out[o++] = organism.lastBiteYield ?? 1; // lastBiteYield
+  out[o++] = maturityOf(organism, config); // maturity (1 for a grown body, and with growth off)
 }
 
 /** Score for one feature vector, with the per-input direct contributions. */
@@ -502,6 +511,20 @@ export function lastCircuitDirect(k: number): number {
 }
 export function lastCircuitHidden(): number {
   return lastHidden;
+}
+
+/**
+ * Copies and restores the scoreCircuit scratch (DIRECT, lastHidden). Only
+ * read-only observers (the brain trace) use these: they score a circuit
+ * between a tick's own scoreCircuit call and its reads of the scratch, so
+ * they put the scratch back as they found it.
+ */
+export function saveCircuitScratch(): { readonly direct: Float64Array; readonly hidden: number } {
+  return { direct: DIRECT.slice(), hidden: lastHidden };
+}
+export function restoreCircuitScratch(saved: { readonly direct: Float64Array; readonly hidden: number }): void {
+  DIRECT.set(saved.direct);
+  lastHidden = saved.hidden;
 }
 
 /**

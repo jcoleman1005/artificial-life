@@ -218,7 +218,7 @@ export class SettingsView {
       </section>
       <section class="settings-group">
         <h3>Display</h3>
-        ${segmented('Colour by', 'color', [['tag', 'Tag'], ['lineage', 'Family'], ['diet', 'Diet'], ['metabolism', 'Metabolism'], ['reproStrategy', 'Breeding']], 'tag')}
+        ${segmented('Colour by', 'color', [['tag', 'Tag'], ['lineage', 'Family'], ['diet', 'Diet'], ['metabolism', 'Metabolism'], ['reproStrategy', 'Breeding'], ['species', 'Species']], 'tag')}
         ${segmented('Motion', 'motion', [['smooth', 'Smooth'], ['fluid', 'Fluid']], 'fluid')}
       </section>
       <section class="settings-group">

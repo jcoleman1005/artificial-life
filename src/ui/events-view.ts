@@ -1,6 +1,7 @@
 import { GROUP_NAMES } from '../sim/groups';
 import type { WorldEvent } from '../sim/events';
 import type { FoodRegion, SimulationConfig } from '../sim/types';
+import { speciesHue } from '../sim/species';
 import { compass, compassPoint } from './peek-view';
 
 /** Hue at the centre of a colour group's 30° bucket, for its dot. */
@@ -74,6 +75,10 @@ export function describeEvent(e: WorldEvent, regions: readonly FoodRegion[], con
       return e.diet === 'meat'
         ? { text: `${GROUP_NAMES[e.group]} have turned to meat`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` }
         : { text: `${GROUP_NAMES[e.group]} have gone back to plants`, colour: `hsl(${groupHue(e.group)}, 80%, 62%)` };
+    case 'speciation':
+      return { text: `New species ${e.name} split from ${e.parentName}`, colour: `hsl(${Math.round(speciesHue(e.speciesId))}, 80%, 62%)` };
+    case 'speciesExtinct':
+      return { text: `Species ${e.name} died out`, colour: `hsl(${Math.round(speciesHue(e.speciesId))}, 80%, 62%)` };
   }
 }
 
