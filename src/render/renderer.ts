@@ -4,6 +4,7 @@ import { bodyScaleOf } from '../sim/growth';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import { speciesHue } from '../sim/species';
 import type { HeatmapKind } from '../sim/activity';
+import { TERRAIN_FULL, type TerrainField } from '../sim/terrain';
 import { ecologicalSeasonAt, regionEcologicalSeasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
@@ -51,8 +52,9 @@ export function reproStrategyHue(org: Pick<OrganismView, 'investment' | 'clutchS
  * - trails: short fading paths behind organisms;
  * - crowding / deaths / feeding: fading heatmaps of where those happen.
  * - health: how much grazing has worn each cell down (overgrazing), on a fixed 0-1 scale.
+ * - terrain: the terrain made stronger, with a key and how many cells the animals have worn.
  */
-export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | 'weather' | HeatmapKind;
+export type OverlayMode = 'none' | 'family' | 'senses' | 'trails' | 'weather' | 'terrain' | HeatmapKind;
 
 const HEATMAP_COLOUR: Record<HeatmapKind, string> = {
   crowding: '251, 146, 60',
@@ -126,6 +128,11 @@ export class CanvasRenderer {
   /** Cell size at zoom 1 (the whole world fits the visible area). */
   private baseCell = 6;
   private cellSize = 6;
+  /** The terrain tint, painted once per field as one pixel per cell and scaled up when drawn. */
+  private terrainLayer: HTMLCanvasElement | null = null;
+  private terrainLayerFor: TerrainField | null = null;
+  private terrainLayerEmphasis = false;
+  private terrainWorn = 0;
   private colorMode: ColorMode = 'tag';
   private speciesOf: ((organismId: string) => number) | null = null;
   private highlightSpecies: number | null = null;
@@ -595,6 +602,8 @@ export class CanvasRenderer {
     // in as cells grow (about 2× zoom on a phone).
     const detail = Math.max(0, Math.min(1, (cellSize - 8) / 4));
 
+    this.drawTerrain(ctx, cellSize);
+
     // Fertile regions: soft glows matching each region's ecological season
     for (const region of this.world.foodRegions) {
       const eco = regionEcologicalSeasonAt(this.world.tick, region, config);
@@ -665,6 +674,7 @@ export class CanvasRenderer {
     if (this.overlay === 'trails') this.drawTrails(selectedOrg);
     if (this.overlay === 'senses') this.drawSignalRipples(selectedOrg);
     if (this.overlay === 'weather') this.drawWeather();
+    if (this.overlay === 'terrain') this.drawTerrainLegend();
 
     // Sensing range of the selected organism: a soft dashed square
     if (selectedOrg) {
@@ -1185,6 +1195,158 @@ export class CanvasRenderer {
       ctx.arc(cx, cy, Math.max(5, cellSize * 0.5 * sizeScale), 0, TAU);
       ctx.stroke();
     }
+  }
+
+  /**
+   * The terrain: rough ground as brown with pebbles, sheltered ground as green with grass tufts, and ground the
+   * animals have worn down as pale packed earth with the pebbles and tufts thinned out. Painted once per update of
+   * the terrain (at most about once a second) into an image of 8 pixels a cell, then scaled when drawn. With the
+   * Terrain layer on, everything is stronger and a legend says how many cells are worn.
+   */
+  private drawTerrain(ctx: CanvasRenderingContext2D, cellSize: number): void {
+    const terrain = this.world.terrain;
+    if (!terrain) return;
+    const emphasis = this.overlay === 'terrain';
+    if (this.terrainLayerFor !== terrain || this.terrainLayerEmphasis !== emphasis || !this.terrainLayer) {
+      this.buildTerrainLayer(terrain, emphasis);
+    }
+    if (!this.terrainLayer) return;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.terrainLayer, 0, 0, terrain.width * cellSize, terrain.height * cellSize);
+    ctx.restore();
+  }
+
+  private buildTerrainLayer(terrain: TerrainField, emphasis: boolean): void {
+    const { width, height } = terrain;
+    const px = 8; // image pixels per cell
+    const layer = document.createElement('canvas');
+    layer.width = width * px;
+    layer.height = height * px;
+    const lctx = layer.getContext('2d');
+    if (!lctx) return;
+    const tintAlpha = emphasis ? 1.7 : 1;
+
+    // Smooth tints, one pixel a cell and scaled up: rough ground brown, cover green, worn ground pale.
+    const tint = document.createElement('canvas');
+    tint.width = width;
+    tint.height = height;
+    const tctx = tint.getContext('2d');
+    const wornCanvas = document.createElement('canvas');
+    wornCanvas.width = width;
+    wornCanvas.height = height;
+    const wctx = wornCanvas.getContext('2d');
+    if (!tctx || !wctx) return;
+    const image = tctx.createImageData(width, height);
+    const wornImage = wctx.createImageData(width, height);
+    let worn = 0;
+    for (let i = 0; i < terrain.roughness.length; i++) {
+      const a1 = Math.min(0.9, (terrain.roughness[i] / TERRAIN_FULL) * 0.3 * tintAlpha); // brown
+      const a2 = Math.min(0.9, (terrain.cover[i] / TERRAIN_FULL) * 0.26 * tintAlpha); // green
+      const aOut = a1 + a2 * (1 - a1);
+      const o = i * 4;
+      if (aOut > 0) {
+        const k1 = a1 * (1 - a2);
+        image.data[o] = (70 * a2 + 150 * k1) / aOut;
+        image.data[o + 1] = (150 * a2 + 115 * k1) / aOut;
+        image.data[o + 2] = (100 * a2 + 70 * k1) / aOut;
+      }
+      image.data[o + 3] = Math.round(aOut * 255);
+      const wear = terrain.wear01(i);
+      if (wear > 0.02) worn++;
+      wornImage.data[o] = 236;
+      wornImage.data[o + 1] = 218;
+      wornImage.data[o + 2] = 168;
+      // A square root, so mild wear (most worn cells) still shows against ground that has not been used.
+      wornImage.data[o + 3] = Math.round(Math.min(1, Math.sqrt(wear) * (emphasis ? 0.9 : 0.62)) * 255);
+    }
+    tctx.putImageData(image, 0, 0);
+    wctx.putImageData(wornImage, 0, 0);
+    lctx.imageSmoothingEnabled = true;
+    lctx.drawImage(tint, 0, 0, layer.width, layer.height);
+    lctx.drawImage(wornCanvas, 0, 0, layer.width, layer.height);
+    this.terrainWorn = worn;
+
+    // Texture: pebbles on rough ground and tufts on covered ground, a few a cell and fewer as the ground wears.
+    const markAlpha = emphasis ? 0.9 : 0.5;
+    lctx.fillStyle = `rgba(112, 92, 66, ${markAlpha})`;
+    lctx.beginPath();
+    for (let i = 0; i < terrain.roughness.length; i++) {
+      const r = terrain.roughness[i] / TERRAIN_FULL;
+      if (r < 0.1) continue;
+      const n = Math.min(4, 1 + Math.floor(r * 4));
+      const cx = (i % width) * px;
+      const cy = Math.floor(i / width) * px;
+      for (let k = 0; k < n; k++) {
+        const h = Math.imul(i * 9 + k + 1, 2654435761) >>> 0;
+        const mx = cx + 1 + ((h & 255) / 255) * (px - 2);
+        const my = cy + 1 + (((h >>> 8) & 255) / 255) * (px - 2);
+        const rad = 0.7 + (((h >>> 16) & 15) / 15) * 0.9;
+        lctx.moveTo(mx + rad, my);
+        lctx.ellipse(mx, my, rad, rad * 0.75, 0, 0, TAU);
+      }
+    }
+    lctx.fill();
+    lctx.strokeStyle = `rgba(104, 196, 132, ${markAlpha})`;
+    lctx.lineWidth = 0.9;
+    lctx.lineCap = 'round';
+    lctx.beginPath();
+    for (let i = 0; i < terrain.cover.length; i++) {
+      const c = terrain.cover[i] / TERRAIN_FULL;
+      if (c < 0.1) continue;
+      const n = Math.min(4, 1 + Math.floor(c * 4));
+      const cx = (i % width) * px;
+      const cy = Math.floor(i / width) * px;
+      for (let k = 0; k < n; k++) {
+        const h = Math.imul(i * 11 + k + 7, 2246822519) >>> 0;
+        const mx = cx + 1.5 + ((h & 255) / 255) * (px - 3);
+        const my = cy + 3 + (((h >>> 8) & 255) / 255) * (px - 4);
+        lctx.moveTo(mx, my);
+        lctx.lineTo(mx - 1.2, my - 2.6);
+        lctx.moveTo(mx, my);
+        lctx.lineTo(mx + 0.2, my - 3);
+        lctx.moveTo(mx, my);
+        lctx.lineTo(mx + 1.3, my - 2.4);
+      }
+    }
+    lctx.stroke();
+
+    this.terrainLayer = layer;
+    this.terrainLayerFor = terrain;
+    this.terrainLayerEmphasis = emphasis;
+  }
+
+  /** The key for the Terrain layer, in the corner of the view, with how much ground has worn. */
+  private drawTerrainLegend(): void {
+    if (!this.world.terrain) return;
+    const { ctx } = this;
+    const x = this.viewX + 12;
+    const y = this.viewY + 12;
+    ctx.save();
+    ctx.fillStyle = 'rgba(11, 16, 24, 0.82)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, 200, 50, 10);
+    ctx.fill();
+    ctx.stroke();
+    const swatch = (sx: number, color: string, label: string) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(x + sx, y + 11, 12, 12, 3);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.92)';
+      ctx.font = '600 11px system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + sx + 17, y + 17);
+    };
+    swatch(10, 'rgb(150, 115, 70)', 'Rough');
+    swatch(72, 'rgb(70, 150, 100)', 'Cover');
+    swatch(134, 'rgb(236, 218, 168)', 'Worn');
+    ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillText(`${this.terrainWorn} cells worn by use`, x + 10, y + 37);
+    ctx.restore();
   }
 
   private drawCarrion(c: CarrionPatch, detail: number): void {

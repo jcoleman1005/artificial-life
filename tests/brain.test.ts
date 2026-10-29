@@ -1,3 +1,4 @@
+import { maxEnergyOf } from '../src/sim/lifehistory';
 import { describe, expect, it } from 'vitest';
 import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
@@ -143,7 +144,7 @@ describe('Brain controller', () => {
         w.step();
         const cells = new Set<string>();
         for (const o of w.organisms.values()) {
-          if (!(o.energy > 0 && o.energy <= w.config.maxEnergy)) violations.push(`energy ${o.energy}`);
+          if (!(o.energy > 0 && o.energy <= maxEnergyOf(o, w.config))) violations.push(`energy ${o.energy}`);
           const key = `${o.x},${o.y}`;
           if (cells.has(key)) violations.push(`overlap ${key}`);
           cells.add(key);

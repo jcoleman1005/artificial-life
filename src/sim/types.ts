@@ -588,6 +588,19 @@ export interface SimulationConfig {
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
   sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
+  terrainEnabled: boolean; // Per-cell roughness and cover from seeded noise (docs/decisions.md, Terrain fields); off draws nothing and changes nothing
+  terrainScale: number; // Cells per noise lattice step: larger gives broader patches
+  terrainThreshold: number; // Noise below this is open ground (0..1); higher means less rough and sheltered ground
+  terrainRoughnessCoeff: number; // Extra move cost entering a fully rough cell, for a size-1 body (× √size for larger ones)
+  terrainWearEnabled: boolean; // Bodies wear the terrain (trampling, grazing) and worn ground recovers; off keeps it static (needs terrainEnabled)
+  terrainTrampleRoughness: number; // Share of a cell's roughness a crossing removes, × √size (multiplicative)
+  terrainTrampleCover: number; // Share of a cell's cover a crossing removes, × √size
+  terrainGrazeCover: number; // Share of a cell's cover a plant bite removes
+  terrainRecoveryRate: number; // Share of the gap to the original terrain a worn cell closes per tick
+  terrainRecoveryInterval: number; // Ticks between recovery steps (the step closes the share for all of them)
+  terrainCoverShelter: number; // Share of temperature swing and rain/wind exposure a fully covered cell removes (0..1)
+  ledgerEnabled: boolean; // Observer: balance the energy the animals hold every ledgerCheckInterval ticks (docs/decisions.md, Energy ledger)
+  ledgerCheckInterval: number; // Ticks between ledger checks; flows are summed every tick, stored energy only at a check
   immigrationEnabled: boolean; // Newcomers arrive during the run (off: only the founders and their descendants)
   immigrationInterval: number; // Every N ticks newcomers arrive (0 = off)
   immigrationCount: number; // Newcomers per arrival
@@ -700,6 +713,10 @@ export interface SimulationConfig {
   weatherEnabled: boolean;
   weatherMaxFronts: number;
   weatherSpawnInterval: number;
+  thermalPhysicsEnabled: boolean; // Both extremes cost, scaled by size, fat and metabolic rate; off keeps the old cold-only rule (docs/decisions.md, Thermal physics)
+  thermalHeatCoeff: number; // Heat surcharge per unit of temperature above thermalHeatThreshold (the cold surcharge is weatherChillCoeff)
+  thermalHeatThreshold: number; // Temperature above which heat costs; the plenty-season baseline (0.1), so only heat waves cost
+  thermalFatInsulation: number; // Share of the surcharge fat can remove in the cold (and adds in the heat) when fat is full (0..1)
   weatherChillCoeff: number;
   weatherMudCoeff: number;
   weatherWindCoupling: number;
