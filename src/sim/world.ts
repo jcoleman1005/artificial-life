@@ -171,6 +171,11 @@ type WorldCounter = (typeof WORLD_COUNTERS)[number];
 
 const clone = <T>(value: T): T => structuredClone(value);
 
+/** Placeholders for the snapshot fields the lean per-tick snapshot leaves out (never read, never written). */
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
+const EMPTY_PATCHES = new Map<string, FoodPatch>();
+const EMPTY_AT = new Map<string, Organism>();
+
 export class World {
   public readonly config: SimulationConfig;
   public readonly prng: PRNG;
@@ -701,9 +706,23 @@ export class World {
    * Captures an immutable pre-tick snapshot of the world for simultaneous decisions.
    */
   public getSnapshot(): WorldSnapshot {
-    const foodCopy = new Map<string, FoodPatch>();
-    for (const [k, v] of this.foodPatches) {
-      foodCopy.set(k, { ...v });
+    return this.buildSnapshot(true);
+  }
+
+  /**
+   * The snapshot behind getSnapshot. `forStep` builds the lean version the tick
+   * itself uses: the decision phase only reads it and nothing mutates an organism
+   * until it is over, so it references the live organisms instead of copying them,
+   * and leaves out the string-keyed copies (obstacles, foodPatches, organismAt)
+   * that nothing in the engine reads.
+   */
+  private buildSnapshot(full: boolean): WorldSnapshot {
+    let foodCopy: Map<string, FoodPatch> = EMPTY_PATCHES;
+    if (full) {
+      foodCopy = new Map<string, FoodPatch>();
+      for (const [k, v] of this.foodPatches) {
+        foodCopy.set(k, { ...v });
+      }
     }
 
     const { gridWidth, gridHeight } = this.config;
@@ -716,7 +735,12 @@ export class World {
     for (const e of this.eggs.values()) eggGrid[e.y * gridWidth + e.x] += e.child.energy;
     const organismGrid = new Int32Array(gridWidth * gridHeight).fill(-1);
     for (const key of this.obstacles) {
-      const [ox, oy] = key.split(',').map(Number);
+      // "x,y" parsed without allocating (coordinates are non-negative integers).
+      let ox = 0;
+      let i = 0;
+      for (let c = key.charCodeAt(i); c !== 44; c = key.charCodeAt(++i)) ox = ox * 10 + (c - 48);
+      let oy = 0;
+      for (i++; i < key.length; i++) oy = oy * 10 + (key.charCodeAt(i) - 48);
       obstacleGrid[oy * gridWidth + ox] = 1;
     }
     for (const patch of this.foodPatches.values()) {
@@ -724,26 +748,28 @@ export class World {
     }
 
     const orgsList: Organism[] = [];
-    const organismAt = new Map<string, Organism>();
+    const organismAt = full ? new Map<string, Organism>() : EMPTY_AT;
     const signallers: number[] = [];
     for (const org of this.organisms.values()) {
-      const copy: Organism = {
-        ...org,
-        policy: { ...org.policy },
-        lineage: { ...org.lineage },
-        recentHistory: [...org.recentHistory],
-      };
+      const copy: Organism = full
+        ? {
+            ...org,
+            policy: { ...org.policy },
+            lineage: { ...org.lineage },
+            recentHistory: [...org.recentHistory],
+          }
+        : org;
       organismGrid[org.y * gridWidth + org.x] = orgsList.length;
       if (org.signalTick >= 0 && org.signalTick === this.tick - 1) signallers.push(orgsList.length);
       orgsList.push(copy);
-      organismAt.set(`${org.x},${org.y}`, copy);
+      if (full) (organismAt as Map<string, Organism>).set(`${org.x},${org.y}`, copy);
     }
 
     return {
       tick: this.tick,
       gridWidth: this.config.gridWidth,
       gridHeight: this.config.gridHeight,
-      obstacles: new Set(this.obstacles),
+      obstacles: full ? new Set(this.obstacles) : EMPTY_KEYS,
       foodPatches: foodCopy,
       organisms: orgsList,
       organismAt,
@@ -791,7 +817,7 @@ export class World {
     }
 
     // Phase 1: Pre-tick snapshot
-    const snapshot = this.getSnapshot();
+    const snapshot = this.buildSnapshot(false);
 
     // Phase 2: Simultaneous decision evaluation
     // Sort organisms by ID for strictly deterministic order of iteration
