@@ -30,6 +30,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Mating (`sexEnabled`, on; brain only): MATE needs mutual consent the same tick; genes come whole from one parent or the other, then mutate as for clones.
 - Mating rule (2026-10-27; refactored to continuous fecundity and sequential viable allocation): both at own threshold and cost; carrier's continuous clutch partitions viable children sequentially with sub-viable remainder dissipated as metabolic heat, eliminating the catastrophic cliff; no eggs.
 - Clutch gene (`clutchGeneEnabled`, on; trait 46): continuous fecundity partition slider ($f \in [1.0, 6.0]$), founders 1, steps smoothly by `clutchStep` 0.2; matings only.
+- Hybrid incompatibility (`hybridIncompatibilityEnabled`, on; `docs/specs/speciation.md`, 2026-10-28): per-child inviability rising with genome distance between mating parents (hue excluded); preference stays on the hue input; control arm `hybridControlInviability`.
 - Tier 1 physical & energetic basic genes (2026-10-27; size, sensingRadius, metabolicRate, digestiveEfficiency, energyReserveCap with fat drag; traits 47–49 in lifehistory.ts, switches on by default).
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
@@ -73,13 +74,17 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Nutrient cycle (`nutrientCycleEnabled`, on; 2026-10-27): Replaces clockwork calendar seasons with endogenous soil-plant-unit nutrient dynamics; switch off reproduces legacy clock seasons bit-identically.
 - Emergent migration (2026-10-27): Soil depletion and animal metabolic excretion drive migration endogenously; no artificial wandering region coordinates.
 - Plant defense & detox coevolution (`plantDefenseEnabled`, `detoxGeneEnabled`, on; `docs/specs/red_queen.md`, 2026-10-27): Plant defense trait vs. herbivore detox (trait 51); yield discount, acute malaise damage, and `lastBiteYield` brain sensory feedback; switch off reproduces baseline bit-identically.
-- Organism adaptation card & 2.5D ballistic leaping trajectory: Clear biological badges (diet %, metabolism, child care, brain nodes, abilities) and canvas-replica preview blob replace dot chips; true 2.5D airborne jump with terrain drop shadow and fixed-grid trajectory arc (2026-10-28).
+- Organism adaptation card & 2.5D leaping hop: Clear biological badges (diet %, metabolism, child care, brain nodes, abilities) and canvas-replica preview blob replace dot chips; true 2.5D airborne hop with terrain drop shadow (parabolic trajectory guide removed) (2026-10-28).
 - Responsive landscape desktop layout: Canvas on top adapting to landscape; collapsable horizontal multi-column stats dashboard below with chevron toggle, expanding canvas to 100% available screen real estate when collapsed on computer screens (> 500px height); mobile landscape side-panel preserved (2026-10-28).
 - Species detection (`speciesEnabled`, observer only; `docs/specs/species.md`): genome-distance clusters with stable ids, speciation/extinction events, Species colour mode (2026-10-28).
 - Live brain viewer (observer only; `docs/specs/brain-viewer.md`): `inspectBrain` / `BrainTrace`, proven not to change `stateHash()` (2026-10-28).
 - Growth and ageing (`growthEnabled`, `ageingEnabled`, on; `docs/specs/growth.md`): hatch small, grow while fed, maturity gate on REPRODUCE/MATE, senescence and old-age death; brain input `maturity` (2026-10-28).
-- Growth duration gene (`growthGeneEnabled`, on; trait 52): inherited time to adulthood; faster growth costs more heat in total (2026-10-28).
-- Inherited hatch maturity (`hatchMaturityGeneEnabled`, on with growth; trait 53; `docs/specs/hatch-maturity.md`): newborn maturity as a gene, paid through the child's minimum viable energy (2026-10-28).
+- Growth duration gene (`growthGeneEnabled`, on; trait 55): inherited time to adulthood; faster growth costs more heat in total (2026-10-28).
+- Inherited hatch maturity (`hatchMaturityGeneEnabled`, on with growth; trait 56; `docs/specs/hatch-maturity.md`): newborn maturity as a gene, paid through the child's minimum viable energy (2026-10-28).
+- Ecological seasons, weather patterns, and versioning system: 4 ecological seasons and weather patterns replace binary plenty/lean; SemVer v0.2.0 ("Biosphere") displayed in UI (2026-10-28).
+- Predator–prey arms race & chemical defense (`predationDefenseEnabled`, `toughnessGeneEnabled`, `toxicityGeneEnabled`, on; traits 52 & 53, 2026-10-28): Prey armor blunts bites, adds move drag, mass upkeep, and slows contested agility; chemical toxicity inflicts acute malaise on attackers/scavengers; metabolic death pulse propagates downwind; zero scripted behavior.
+- Weather hues & storm cloud parallax: Weather front palettes harmonized with ecological seasons; high-altitude cloud billows with 3D camera parallax, wind drift, terrain overcast shadows, and rain streaks (2026-10-28).
+- Stealth & death pulse dampening (`stealthGeneEnabled`, on; trait 54, 2026-10-28): Ambush bonus, mass upkeep, and dampens/negates violent death pulses emitted by prey or silenced by attackers; zero scripted behavior.
 
 ## Working notes
 - Read `docs/STATUS.md` (short) at the start of a session and update it at the end: current state, next steps. Open `docs/findings.md` (experiment results) and `docs/decisions.md` only when the task touches them.

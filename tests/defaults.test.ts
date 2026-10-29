@@ -32,6 +32,11 @@ describe('Default world', () => {
       dnaGrowableBrain: DEFAULT_CONFIG.dnaGrowableBrain,
       dnaMaxInternal: DEFAULT_CONFIG.dnaMaxInternal,
       dnaUpkeepPerConnection: DEFAULT_CONFIG.dnaUpkeepPerConnection,
+      hybridIncompatibilityEnabled: DEFAULT_CONFIG.hybridIncompatibilityEnabled,
+      hybridTolerance: DEFAULT_CONFIG.hybridTolerance,
+      hybridFull: DEFAULT_CONFIG.hybridFull,
+      hybridMaxInviability: DEFAULT_CONFIG.hybridMaxInviability,
+      hybridControlInviability: DEFAULT_CONFIG.hybridControlInviability,
       clutchGeneEnabled: DEFAULT_CONFIG.clutchGeneEnabled,
       sizeGeneEnabled: DEFAULT_CONFIG.sizeGeneEnabled,
       sensingGeneEnabled: DEFAULT_CONFIG.sensingGeneEnabled,
@@ -42,6 +47,9 @@ describe('Default world', () => {
       nutrientCycleEnabled: DEFAULT_CONFIG.nutrientCycleEnabled,
       plantDefenseEnabled: DEFAULT_CONFIG.plantDefenseEnabled,
       detoxGeneEnabled: DEFAULT_CONFIG.detoxGeneEnabled,
+      predationDefenseEnabled: DEFAULT_CONFIG.predationDefenseEnabled,
+      toughnessGeneEnabled: DEFAULT_CONFIG.toughnessGeneEnabled,
+      stealthGeneEnabled: DEFAULT_CONFIG.stealthGeneEnabled,
     }).toEqual({
       controller: 'brain',
       windfallsEnabled: true,
@@ -69,6 +77,12 @@ describe('Default world', () => {
       dnaGrowableBrain: false,
       dnaMaxInternal: 16,
       dnaUpkeepPerConnection: 0.00005,
+      // Reproductive isolation: on; tolerance/full distance set from the phase 0 diagnostic (Parameter log); no control arm by default.
+      hybridIncompatibilityEnabled: true,
+      hybridTolerance: 0.15,
+      hybridFull: 0.35,
+      hybridMaxInviability: 0.8,
+      hybridControlInviability: 0,
       // The clutch gene (matings only) is a new feature, on by default.
       clutchGeneEnabled: true,
       // Tier 1 physical & energetic architecture basic genes
@@ -82,9 +96,12 @@ describe('Default world', () => {
       weatherEnabled: true,
       // Nutrient cycle: on by default.
       nutrientCycleEnabled: true,
-      // Red Queen: Trophic plant defense and herbivore detox on by default.
+      // Red Queen: Trophic plant defense, herbivore detox, predation defense, and prey armor on by default.
       plantDefenseEnabled: true,
       detoxGeneEnabled: true,
+      predationDefenseEnabled: true,
+      toughnessGeneEnabled: true,
+      stealthGeneEnabled: true,
     });
   });
 

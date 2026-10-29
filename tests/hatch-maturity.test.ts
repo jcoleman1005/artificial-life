@@ -28,10 +28,10 @@ function emptyWorld(config: Partial<SimulationConfig> = {}): { world: World; don
   return { world, donor };
 }
 
-describe('Hatch maturity gene (trait 53)', () => {
+describe('Hatch maturity gene (trait 56)', () => {
   it('is a life-history gene with the logged range, carried only while growth and the gene are on', () => {
-    expect(TraitId.hatchMaturity).toBe(53);
-    const gene = geneForTrait(53)!;
+    expect(TraitId.hatchMaturity).toBe(56);
+    const gene = geneForTrait(56)!;
     const w = new World({ seed: 2, initialOrganisms: 4 });
     const c = w.config;
     expect([gene.founder(c), gene.min(c), gene.max(c), gene.step(c)]).toEqual([0.35, 0.2, 1, 0.05]);
@@ -41,12 +41,12 @@ describe('Hatch maturity gene (trait 53)', () => {
       expect([...w2.organisms.values()].every((o) => o.hatchMaturity === undefined)).toBe(true);
       expect(w2.getMetrics().life?.hatchMaturity ?? null).toBeNull();
     }
-    expect(LIFE_GENES.map((g) => g.traitId)).toContain(53);
+    expect(LIFE_GENES.map((g) => g.traitId)).toContain(56);
   });
 
   it('clamps to its range and round-trips through the genome (a missing gene decodes to the founder value)', () => {
     const w = new World({ seed: 2, initialOrganisms: 1 });
-    const gene = geneForTrait(53)!;
+    const gene = geneForTrait(56)!;
     expect(clampLife(gene, 0.01, w.config)).toBe(w.config.hatchMaturityMin);
     expect(clampLife(gene, 4, w.config)).toBe(w.config.hatchMaturityMax);
     const o = [...w.organisms.values()][0];

@@ -189,6 +189,13 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   dnaGrowableBrain: false, // Stage 3 (needs dnaEnabled): hidden units past the 6 founders are expressed; wrapped unit fields land on them, other wrapped brain keys stay silent (docs/specs/dna.md)
   dnaMaxInternal: 16, // hidden units a genome can address with the growable brain (clamped to 6..256)
   dnaUpkeepPerConnection: 0.00005, // an expressed acquired connection costs as much as a gene
+  // Reproductive isolation (docs/specs/speciation.md); tolerance and full distance are set from the phase 0 diagnostic (docs/findings.md, Parameter log)
+  hybridIncompatibilityEnabled: true,
+  hybridTolerance: 0.15,
+  hybridFull: 0.35,
+  hybridMaxInviability: 0.8,
+  hybridControlInviability: 0,
+  genomeDistanceBrainScale: 1,
   // Weather systems (docs/specs/weather.md)
   weatherEnabled: true,
   weatherMaxFronts: 2,
@@ -229,13 +236,13 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   growthEnergyFloor: 0.4, // growth stalls below this fraction of the current maximum energy
   growthCostPerTick: 0.05, // extra energy (heat) paid on each tick that adds growth, at duration growthTicks
   matureAt: 0.9, // REPRODUCE and MATE are illegal below this maturity
-  growthGeneEnabled: true, // with growth: duration is an inherited gene (trait 52)
+  growthGeneEnabled: true, // with growth: duration is an inherited gene (trait 55)
   growthDurationFounder: 100,
   growthDurationMin: 20,
   growthDurationMax: 800,
   growthDurationStep: 10,
   growthDurationCostExponent: 1.5, // heat per tick x (growthTicks / duration)^1.5: total cost to grow ~ duration^-0.5 (4x faster = 2x the heat, 4x slower = half)
-  hatchMaturityGeneEnabled: true, // with growth: the maturity a newborn starts at is an inherited gene (trait 53); launch cost scales with it
+  hatchMaturityGeneEnabled: true, // with growth: the maturity a newborn starts at is an inherited gene (trait 56); launch cost scales with it
   hatchMaturityMin: 0.2,
   hatchMaturityMax: 1.0,
   hatchMaturityStep: 0.05,
@@ -252,6 +259,29 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   speciesExtinctTicks: 100,
   speciesBrainWeight: 0.3,
   speciesTagWeight: 0.1,
+  // Red Queen Phase 2: Predator–Prey Arms Race
+  predationDefenseEnabled: true,
+  toughnessGeneEnabled: true,
+  toughnessFounder: 0.1,
+  toughnessStep: 0.05,
+  toughnessMin: 0,
+  toughnessMax: 1,
+  toughnessUpkeepRate: 0.025,
+  armorEffectiveness: 0.75,
+  armorDragCoeff: 0.35,
+  toxicityGeneEnabled: true,
+  toxicityFounder: 0.05,
+  toxicityStep: 0.05,
+  toxicityMin: 0,
+  toxicityMax: 1,
+  toxicityUpkeepRate: 0.025,
+  stealthGeneEnabled: true,
+  stealthFounder: 0.1,
+  stealthStep: 0.05,
+  stealthMin: 0,
+  stealthMax: 1,
+  stealthUpkeepRate: 0.02,
+  stealthAmbushBonus: 0.3,
   seed: 42,
 };
 

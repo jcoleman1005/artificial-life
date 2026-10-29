@@ -14,7 +14,7 @@ import type {
   WorldView,
 } from '../sim/protocol';
 import type { SpeciesSnapshot } from '../sim/species';
-import type { CarrionPatch, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
+import type { CarrionPatch, DeathPulse, FoodPatch, FoodRegion, Organism, SimulationConfig, WorldMetrics } from '../sim/types';
 
 export interface ClientEvents {
   /** A new frame arrived. Called before it is applied, so positions can be remembered for glides. */
@@ -82,6 +82,7 @@ export class SimulationClient implements WorldView {
   public foodPatches = new Map<string, FoodPatch>();
   public carrion = new Map<string, CarrionPatch>();
   public eggs = new Map<string, EggView>();
+  public deathPulses: readonly DeathPulse[] = [];
   public foodRegions: readonly FoodRegion[] = [];
   public obstacles: ReadonlySet<string> = new Set();
   public weather: WorldView['weather'] = null;
@@ -204,6 +205,7 @@ export class SimulationClient implements WorldView {
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));
         this.eggs = new Map((message.eggs ?? []).map((e) => [e.id, e]));
+        this.deathPulses = message.deathPulses ?? [];
         if (message.weather) {
           const w = message.weather;
           this.weather = {

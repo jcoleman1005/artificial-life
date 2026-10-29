@@ -90,15 +90,15 @@ export function inheritAbilityEfficiency(parent: number, config: Readonly<Simula
  * squeeze squeezeCostMultiplier + 1 − e (3 − e), leap leapCostMultiplier + 1 − e (3.5 − e).
  */
 export function moveEnergyCost(
-  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity'>>,
+  subject: Readonly<Abilities> | Readonly<Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity' | 'toughness'>>,
   move: { readonly leap: boolean; readonly diagonal: boolean; readonly squeeze: boolean },
   config: Readonly<SimulationConfig>
 ): number {
-  const isOrganism = 'abilities' in subject || 'size' in subject || 'fat' in subject;
+  const isOrganism = 'abilities' in subject || 'size' in subject || 'fat' in subject || 'toughness' in subject;
   const abilities = isOrganism ? (subject as Pick<Organism, 'abilities'>).abilities : (subject as Abilities);
   let moveCost = config.moveCost;
   if (isOrganism) {
-    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity'>;
+    const org = subject as Pick<Organism, 'abilities' | 'size' | 'fat' | 'fatCapacity' | 'maturity' | 'toughness'>;
     // Mass moved: the size gene's, times body scale while growing (1 when grown).
     const size = sizeOf(org, config) * bodyScaleOf(org, config);
     moveCost *= size;
@@ -107,6 +107,12 @@ export function moveEnergyCost(
       if (fat > 0) {
         const capacity = maxEnergyOf(org, config) + Math.max(1, org.fatCapacity ?? 0);
         moveCost *= 1 + config.fatDragCoeff * (fat / capacity);
+      }
+    }
+    if (config.toughnessGeneEnabled && (config.armorDragCoeff ?? 0) > 0) {
+      const toughness = org.toughness ?? 0;
+      if (toughness > 0) {
+        moveCost *= 1 + config.armorDragCoeff * toughness;
       }
     }
   }
@@ -167,12 +173,33 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.detoxUpkeepRate * organism.detox * sizeFactor
       : 0;
 
+  // Armor/Toughness upkeep: maintaining dense hide/carapace scaling with body size
+  const toughnessUpkeep =
+    config.toughnessGeneEnabled && organism.toughness !== undefined && organism.toughness > 0
+      ? config.toughnessUpkeepRate * organism.toughness * sizeFactor
+      : 0;
+
+  // Chemical toxicity upkeep: synthesizing and maintaining defensive toxins scaling with body size
+  const toxicityUpkeep =
+    config.toxicityGeneEnabled && organism.toxicity !== undefined && organism.toxicity > 0
+      ? config.toxicityUpkeepRate * organism.toxicity * sizeFactor
+      : 0;
+
+  // Stealth upkeep: maintaining silent stalking machinery and camouflage scaling with body size
+  const stealthUpkeep =
+    config.stealthGeneEnabled && organism.stealth !== undefined && organism.stealth > 0
+      ? config.stealthUpkeepRate * organism.stealth * sizeFactor
+      : 0;
+
   const total =
     baseCost +
     sensoryUpkeep +
     digestiveUpkeep +
     carnivoreUpkeep +
     detoxUpkeep +
+    toughnessUpkeep +
+    toxicityUpkeep +
+    stealthUpkeep +
     config.carryUpkeep * organism.carryCapacity +
     (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +
@@ -234,12 +261,20 @@ export function carrionFromBody(bodyEnergy: number, config: Readonly<SimulationC
  * meat eater). Prey that moves out of reach that tick escapes regardless.
  */
 export function killChance(
-  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory'>>,
-  prey: Readonly<Pick<Organism, 'energy'>>,
+  attacker: Readonly<Pick<Organism, 'energy' | 'carnivory' | 'stealth'>>,
+  prey: Readonly<Pick<Organism, 'energy' | 'toughness'>>,
   config: Readonly<SimulationConfig>
 ): number {
   const total = attacker.energy + prey.energy;
   const share = total > 0 ? attacker.energy / total : 0;
   const bite = config.bitePowerMin + (1 - config.bitePowerMin) * attacker.carnivory;
-  return share * bite;
+  let chance = share * bite;
+  if (config.stealthGeneEnabled && attacker.stealth !== undefined && attacker.stealth > 0) {
+    chance *= 1 + (config.stealthAmbushBonus ?? 0.3) * attacker.stealth;
+  }
+  if (!config.toughnessGeneEnabled || prey.toughness === undefined || prey.toughness <= 0) {
+    return Math.min(1, chance);
+  }
+  const armorEffectiveness = config.armorEffectiveness ?? 0.75;
+  return Math.min(1, Math.max(0, chance * (1 - armorEffectiveness * prey.toughness)));
 }

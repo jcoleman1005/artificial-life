@@ -379,7 +379,7 @@ describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual rep
     };
     const own = geneCount(encodeOrganismDNA(phenotypeOf(parent('p', 0, 0))));
     const cap = own + 5; // the crossed genome carries ~60 of the 120 silent genes
-    const world = quietWorld({ reproductionThreshold: 40, dnaMaxGenes: cap });
+    const world = quietWorld({ reproductionThreshold: 40, dnaMaxGenes: cap, hybridIncompatibilityEnabled: false }); // hybrid cost off: these parents differ by ~120 silent genes, so a seed-dependent draw could lose the child
     addAll(world, parent('a', 5, 0), parent('b', 6, 1000));
     world.step();
     const child = Array.from(world.organisms.values()).find((o) => o.id !== 'a' && o.id !== 'b')!;
@@ -531,7 +531,7 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
 
   it('conserves energy across a clutch, counting children that find no room as lost', () => {
     // Walls on three sides of both parents leave one free cell each, so a clutch of 4 places 1 or 2.
-    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 1 });
+    const world = quietWorld({ reproductionThreshold: 40, reproductionMetabolismTax: 5, minViableChildEnergy: 1, growthEnabled: false }); // growth off: a newborn's small body would clip the split;
     for (const [x, y] of [[5, 4], [5, 6], [6, 4], [6, 6], [7, 5]]) world.obstacles.add(`${x},${y}`);
     const [a, b] = pair(world, { energy: 90, investment: 0.5, clutchSize: 4 }, { energy: 70, investment: 0.5, clutchSize: 4 });
     world.step();

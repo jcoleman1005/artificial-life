@@ -361,7 +361,7 @@ function fillBrainFeatures(
   out[o++] = sensed.registers[2] ?? 0; // register2
   out[o++] = type === 'EAT_CARRION' ? 1 : 0; // isEatCarrion
   out[o++] = type === 'EAT_CARRION' ? hunger * (carrionYield(organism, config) / config.foodEnergyYield) : 0; // eatCarrionHunger
-  out[o++] = isMove ? aligned(dx, dy, sensed.nearestCarrion, 0.25) * organism.carnivory : 0; // moveCarrion
+  out[o++] = isMove ? aligned(dx, dy, sensed.nearestCarrion, 0.25) * (config.predationDefenseEnabled !== false ? 1 : organism.carnivory) : 0; // moveCarrion
   out[o++] = isAttack ? 1 : 0; // isAttack
   out[o++] = isAttack ? (action.preyKillChance ?? 0) : 0; // attackKillChance
   out[o++] = isAttack ? (action.preySimilarity ?? 0) : 0; // attackAlike

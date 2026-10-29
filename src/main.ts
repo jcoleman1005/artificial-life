@@ -24,6 +24,7 @@ import type { SimulationConfig } from './sim/types';
 import type { ExperimentToggles } from './ui/controls';
 import { AUTOSAVE_KEY, deleteWorld, getWorld, infoFor, listBranches, putWorld } from './ui/saved-worlds';
 import { DEFAULT_CONFIG, FOOD_LAYOUTS, WORLD_SIZES } from './sim/config';
+import { APP_VERSION, APP_CODENAME } from './version';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) {
@@ -78,7 +79,7 @@ app.innerHTML = `
         <div class="sheet-peek" role="button" tabindex="0" aria-expanded="false" aria-label="Show details">
           <div class="peek-row">
             <span class="peek-pop">0 alive</span>
-            <span class="peek-season">Plenty</span>
+            <span class="peek-season">Spring</span>
             <button type="button" class="round-btn btn-settings" aria-label="Settings">${GEAR_ICON}</button>
           </div>
           <div class="group-strip" role="img" aria-label="Colour groups"></div>
@@ -112,6 +113,7 @@ app.innerHTML = `
             </div>
             <div class="stats-col stats-col-legend">
               ${LEGEND_HTML}
+              <div class="stats-version-info">Artificial Life Lab <strong>v${APP_VERSION}</strong> · ${APP_CODENAME}</div>
             </div>
           </div>
         </section>
@@ -125,7 +127,7 @@ app.innerHTML = `
       <div class="settings-backdrop"></div>
       <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header class="settings-header">
-          <h2 id="settings-title">Settings</h2>
+          <h2 id="settings-title">Settings <span class="settings-version-tag">v${APP_VERSION}</span></h2>
           <button type="button" class="round-btn settings-close" aria-label="Close settings">✕</button>
         </header>
         <div id="settings-container" class="settings-body"></div>
@@ -356,7 +358,7 @@ function refreshPanels(): void {
 
   const groups = colourGroups(sim.organisms.values());
   const population = sim.organisms.size;
-  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config), groups);
+  peekView.render(population, seasonSummary(sim.tick, sim.foodRegions, sim.config, sim.weather), groups);
   const latest = latestEventHTML(sim.worldEvents, sim.foodRegions, sim.config);
   if (peekEvent.innerHTML !== latest) peekEvent.innerHTML = latest;
   pill.setTick(sim.tick);
@@ -470,6 +472,8 @@ const settingsView = new SettingsView(
     overgrazingEnabled: sim.config.overgrazingEnabled ?? false,
     carrionEnabled: sim.config.carrionEnabled ?? true,
     predationEnabled: sim.config.predationEnabled ?? true,
+    toughnessGeneEnabled: sim.config.toughnessGeneEnabled ?? true,
+    stealthGeneEnabled: sim.config.stealthGeneEnabled ?? true,
     sexEnabled: sim.config.sexEnabled ?? true,
     immigrationEnabled: sim.config.immigrationEnabled,
     plantsEnabled: sim.config.plantsEnabled,
@@ -511,6 +515,8 @@ const settingsView = new SettingsView(
     onOvergrazingChange: (enabled) => sim.setConfig({ overgrazingEnabled: enabled }),
     onCarrionChange: (enabled) => sim.setConfig({ carrionEnabled: enabled }),
     onPredationChange: (enabled) => sim.setConfig({ predationEnabled: enabled }),
+    onToughnessChange: (enabled) => sim.setConfig({ toughnessGeneEnabled: enabled }),
+    onStealthChange: (enabled) => sim.setConfig({ stealthGeneEnabled: enabled }),
     onSexChange: (enabled) => sim.setConfig({ sexEnabled: enabled }),
     onControllerChange: (controller) => {
       // Every organism carries both genomes, so this can switch mid-run.
@@ -896,6 +902,8 @@ function togglesFor(config: SimulationConfig): ExperimentToggles {
     overgrazingEnabled: config.overgrazingEnabled ?? false,
     carrionEnabled: config.carrionEnabled ?? true,
     predationEnabled: config.predationEnabled ?? true,
+    toughnessGeneEnabled: config.toughnessGeneEnabled ?? true,
+    stealthGeneEnabled: config.stealthGeneEnabled ?? true,
     sexEnabled: config.sexEnabled ?? true,
     immigrationEnabled: config.immigrationEnabled ?? false,
     plantsEnabled: config.plantsEnabled,

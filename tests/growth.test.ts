@@ -165,12 +165,12 @@ describe('Brain input', () => {
   });
 });
 
-describe('Growth duration gene (trait 52)', () => {
+describe('Growth duration gene (trait 55)', () => {
   const base = { growthEnabled: true, ageingEnabled: false };
 
   it('is a life-history gene with the logged range, carried only while growth and the gene are on', () => {
-    expect(TraitId.growthDuration).toBe(52);
-    const gene = geneForTrait(52)!;
+    expect(TraitId.growthDuration).toBe(55);
+    const gene = geneForTrait(55)!;
     const w = new World({ seed: 2, initialOrganisms: 4 });
     const c = w.config;
     expect([gene.founder(c), gene.min(c), gene.max(c), gene.step(c)]).toEqual([100, 20, 800, 10]);
@@ -180,7 +180,7 @@ describe('Growth duration gene (trait 52)', () => {
       expect([...w2.organisms.values()].every((o) => o.growthDuration === undefined)).toBe(true);
       expect(w2.getMetrics().life?.growthDuration).toBeNull();
     }
-    expect(LIFE_GENES.map((g) => g.traitId)).toContain(52);
+    expect(LIFE_GENES.map((g) => g.traitId)).toContain(55);
   });
 
   it('falls back to the fixed growthTicks without the gene (switch off, or an organism that carries none)', () => {
@@ -216,7 +216,7 @@ describe('Growth duration gene (trait 52)', () => {
     // Isolated: alone, no food needed (energy topped up each tick), breeding impossible (huge threshold), ageing off.
     // The hatch maturity gene is off here (stated): a grown subject can still breed late in the run, and its newborns' heat would depend on the gene's extra draws.
     const run = (duration: number) => {
-      const { world, org } = lone({ ...base, reproductionThreshold: 1e6, seasonLength: 0, windfallsEnabled: false, hatchMaturityGeneEnabled: false }, { maturity: 0.35, growthDuration: duration });
+      const { world, org } = lone({ ...base, reproductionThreshold: 1e6, seasonLength: 0, windfallsEnabled: false, hatchMaturityGeneEnabled: false, thresholdGeneEnabled: false }, { maturity: 0.35, growthDuration: duration }); // threshold gene off too: otherwise the inherited threshold lets the grown loner breed, and its newborns' growth heat enters the ledger
       let matureTick = -1;
       let t = 0;
       while ((world.organisms.get('solo')?.maturity ?? 1) < 1 && t < 5000) {
@@ -264,7 +264,7 @@ describe('Growth duration gene (trait 52)', () => {
       expect([...seen].every((v) => v === 250 || v === 270 || v === 260)).toBe(true);
       expect(seen.has(250) || seen.has(270)).toBe(true);
     }
-    const gene = geneForTrait(52)!;
+    const gene = geneForTrait(55)!;
     const c = new World({ seed: 1 }).config;
     const prng = new PRNG(3);
     const lo = { ...c, traitMutationRate: 1 };

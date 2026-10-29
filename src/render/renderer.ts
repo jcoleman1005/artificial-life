@@ -4,7 +4,7 @@ import { bodyScaleOf } from '../sim/growth';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import { speciesHue } from '../sim/species';
 import type { HeatmapKind } from '../sim/activity';
-import { regionSeasonAt, seasonAt } from '../sim/seasons';
+import { ecologicalSeasonAt, regionEcologicalSeasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
 
@@ -525,13 +525,30 @@ export class CanvasRenderer {
     const { gridWidth, gridHeight } = config;
     const selectedOrg = this.world.getSelectedOrganism();
 
-    // Background: a dark radial gradient, warmer while the world is lean.
-    // With staggered regions there is no world season: each region glows instead.
+    // Background: a dark radial gradient harmonized with the world season and atmosphere.
+    // With staggered regions, each region glows with its specific seasonal hue instead.
     const regionSeasons = config.staggeredSeasons && this.world.foodRegions.length > 0;
-    const lean = !regionSeasons && seasonAt(this.world.tick, config)?.season === 'lean';
+    const ecoSeason = ecologicalSeasonAt(this.world.tick, config);
     const bg = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) * 0.75);
-    bg.addColorStop(0, lean ? '#2a2418' : '#1c2430');
-    bg.addColorStop(1, lean ? '#130f0a' : '#0b1017');
+    if (!regionSeasons && ecoSeason) {
+      if (ecoSeason.season === 'Spring') {
+        bg.addColorStop(0, '#152424');
+        bg.addColorStop(1, '#091314');
+      } else if (ecoSeason.season === 'Summer') {
+        bg.addColorStop(0, '#1c2533');
+        bg.addColorStop(1, '#0b1119');
+      } else if (ecoSeason.season === 'Autumn') {
+        bg.addColorStop(0, '#261e18');
+        bg.addColorStop(1, '#130e0a');
+      } else {
+        // Winter
+        bg.addColorStop(0, '#16202e');
+        bg.addColorStop(1, '#090e17');
+      }
+    } else {
+      bg.addColorStop(0, '#1c2430');
+      bg.addColorStop(1, '#0b1017');
+    }
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
@@ -578,20 +595,34 @@ export class CanvasRenderer {
     // in as cells grow (about 2× zoom on a phone).
     const detail = Math.max(0, Math.min(1, (cellSize - 8) / 4));
 
-    // Fertile regions: soft glows, amber while that region is lean
+    // Fertile regions: soft glows matching each region's ecological season
     for (const region of this.world.foodRegions) {
-      const regionLean = regionSeasonAt(this.world.tick, region, config)?.season === 'lean';
+      const eco = regionEcologicalSeasonAt(this.world.tick, region, config);
       const rx = (region.x + 0.5) * cellSize;
       const ry = (region.y + 0.5) * cellSize;
       const r = (region.radius + 1) * cellSize;
       const glow = ctx.createRadialGradient(rx, ry, 0, rx, ry, r);
-      glow.addColorStop(0, regionLean ? 'rgba(217, 160, 80, 0.22)' : 'rgba(110, 231, 183, 0.13)');
-      glow.addColorStop(0.6, regionLean ? 'rgba(217, 160, 80, 0.10)' : 'rgba(110, 231, 183, 0.06)');
+      const s = eco?.season ?? 'Spring';
+      const c =
+        s === 'Winter'
+          ? '56, 189, 248' // crisp frost blue (Winter)
+          : s === 'Autumn'
+            ? '251, 146, 60' // rich bronze amber (Autumn)
+            : s === 'Summer'
+              ? '250, 204, 21' // radiant sunlight gold (Summer)
+              : '110, 231, 183'; // fresh mint emerald (Spring)
+      glow.addColorStop(0, `rgba(${c}, 0.20)`);
+      glow.addColorStop(0.6, `rgba(${c}, 0.08)`);
       glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(rx, ry, r, 0, TAU);
       ctx.fill();
+    }
+
+    // Terrain cloud overcast shadows for active storm regions
+    if (this.world.weather && config.weatherEnabled) {
+      this.drawStormGroundShadows(inView);
     }
 
     // Rocks: rounded grey blocks, filled as one path
@@ -671,6 +702,11 @@ export class CanvasRenderer {
       this.drawInteractions();
       ctx.globalAlpha = 1;
     }
+
+    // High-altitude atmospheric storm clouds with 3D camera parallax & rain streaks
+    if (this.world.weather && config.weatherEnabled) {
+      this.drawStormCloudParallax(detail);
+    }
     ctx.restore();
   }
 
@@ -713,14 +749,14 @@ export class CanvasRenderer {
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
 
       if (front.type === 'cold_front') {
-        grad.addColorStop(0, `rgba(59, 130, 246, ${0.3 * front.intensity})`);
-        grad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+        grad.addColorStop(0, `rgba(56, 189, 248, ${0.32 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
       } else if (front.type === 'rain_storm') {
-        grad.addColorStop(0, `rgba(16, 185, 129, ${0.28 * front.intensity})`);
-        grad.addColorStop(1, 'rgba(16, 185, 129, 0)');
+        grad.addColorStop(0, `rgba(99, 102, 241, ${0.30 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(99, 102, 241, 0)');
       } else if (front.type === 'heat_wave') {
-        grad.addColorStop(0, `rgba(245, 158, 11, ${0.28 * front.intensity})`);
-        grad.addColorStop(1, 'rgba(245, 158, 11, 0)');
+        grad.addColorStop(0, `rgba(251, 191, 36, ${0.30 * front.intensity})`);
+        grad.addColorStop(1, 'rgba(251, 191, 36, 0)');
       }
 
       ctx.fillStyle = grad;
@@ -759,6 +795,139 @@ export class CanvasRenderer {
         ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
         ctx.moveTo(x1, y1);
         ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
+        ctx.stroke();
+      }
+    }
+  }
+
+  /**
+   * Casts soft terrain overcast shadows beneath active storm regions.
+   * Rendered on the ground layer before plants and organisms.
+   */
+  private drawStormGroundShadows(inView: (x: number, y: number) => boolean): void {
+    if (!this.world.weather) return;
+    const { ctx, cellSize } = this;
+    for (const front of this.world.weather.fronts) {
+      if (front.type !== 'rain_storm') continue;
+      const r = front.radius * cellSize;
+      const gx = (front.x + 0.5) * cellSize;
+      const gy = (front.y + 0.5) * cellSize;
+      if (!inView(Math.round(front.x), Math.round(front.y))) continue;
+
+      const shadow = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
+      shadow.addColorStop(0, `rgba(15, 23, 42, ${0.30 * front.intensity})`);
+      shadow.addColorStop(0.6, `rgba(15, 23, 42, ${0.15 * front.intensity})`);
+      shadow.addColorStop(1, 'rgba(15, 23, 42, 0)');
+      ctx.fillStyle = shadow;
+      ctx.beginPath();
+      ctx.arc(gx, gy, r, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  /**
+   * Floating atmospheric storm clouds with 3D camera parallax, procedural
+   * cumulus billows, and falling rain streaks. Rendered at high elevation above organisms.
+   */
+  private drawStormCloudParallax(detail: number): void {
+    if (!this.world.weather) return;
+    const { ctx, cellSize } = this;
+    const weather = this.world.weather;
+    const animTime = performance.now() * 0.001;
+
+    // Camera center in world space
+    const camX = this.viewX + this.width * 0.5;
+    const camY = this.viewY + this.height * 0.5;
+    const PARALLAX_FACTOR = 0.12;
+
+    for (const front of weather.fronts) {
+      if (front.type !== 'rain_storm') continue;
+      const r = front.radius * cellSize;
+      const gx = (front.x + 0.5) * cellSize;
+      const gy = (front.y + 0.5) * cellSize;
+
+      // Parallax displacement from camera line-of-sight
+      const plx = (gx - camX) * PARALLAX_FACTOR;
+      const ply = (gy - camY) * PARALLAX_FACTOR;
+
+      // Wind animation drift
+      const wind = weather.getWind(front.x, front.y);
+      const windSpeed = Math.hypot(wind.wx, wind.wy);
+      const driftLen = cellSize * 2.0;
+      const driftPhase = (animTime * 0.3 * Math.max(0.15, windSpeed)) % 1;
+      const dirX = windSpeed > 0.02 ? wind.wx / windSpeed : 1;
+      const dirY = windSpeed > 0.02 ? wind.wy / windSpeed : 0.2;
+      const driftX = dirX * driftPhase * driftLen;
+      const driftY = dirY * driftPhase * driftLen;
+
+      const cloudX = gx + plx + driftX;
+      const cloudY = gy + ply + driftY;
+
+      // Skip drawing if completely off-screen
+      const margin = r * 1.5;
+      if (
+        cloudX + margin < this.viewX ||
+        cloudX - margin > this.viewX + this.width ||
+        cloudY + margin < this.viewY ||
+        cloudY - margin > this.viewY + this.height
+      ) {
+        continue;
+      }
+
+      // 1. Broad atmospheric overcast mist envelope
+      const mistGrad = ctx.createRadialGradient(cloudX, cloudY, 0, cloudX, cloudY, r * 1.15);
+      mistGrad.addColorStop(0, `rgba(71, 85, 105, ${0.40 * front.intensity})`);
+      mistGrad.addColorStop(0.55, `rgba(100, 116, 139, ${0.24 * front.intensity})`);
+      mistGrad.addColorStop(0.85, `rgba(148, 163, 184, ${0.10 * front.intensity})`);
+      mistGrad.addColorStop(1, 'rgba(148, 163, 184, 0)');
+      ctx.fillStyle = mistGrad;
+      ctx.beginPath();
+      ctx.arc(cloudX, cloudY, r * 1.15, 0, TAU);
+      ctx.fill();
+
+      // 2. Overlapping cumulus billow puffs
+      const lobeCount = 7;
+      for (let i = 0; i < lobeCount; i++) {
+        const lobeAngle = (i / lobeCount) * TAU + (((front.id * 17 + i * 23) % 100) / 100) * 0.5;
+        const lobeDist = r * (0.32 + 0.38 * (((front.id * 31 + i * 47) % 100) / 100));
+        const lobeR = r * (0.38 + 0.22 * (((front.id * 43 + i * 59) % 100) / 100));
+        const lx = cloudX + Math.cos(lobeAngle) * lobeDist;
+        const ly = cloudY + Math.sin(lobeAngle) * lobeDist;
+
+        const puffGrad = ctx.createRadialGradient(lx - lobeR * 0.15, ly - lobeR * 0.15, 0, lx, ly, lobeR);
+        puffGrad.addColorStop(0, `rgba(226, 232, 240, ${0.35 * front.intensity})`);
+        puffGrad.addColorStop(0.45, `rgba(148, 163, 184, ${0.25 * front.intensity})`);
+        puffGrad.addColorStop(0.8, `rgba(71, 85, 105, ${0.12 * front.intensity})`);
+        puffGrad.addColorStop(1, 'rgba(71, 85, 105, 0)');
+        ctx.fillStyle = puffGrad;
+        ctx.beginPath();
+        ctx.arc(lx, ly, lobeR, 0, TAU);
+        ctx.fill();
+      }
+
+      // 3. Falling rain streaks within the storm radius at LOD >= 0.15
+      if (detail >= 0.15 && cellSize >= 5) {
+        const rainDrops = Math.min(28, Math.round(14 + front.radius * 1.1));
+        const rainAngle = Math.atan2(wind.wy + 0.75, wind.wx);
+        const rainLen = Math.max(3.5, cellSize * 0.45);
+        const cosA = Math.cos(rainAngle);
+        const sinA = Math.sin(rainAngle);
+
+        ctx.strokeStyle = `rgba(199, 210, 254, ${0.32 * front.intensity})`;
+        ctx.lineWidth = Math.max(0.65, cellSize * 0.03);
+        ctx.beginPath();
+        for (let i = 0; i < rainDrops; i++) {
+          const dropSeed = front.id * 97 + i * 131;
+          const baseR = Math.sqrt(((dropSeed * 17) % 100) / 100) * r * 0.85;
+          const baseAngle = (((dropSeed * 29) % 100) / 100) * TAU;
+          const fallOffset = (animTime * 160 + dropSeed * 13) % (r * 1.4);
+          const dx0 = gx + Math.cos(baseAngle) * baseR + cosA * (fallOffset - r * 0.7);
+          const dy0 = gy + Math.sin(baseAngle) * baseR + sinA * (fallOffset - r * 0.7);
+          if (Math.hypot(dx0 - gx, dy0 - gy) <= r * 0.92) {
+            ctx.moveTo(dx0, dy0);
+            ctx.lineTo(dx0 + cosA * rainLen, dy0 + sinA * rainLen);
+          }
+        }
         ctx.stroke();
       }
     }
@@ -837,6 +1006,19 @@ export class CanvasRenderer {
       ctx.strokeStyle = `hsla(${this.hueOf(org)}, 85%, 70%, ${(0.55 * (1 - p) + 0.08).toFixed(3)})`;
       diamond(cx, cy, Math.max(0.1, p) * (reach + 0.5) * cellSize, org.x, org.y);
       ctx.stroke();
+    }
+    if (this.world.deathPulses) {
+      for (const dp of this.world.deathPulses) {
+        const cx = (dp.x + 0.5) * cellSize;
+        const cy = (dp.y + 0.5) * cellSize;
+        const p = this.progress;
+        const pulseReach = reach * Math.max(0.4, dp.size * (dp.power ?? 1));
+        ctx.strokeStyle = `hsla(${Math.round(dp.tag)}, 95%, 65%, ${(0.7 * (1 - p) + 0.12).toFixed(3)})`;
+        ctx.setLineDash([Math.max(2, cellSize * 0.15), Math.max(2, cellSize * 0.15)]);
+        diamond(cx, cy, Math.max(0.1, p) * (pulseReach + 0.5) * cellSize, dp.x, dp.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
     }
     if (selected) {
       const [cx, cy] = this.displayCentre(selected);
@@ -987,6 +1169,15 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Chemically defended / toxic egg: subtle magenta/purple protective tint
+    if (egg.toxicity && egg.toxicity > 0.05) {
+      ctx.strokeStyle = `hsla(285, 80%, 65%, ${(0.3 + 0.45 * egg.toxicity).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.9, cellSize * (0.03 + 0.04 * egg.toxicity));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx + Math.max(1, cellSize * 0.04), ry + Math.max(1, cellSize * 0.04), 0, 0, TAU);
+      ctx.stroke();
+    }
+
     if (egg.id === this.selectedEggId) {
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
       ctx.lineWidth = 2;
@@ -1006,6 +1197,15 @@ export class CanvasRenderer {
 
     const isFresh = c.stock >= baseEnergy * 0.7;
     const isDecomposing = !isFresh && c.stock >= baseEnergy * 0.3;
+
+    // Chemical defense / toxicity aura
+    if (c.toxicity && c.toxicity > 0.05) {
+      ctx.strokeStyle = `hsla(285, 75%, 60%, ${(0.3 + 0.4 * c.toxicity).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, cellSize * 0.04);
+      ctx.beginPath();
+      ctx.arc(cx, cy, cellSize * 0.46 * size, 0, TAU);
+      ctx.stroke();
+    }
 
     if (isFresh) {
       // Fresh carcass: vivid crimson circle with fleshy tint
@@ -1433,8 +1633,42 @@ export class CanvasRenderer {
       ctx.stroke();
     }
 
+    // Prey armor / toughness: hardened chitinous carapace outer rim
+    const toughness = config.toughnessGeneEnabled ? (org.toughness ?? 0) : 0;
+    if (toughness > 0.1) {
+      ctx.strokeStyle = `hsla(38, 70%, 75%, ${(0.4 + 0.45 * toughness).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1.0, r * (0.1 + 0.12 * toughness));
+      ctx.setLineDash([Math.max(2.5, r * 0.28), Math.max(1.5, r * 0.16)]);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + Math.max(1.0, r * 0.1), b + Math.max(1.0, r * 0.1), heading, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Chemical toxicity: vivid aposematic venom rim
+    const tox = config.toxicityGeneEnabled ? (org.toxicity ?? 0) : 0;
+    if (tox > 0.1) {
+      ctx.strokeStyle = `hsla(285, 85%, 65%, ${(0.35 + 0.45 * tox).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, r * (0.08 + 0.1 * tox));
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + Math.max(0.8, r * 0.08), b + Math.max(0.8, r * 0.08), heading, 0, TAU);
+      ctx.stroke();
+    }
+
+    // Stealth: cryptic ambush camouflage stippled rim
+    const stealth = config.stealthGeneEnabled ? (org.stealth ?? 0) : 0;
+    if (stealth > 0.1) {
+      ctx.strokeStyle = `hsla(160, 45%, 65%, ${(0.3 + 0.4 * stealth).toFixed(2)})`;
+      ctx.lineWidth = Math.max(0.8, r * (0.08 + 0.1 * stealth));
+      ctx.setLineDash([Math.max(1.5, r * 0.15), Math.max(2, r * 0.25)]);
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, a + Math.max(0.6, r * 0.08), b + Math.max(0.6, r * 0.08), heading, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // Acute toxin distress spasm glyph: vibrating amber-magenta jagged distress ring / starburst
-    if (eating && org.lastBiteYield !== undefined && org.lastBiteYield < 0.775) {
+    if ((eating || type.startsWith('ATTACK_')) && org.lastBiteYield !== undefined && org.lastBiteYield < 0.775) {
       const malaiseNorm = Math.min(1, (0.775 - org.lastBiteYield) / 0.4);
       const ringBase = Math.max(a, b) + Math.max(1.8, cellSize * 0.12);
       const points = 10;
@@ -1535,66 +1769,17 @@ export class CanvasRenderer {
 
     const moving = isMoveAction(type) || isLeapAction(type);
     if (moving && succeeded) {
-      if (isLeapAction(type)) {
-        // Stationary 2.5D ballistic trajectory guide anchored to fixed grid cells
-        const [hx, hy] = directionOf(type);
-        const originPx = (org.x - 2 * hx + 0.5) * cellSize;
-        const originPy = (org.y - 2 * hy + 0.5) * cellSize;
-        const targetPx = (org.x + 0.5) * cellSize;
-        const targetPy = (org.y + 0.5) * cellSize;
-        const midPx = (originPx + targetPx) / 2;
-        const midPy = (originPy + targetPy) / 2;
-        const Hmax = cellSize * 0.85;
-        const cpx = midPx;
-        const cpy = midPy - 2 * Hmax;
-
-        // Subtle ground track connecting origin to destination
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
-        ctx.lineWidth = Math.max(0.9, stroke * 0.65);
-        ctx.setLineDash([cellSize * 0.12, cellSize * 0.12]);
-        ctx.beginPath();
-        ctx.moveTo(originPx, originPy);
-        ctx.lineTo(targetPx, targetPy);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Ballistic parabolic trajectory curve in 2.5D perspective
-        ctx.strokeStyle = GLYPH;
-        ctx.lineWidth = stroke;
-        ctx.beginPath();
-        ctx.moveTo(originPx, originPy);
-        ctx.quadraticCurveTo(cpx, cpy, targetPx, targetPy);
-        ctx.stroke();
-
-        // Arrowhead at landing
-        const tx = targetPx - cpx;
-        const ty = targetPy - cpy;
-        const tLen = Math.hypot(tx, ty) || 1;
-        const ux = tx / tLen;
-        const uy = ty / tLen;
-        const wing = r * 0.32;
-        const wingX = targetPx - ux * wing;
-        const wingY = targetPy - uy * wing;
-        const px = -uy * wing * 0.65;
-        const py = ux * wing * 0.65;
-        ctx.beginPath();
-        ctx.moveTo(wingX + px, wingY + py);
-        ctx.lineTo(targetPx, targetPy);
-        ctx.lineTo(wingX - px, wingY - py);
-        ctx.stroke();
-      } else {
-        // Moving: a white arrow along the way it went
-        const [hx, hy] = directionOf(type);
-        const tip = r * 0.5;
-        const wing = r * 0.28;
-        ctx.beginPath();
-        ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
-        ctx.lineTo(cx + hx * tip, cy + hy * tip);
-        ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
-        ctx.lineTo(cx + hx * tip, cy + hy * tip);
-        ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
-        ctx.stroke();
-      }
+      // Moving (or leaping): a white arrow along the way it went
+      const [hx, hy] = directionOf(type);
+      const tip = r * 0.5;
+      const wing = r * 0.28;
+      ctx.beginPath();
+      ctx.moveTo(cx - hx * r * 0.4, cy - hy * r * 0.4);
+      ctx.lineTo(cx + hx * tip, cy + hy * tip);
+      ctx.moveTo(cx + hx * (tip - wing) - hy * wing, cy + hy * (tip - wing) + hx * wing);
+      ctx.lineTo(cx + hx * tip, cy + hy * tip);
+      ctx.lineTo(cx + hx * (tip - wing) + hy * wing, cy + hy * (tip - wing) - hx * wing);
+      ctx.stroke();
     } else if (moving) {
       // Blocked: a white bar on the side it pushed toward
       const [hx, hy] = directionOf(type);

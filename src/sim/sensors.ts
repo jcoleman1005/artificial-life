@@ -220,6 +220,32 @@ export function senseEnvironment(
     }
   }
 
+  // Involuntary death pulses from violently killed organisms also propagate into the signal grid
+  if (snapshot.deathPulses) {
+    for (const pulse of snapshot.deathPulses) {
+      const dx = pulse.x - x;
+      const dy = pulse.y - y;
+      const distance = Math.abs(dx) + Math.abs(dy);
+      let effectiveDist = distance;
+      if (config.weatherEnabled && wind && config.weatherSignalDrift > 0 && distance > 0) {
+        const align = (-dx * wind.wx + -dy * wind.wy) / distance;
+        effectiveDist = Math.max(0, distance - config.weatherSignalDrift * align);
+      }
+      const maxReach = config.signalRadius * Math.max(0.4, pulse.size * (pulse.power ?? 1));
+      if (effectiveDist > maxReach) continue;
+      if (!nearestSignal || effectiveDist < nearestSignal.distance) {
+        nearestSignal = {
+          x: pulse.x,
+          y: pulse.y,
+          distance: effectiveDist,
+          dx,
+          dy,
+          value: Number(tagSimilarity(organism.tag, pulse.tag).toFixed(3)),
+        };
+      }
+    }
+  }
+
   // Microclimate at organism's current position (x, y)
   let weatherTemp = 0;
   let weatherRain = 0;

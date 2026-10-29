@@ -54,6 +54,12 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   }
   if (o.growthDuration !== undefined) out.push(pill('Growth', `${o.growthDuration.toFixed(0)} fed ticks to adult`));
   if (o.hatchMaturity !== undefined) out.push(pill('Born at', `${Math.round(o.hatchMaturity * 100)}% grown`));
+  if (c.toughnessGeneEnabled && o.toughness !== undefined) {
+    out.push(pill('Armor', `${Math.round(o.toughness * 100)}%`));
+  }
+  if (c.stealthGeneEnabled && o.stealth !== undefined) {
+    out.push(pill('Stealth', `${Math.round(o.stealth * 100)}%`));
+  }
   return out.join('');
 }
 
@@ -129,6 +135,7 @@ export function genomeTraitRows(o: Readonly<Organism>, c: Readonly<SimulationCon
     detox: 'Detoxification',
     growthDuration: 'Growth duration',
     hatchMaturity: 'Hatch maturity',
+    toughness: 'Prey armor / toughness',
   };
   for (const g of LIFE_GENES) {
     add(lifeLabels[g.field] ?? g.field, g.traitId, o[g.field], g.min(c), g.max(c), g.field === 'reproThreshold' || g.field === 'fatCapacity' ? 0 : 2);
@@ -695,6 +702,7 @@ export class InspectorView {
           <div class="summary-pill"><span class="pill-title">Hatch Yield</span><span class="pill-value">~${Math.floor(egg.energy * config.eggHatchEfficiency)} E</span></div>
           <div class="summary-pill"><span class="pill-title">Generation</span><span class="pill-value">Gen ${egg.generation}</span></div>
           <div class="summary-pill"><span class="pill-title">Body Size</span><span class="pill-value">${(detail?.size ?? egg.size ?? 1).toFixed(2)}×</span></div>
+          ${egg.toxicity !== undefined && egg.toxicity > 0 ? `<div class="summary-pill"><span class="pill-title">Toxicity</span><span class="pill-value">${(egg.toxicity * 100).toFixed(0)}%</span></div>` : ''}
           <div class="summary-pill"><span class="pill-title">Diet</span><span class="pill-value">${detail ? dietLabel(detail.carnivory) : 'Herbivore'}</span></div>
           <div class="summary-pill"><span class="pill-title">Abilities</span><span class="pill-value">${detail ? abilityList(detail) : 'None'}</span></div>
         </div>

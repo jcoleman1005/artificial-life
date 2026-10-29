@@ -15,6 +15,7 @@ export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
   Abilities,
   CarrionPatch,
+  DeathPulse,
   DecisionOutcome,
   FoodPatch,
   FoodRegion,
@@ -63,6 +64,9 @@ export interface OrganismView {
   /** Maturity this organism's newborns start at (hatch maturity gene). */
   readonly hatchMaturity?: number;
   readonly maturity?: number;
+  readonly toughness?: number;
+  readonly toxicity?: number;
+  readonly stealth?: number;
   readonly lastBiteYield?: number;
   /** Life-history genes the colour modes and card read (absent while their switch is off). */
   readonly metabolicRate?: number;
@@ -86,6 +90,7 @@ export interface EggView {
   readonly size: number;
   readonly parentId: string | null;
   readonly generation: number;
+  readonly toxicity?: number;
 }
 
 /** What the renderer reads from a world. Both World and the page's mirror satisfy it. */
@@ -99,6 +104,7 @@ export interface WorldView {
   readonly eggs: ReadonlyMap<string, EggView>;
   readonly foodRegions: readonly FoodRegion[];
   readonly obstacles: ReadonlySet<string>;
+  readonly deathPulses?: readonly DeathPulse[];
   readonly weather?: {
     readonly fronts: readonly WeatherFront[];
     getWind(x: number, y: number): { wx: number; wy: number };
@@ -133,6 +139,9 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.growthDuration !== undefined ? { growthDuration: org.growthDuration } : {}),
     ...(org.hatchMaturity !== undefined ? { hatchMaturity: org.hatchMaturity } : {}),
     ...(org.maturity !== undefined ? { maturity: org.maturity } : {}),
+    ...(org.toughness !== undefined ? { toughness: org.toughness } : {}),
+    ...(org.toxicity !== undefined ? { toxicity: org.toxicity } : {}),
+    ...(org.stealth !== undefined ? { stealth: org.stealth } : {}),
     ...(org.lastBiteYield !== undefined ? { lastBiteYield: org.lastBiteYield } : {}),
     ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0
       ? { acquiredBrainUnits: org.circuit.effectiveAcquiredUnits }
@@ -219,6 +228,8 @@ export type FromWorker =
       readonly carrion: readonly CarrionPatch[];
       /** Eggs waiting for food (absent from older servers). */
       readonly eggs?: readonly EggView[];
+      /** Active involuntary death pulses emitted on violent kills. */
+      readonly deathPulses?: readonly DeathPulse[];
       /** Weather state for the overlay (absent when weather is off). */
       readonly weather?: {
         readonly fronts: readonly WeatherFront[];
