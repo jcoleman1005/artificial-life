@@ -79,6 +79,9 @@ Values chosen or changed with a behaviour in mind (AGENTS.md, Engineering rules;
 | 2026-10-28 | Energy cap clamp | end-of-tick clamp, give threshold and brain/dial headroom use `maxEnergy` → `maxEnergyOf` (`maxEnergy × size`) | Not tuning: a consistency bug. The eat gate and fat logic already used the size-scaled cap, so a size > 1 body ate toward its cap and was clamped back to 100 at end of tick. Size 1 (all founders) is unchanged; worlds whose bodies evolved size ≠ 1 differ from before. | No (bug fix). |
 | 2026-10-28 | Carrion fixed part | `carrionBodyEnergy` → `carrionBodyEnergy` × size | Design decision (size physics): a bigger body leaves more. Not tuning; the no-free-energy invariant is tested across sizes 0.4–2.5. Size 1 unchanged. | No (design decision). |
 | 2026-10-29 | `ledgerCheckInterval` | 25 | Observer only: how often the energy ledger sums the animals' stored energy. Flows are added every tick, so the interval sets only the summing cost; tests use 1. | No (observer; changes no outcome). |
+| 2026-10-29 | `thermalPhysicsEnabled` | on (off = the old cold-only rule) | Design decision (thermal physics, `docs/specs/physics.md`): both extremes cost, scaled by body. Off reproduces the previous fingerprint exactly. | No (design decision). |
+| 2026-10-29 | `thermalHeatCoeff`, `thermalHeatThreshold` | 0.4, 0.1 | The heat surcharge is the same size as the cold one (`weatherChillCoeff` 0.4), and the threshold is the plenty-season baseline temperature, so only heat waves cost and the everyday economy is unchanged. Chosen a priori for symmetry and continuity, not to make a behaviour appear. | No (chosen a priori). |
+| 2026-10-29 | `thermalFatInsulation` | 0.5 | Full fat halves the cold surcharge and raises the heat surcharge by half. A round value chosen before any run; the exponents (size^∓1/3, metabolic rate to the first power) are fixed physics, not tuned. | No (chosen a priori). |
 
 ## Engine
 

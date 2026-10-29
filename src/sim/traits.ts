@@ -1,6 +1,6 @@
 import type { PRNG } from './prng';
 import type { Abilities, AbilityName, Organism, SimulationConfig } from './types';
-import { carnivoreEfficiencyOf, digestiveEfficiencyOf, maxEnergyOf, sizeOf } from './lifehistory';
+import { carnivoreEfficiencyOf, digestiveEfficiencyOf, maxEnergyOf, metabolicRateOf, sizeOf } from './lifehistory';
 
 /** Carry capacity for a founder (pioneer or immigrant): 1–3 units. */
 export function founderCarryCapacity(config: Readonly<SimulationConfig>, prng: PRNG): number {
@@ -181,6 +181,44 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
     // Stage 3: each expressed connection of an acquired hidden unit (past the founders' 6) costs upkeep; founders pay 0.
     (config.dnaEnabled && config.dnaGrowableBrain && organism.circuit ? config.dnaUpkeepPerConnection * organism.circuit.acquiredConnections : 0)
   );
+}
+
+/**
+ * Upkeep multiplier from local temperature (docs/decisions.md, "Thermal physics"). `temp` is the
+ * weather temperature in [-1, 1].
+ *
+ * Without thermalPhysicsEnabled this is the old rule: cold only, `1 + weatherChillCoeff × |temp|`
+ * below zero, the same for every body.
+ *
+ * With it, both extremes cost and the body sets the scale. A body makes heat in proportion to its
+ * metabolic rate and loses it through its surface, which relative to its volume is size^(-1/3):
+ *   cold: 1 + chill × cold × size^(-1/3) × (1 − fatInsulation × fatRatio) / metabolicRate
+ *   heat: 1 + heat × hot × size^(+1/3) × (1 + fatInsulation × fatRatio) × metabolicRate
+ * where cold = max(0, −temp), hot = max(0, temp − thermalHeatThreshold) and fatRatio = fat/fatCapacity.
+ * So small, lean, slow-burning bodies suffer most in the cold, and large, fat, fast-burning bodies
+ * in the heat. A founder-shaped body (size 1, rate 1, no fat) pays exactly the old cold cost.
+ * The exponents are fixed physics (surface area to volume, heat made ∝ metabolic rate).
+ */
+export function thermalUpkeepFactor(
+  organism: Readonly<Pick<Organism, 'size' | 'metabolicRate' | 'fat' | 'fatCapacity'>>,
+  temp: number,
+  config: Readonly<SimulationConfig>
+): number {
+  if (!config.thermalPhysicsEnabled) {
+    return temp < 0 ? 1 + config.weatherChillCoeff * Math.abs(temp) : 1;
+  }
+  const size = sizeOf(organism, config);
+  const rate = metabolicRateOf(organism, config);
+  const fatRatio =
+    config.fatEnabled && (organism.fatCapacity ?? 0) > 0 ? Math.min(1, Math.max(0, (organism.fat ?? 0) / (organism.fatCapacity ?? 1))) : 0;
+  if (temp < 0) {
+    const insulation = 1 - config.thermalFatInsulation * fatRatio;
+    return 1 + (config.weatherChillCoeff * -temp * Math.pow(size, -1 / 3) * insulation) / rate;
+  }
+  const hot = temp - config.thermalHeatThreshold;
+  if (hot <= 0) return 1;
+  const trapped = 1 + config.thermalFatInsulation * fatRatio;
+  return 1 + config.thermalHeatCoeff * hot * Math.pow(size, 1 / 3) * trapped * rate;
 }
 
 /** A founder's diet: mostly a plant eater (carnivory 0–0.2), so any taste for meat has to evolve. */

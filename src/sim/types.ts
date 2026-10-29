@@ -680,6 +680,10 @@ export interface SimulationConfig {
   weatherEnabled: boolean;
   weatherMaxFronts: number;
   weatherSpawnInterval: number;
+  thermalPhysicsEnabled: boolean; // Both extremes cost, scaled by size, fat and metabolic rate; off keeps the old cold-only rule (docs/decisions.md, Thermal physics)
+  thermalHeatCoeff: number; // Heat surcharge per unit of temperature above thermalHeatThreshold (the cold surcharge is weatherChillCoeff)
+  thermalHeatThreshold: number; // Temperature above which heat costs; the plenty-season baseline (0.1), so only heat waves cost
+  thermalFatInsulation: number; // Share of the surcharge fat can remove in the cold (and adds in the heat) when fat is full (0..1)
   weatherChillCoeff: number;
   weatherMudCoeff: number;
   weatherWindCoupling: number;

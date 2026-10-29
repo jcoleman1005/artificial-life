@@ -46,6 +46,7 @@ import {
   inheritCarryCapacity,
   inheritDispersal,
   metabolismCost,
+  thermalUpkeepFactor,
   plantYield,
   moveEnergyCost,
   splitDiets,
@@ -1019,9 +1020,7 @@ export class World {
       if (this.weather && this.config.weatherEnabled) {
         const season = seasonAt(this.tick, this.config)?.season ?? null;
         const temp = this.weather.getTemperature(organism.x, organism.y, season);
-        if (temp < 0) {
-          metabolism *= (1 + this.config.weatherChillCoeff * Math.abs(temp));
-        }
+        metabolism *= thermalUpkeepFactor(organism, temp, this.config);
       }
       // Resting saves upkeep in proportion to torpor depth.
       if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);

@@ -25,6 +25,10 @@ describe('Default world', () => {
       sexEnabled: DEFAULT_CONFIG.sexEnabled,
       immigrationEnabled: DEFAULT_CONFIG.immigrationEnabled,
       ledgerEnabled: DEFAULT_CONFIG.ledgerEnabled,
+      thermalPhysicsEnabled: DEFAULT_CONFIG.thermalPhysicsEnabled,
+      thermalHeatCoeff: DEFAULT_CONFIG.thermalHeatCoeff,
+      thermalHeatThreshold: DEFAULT_CONFIG.thermalHeatThreshold,
+      thermalFatInsulation: DEFAULT_CONFIG.thermalFatInsulation,
       ledgerCheckInterval: DEFAULT_CONFIG.ledgerCheckInterval,
       plantsEnabled: DEFAULT_CONFIG.plantsEnabled,
       dnaEnabled: DEFAULT_CONFIG.dnaEnabled,
@@ -62,6 +66,11 @@ describe('Default world', () => {
       immigrationEnabled: false,
       // The energy ledger is an observer: on, and a check every 25 ticks.
       ledgerEnabled: true,
+      // Thermal physics: both extremes cost; the heat threshold sits at the plenty baseline so everyday costs are unchanged.
+      thermalPhysicsEnabled: true,
+      thermalHeatCoeff: 0.4,
+      thermalHeatThreshold: 0.1,
+      thermalFatInsulation: 0.5,
       ledgerCheckInterval: 25,
       plantsEnabled: true,
       // DNA Stage 1 is on; the Stage 1b toggles and Stage 2 stay off until their gates are signed off.

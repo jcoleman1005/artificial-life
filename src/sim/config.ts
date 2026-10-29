@@ -195,6 +195,10 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   weatherEnabled: true,
   weatherMaxFronts: 2,
   weatherSpawnInterval: 150,
+  thermalPhysicsEnabled: true, // off reproduces the old cold-only rule (the control arm)
+  thermalHeatCoeff: 0.4, // the same size as the cold surcharge
+  thermalHeatThreshold: 0.1, // the plenty-season baseline: only heat waves cost, so the everyday economy is unchanged
+  thermalFatInsulation: 0.5, // full fat halves the cold surcharge and raises the heat surcharge by half
   weatherChillCoeff: 0.4,
   weatherMudCoeff: 0.25,
   weatherWindCoupling: 0.25,

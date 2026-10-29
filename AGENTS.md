@@ -36,7 +36,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Wound load (2026-10-28, decided, not built): injury is one scalar per body (upkeep, impairment, energy-paid healing, size-scaled lethal ceiling); no hit-point pool.
 - Footprint space rule (2026-10-28, decided, not built): one body per cell; derived footprint radius draws large bodies overlapping and drives crowding pressure; squeeze and leap are size-gated.
 - Energy ledger (2026-10-29, built; `src/sim/ledger.ts`): observer that checks energy in minus out equals the change in the animals' stored energy; a drift fails a test; every new gene must balance.
-- Thermal physics (2026-10-28, decided, not built): cold and heat both cost, scaled by surface-area-to-volume, fat and metabolic rate; no thermal gene; `thermalPhysicsEnabled` switch.
+- Thermal physics (2026-10-29, built; `thermalUpkeepFactor`, `thermalPhysicsEnabled`): cold and heat both cost, scaled by size^(∓1/3), fat and metabolic rate; no thermal gene; switch off is the old cold-only rule bit-identically.
 - Line of sight (2026-10-28, decided, conditional on a perf budget, not built): walls and bodies block sight inside the sensing window; `lineOfSightEnabled` switch; weather coupling is held.
 - Growth (2026-10-29, decided, not built): born small, grow toward the genetic size by spending energy; `growthEnabled` switch; senescence deferred.
 - Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger (built), optimisation, baseline runs first, re-rank after; terrain fields decided (rank 4b); weather coupling, food physics and the signal layer are open hook points.
