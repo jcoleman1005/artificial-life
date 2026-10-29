@@ -6,6 +6,8 @@ import { founderCarryCapacity, inheritCarryCapacity, metabolismCost } from '../s
 import type { Organism } from '../src/sim/types';
 import { createHeadStartBrain } from '../src/sim/brain';
 
+// Every world here sets the three 2026-10-29 DNA defaults (continuous abilities, split diets, variation) off, so each test isolates its own mechanism on the legacy costs.
+
 describe('Carry capacity trait', () => {
   it('gives founders 1-3 units', () => {
     const prng = new PRNG(4);
@@ -29,7 +31,8 @@ describe('Carry capacity trait', () => {
   });
 
   it('costs upkeep every tick in proportion to capacity', () => {
-    const config = { ...DEFAULT_CONFIG, tickMetabolismCost: 0.25, carryUpkeep: 0.05, memoryEnabled: false };
+    // Hand-built organisms carry no genome, so the 2026-10-29 DNA defaults (per-gene upkeep, continuous abilities) are off here.
+    const config = { ...DEFAULT_CONFIG, tickMetabolismCost: 0.25, carryUpkeep: 0.05, memoryEnabled: false, dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false };
     const none = { diagonal: 0, squeeze: 0, leap: 0 };
     expect(metabolismCost({ carryCapacity: 0, abilities: none } as Organism, config)).toBeCloseTo(0.25);
     expect(metabolismCost({ carryCapacity: 4, abilities: none } as Organism, config)).toBeCloseTo(0.45);
@@ -38,7 +41,7 @@ describe('Carry capacity trait', () => {
     expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03, leapEnabled: true })).toBeCloseTo(0.31);
     expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03, leapEnabled: false })).toBeCloseTo(0.28);
 
-    const world = new World({
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
       seed: 1,
       initialOrganisms: 1,
       initialFoodPatches: 0,
@@ -65,7 +68,7 @@ describe('Carry capacity trait', () => {
 
   it('limits picking up to the organism’s own capacity; capacity 0 carries nothing', () => {
     for (const capacity of [0, 1, 4]) {
-      const world = new World({
+      const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 2,
         gridWidth: 10,
         gridHeight: 10,
@@ -123,7 +126,7 @@ describe('Carry capacity trait', () => {
     // Sex is switched off here to isolate cloning (a child of mating can take
     // its capacity from a parent of another lineage). Only this test's world
     // changes; the default stays on (tests/defaults.test.ts).
-    const world = new World({ seed: 'traits', traitMutationRate: 0, sexEnabled: false, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 });
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'traits', traitMutationRate: 0, sexEnabled: false, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 });
     const founders = new Map(Array.from(world.organisms.values(), (o) => [o.lineage.id, o.carryCapacity]));
     for (let t = 0; t < 300; t++) world.step();
     for (const o of world.organisms.values()) {

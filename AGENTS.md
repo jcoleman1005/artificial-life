@@ -64,7 +64,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Offspring are born adjacent with the parent's tag; compare tribe claims against a sharing-off control.
 - Hybrid controller: hard constraints define legal actions; a weighted policy chooses.
 - Food first as evolvable head starts (`eatPriority`, `hungerUrgency`); prefer head starts over fixed priorities.
-- Two controllers: brain (default; 52 inputs → 6 hidden → score, append-only `BRAIN_INPUTS`, `upgradeBrain`) and dials (readable reference; they only drift under the brain).
+- Two controllers: brain (default; 57 inputs → 6 hidden → score, append-only `BRAIN_INPUTS`, `upgradeBrain`) and dials (readable reference; they only drift under the brain).
 - Memory (`memoryEnabled`, brain only): named memories plus 3 free registers; span is an inherited costed trait.
 - Discrete ticks; simultaneous decisions from one pre-tick snapshot; seeded random tie-breaks.
 - Seeded PRNG only in simulation code; never `Math.random()`.
@@ -73,9 +73,9 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Observers (`WorldEventDetector`, `ActivityMaps`) never change the world; the feed shows world events only.
 - Overlays, one at a time: Family, Senses & signals, Trails, Crowding, Deaths, Feeding.
 - Genome trends (2026-10-27): Trends tab has genome sections, trait histograms and colour modes Metabolism / Breeding; inspector shows gene dosage; all display only.
-- DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` off.
+- DNA (`dnaEnabled`, on; `docs/specs/dna.md`): genome-decoded body and brain (not dials); Stage 1 bit-identical to legacy; 1b toggles `dnaContinuousAbilities`, `dnaSplitDiets` signed off and on (2026-10-29).
 - DNA mating: genomes cross by key (each key's copies from one parent; a hidden unit travels whole), then the clone mutation path, capped at `dnaMaxGenes`; dials mix per dial (2026-10-26).
-- DNA Stage 2 (`dnaVariationEnabled`, off until its gate is finished): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.
+- DNA Stage 2 (`dnaVariationEnabled`, signed off and on 2026-10-29; its remaining arms run in roadmap A2): Poisson point mutations, gene insertion/deletion/duplication, `dnaUpkeepPerGene`; see `docs/specs/dna.md`.
 - DNA Stage 3 (`dnaGrowableBrain`, off until its gate is reviewed): genome compiled to a sparse brain circuit, up to `dnaMaxInternal` hidden units, flipped keys land only on new units (else silent), pruning, `dnaUpkeepPerConnection` (2026-10-27).
 - Snapshots: `exportState()` / `fromState()` restore bit-identically; `SavedWorld` format; browser auto-save, branch points, files.
 - Experiments can start from a saved world (`--from saved.json`).
@@ -91,6 +91,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Plant defense & detox coevolution (`plantDefenseEnabled`, `detoxGeneEnabled`, on; `docs/specs/red_queen.md`, 2026-10-27): Plant defense trait vs. herbivore detox (trait 51); yield discount, acute malaise damage, and `lastBiteYield` brain sensory feedback; switch off reproduces baseline bit-identically.
 - Organism adaptation card & 2.5D leaping hop: Clear biological badges (diet %, metabolism, child care, brain nodes, abilities) and canvas-replica preview blob replace dot chips; true 2.5D airborne hop with terrain drop shadow (parabolic trajectory guide removed) (2026-10-28).
 - Responsive landscape desktop layout: Canvas on top adapting to landscape; collapsable horizontal multi-column stats dashboard below with chevron toggle, expanding canvas to 100% available screen real estate when collapsed on computer screens (> 500px height); mobile landscape side-panel preserved (2026-10-28).
+- Roadmap rewritten after the audit (2026-10-29): Tier A (re-baseline, gates for every ungated switch, phone/perf check, housekeeping) comes before any new feature; long runs on the user's Fedora machine; `docs/STATUS.md` Roadmap.
 - Species detection (`speciesEnabled`, observer only; `docs/specs/species.md`): genome-distance clusters with stable ids, speciation/extinction events, Species colour mode (2026-10-28).
 - Live brain viewer (observer only; `docs/specs/brain-viewer.md`): `inspectBrain` / `BrainTrace`, proven not to change `stateHash()` (2026-10-28).
 - Growth and ageing (`growthEnabled`, `ageingEnabled`, on; `docs/specs/growth.md`): hatch small, grow while fed, maturity gate on REPRODUCE/MATE, senescence and old-age death; brain input `maturity` (2026-10-28).

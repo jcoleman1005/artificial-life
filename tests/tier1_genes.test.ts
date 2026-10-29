@@ -7,6 +7,8 @@ import { maxEnergyOf, sensingRadiusOf, sizeOf, digestiveEfficiencyOf, thresholdO
 import { senseEnvironment } from '../src/sim/sensors';
 import type { Organism, PolicyWeights, SimulationConfig, WorldSnapshot } from '../src/sim/types';
 
+// Every world here sets the three 2026-10-29 DNA defaults (continuous abilities, split diets, variation) off, so each test isolates its own mechanism on the legacy costs.
+
 const ZERO_POLICY: PolicyWeights = {
   foodAttraction: 0,
   obstacleAvoidance: 0,
@@ -63,7 +65,7 @@ function makeTestOrganism(overrides: Partial<Organism> = {}): Organism {
 describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
   describe('Gene 1: size (Body Mass / Radius)', () => {
     it('scales maximum energy capacity linearly (Emax = 100 * size)', () => {
-      const config = new World({ seed: 1 }).config;
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 1 }).config;
       const mouse = makeTestOrganism({ size: 0.5 });
       const baseline = makeTestOrganism({ size: 1.0 });
       const elephant = makeTestOrganism({ size: 2.0 });
@@ -74,7 +76,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
     });
 
     it('scales basal metabolism allometrically via Kleiber law (size^0.75)', () => {
-      const config = new World({
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 1,
         sensingGeneEnabled: false,
         digestiveGeneEnabled: false,
@@ -94,7 +96,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
     });
 
     it('scales movement cost directly with body mass', () => {
-      const config = new World({ seed: 1, fatEnabled: false }).config;
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 1, fatEnabled: false }).config;
       const move = { leap: false, diagonal: false, squeeze: false };
 
       const mouse = makeTestOrganism({ size: 0.5 });
@@ -107,7 +109,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
     });
 
     it('scales reproduction threshold with body size so mice can reproduce', () => {
-      const config = new World({ seed: 1, reproductionThreshold: 60 }).config;
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 1, reproductionThreshold: 60 }).config;
       const mouse = makeTestOrganism({ size: 0.5, reproThreshold: 60 });
       const baseline = makeTestOrganism({ size: 1.0, reproThreshold: 60 });
       const elephant = makeTestOrganism({ size: 2.0, reproThreshold: 60 });
@@ -120,7 +122,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
 
   describe('Gene 2: sensingRadius (Sensory / Perception Range)', () => {
     it('restricts environmental perception to the individual sensing radius', () => {
-      const world = new World({
+      const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 42,
         gridWidth: 20,
         gridHeight: 20,
@@ -145,7 +147,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
     });
 
     it('charges continuous sensory upkeep proportional to radius^2', () => {
-      const config = new World({
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 1,
         sizeGeneEnabled: false,
         digestiveGeneEnabled: false,
@@ -170,7 +172,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
   describe('Gene 3: metabolicRate (Basal Metabolism vs. Action Speed)', () => {
     it('gives higher metabolic rate higher priority in movement cell conflicts', () => {
       const prng = new PRNG('conflict-priority');
-      const world = new World({ seed: 'priority-test' });
+      const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'priority-test' });
 
       const fast = makeTestOrganism({ id: 'fast', metabolicRate: 1.5 });
       const slow = makeTestOrganism({ id: 'slow', metabolicRate: 0.5 });
@@ -194,7 +196,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
 
   describe('Gene 4: digestiveEfficiency (Nutrient Extraction Rate)', () => {
     it('scales plant and carrion energy yield', () => {
-      const config = new World({ seed: 1, carrionEnabled: true, carrionBite: 20 }).config;
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 1, carrionEnabled: true, carrionBite: 20 }).config;
 
       const wasteful = makeTestOrganism({ digestiveEfficiency: 0.6, carnivory: 0.5 });
       const normal = makeTestOrganism({ digestiveEfficiency: 1.0, carnivory: 0.5 });
@@ -210,7 +212,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
     });
 
     it('charges continuous digestive organ upkeep per tick', () => {
-      const config = new World({
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 1,
         sizeGeneEnabled: false,
         sensingGeneEnabled: false,
@@ -234,7 +236,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
 
   describe('Gene 5: energyReserveCap (Adipose Weight Drag)', () => {
     it('increases movement cost when laden with fat', () => {
-      const config = new World({
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 1,
         fatEnabled: true,
         fatDragCoeff: 0.5,
@@ -257,7 +259,7 @@ describe('Tier 1 Basic Genes: Core Physical & Energetic Architecture', () => {
 
   describe('Zero-Dose & Disabled Fallback', () => {
     it('reproduces exact baseline values when Tier 1 switches are disabled', () => {
-      const config = new World({
+      const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
         seed: 1,
         sizeGeneEnabled: false,
         sensingGeneEnabled: false,
@@ -286,12 +288,12 @@ describe('Gene 5: carnivoreEfficiency (carrion and meat digestion)', () => {
   });
 
   it('is exactly the old world when switched off', () => {
-    const off = new World({ ...base, carnivoreGeneEnabled: false }).config;
+    const off = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, ...base, carnivoreGeneEnabled: false }).config;
     expect(carrionYield({ carnivory: 0.5, carnivoreEfficiency: 0.1 }, off)).toBeCloseTo(15);
   });
 
   it('pays upkeep only in proportion to diet: herbivores pay nothing, full meat eaters most', () => {
-    const config = new World({ ...base, sensingGeneEnabled: false, sizeGeneEnabled: false, fatEnabled: false, memoryEnabled: false, metabolismGeneEnabled: false }).config;
+    const config = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, ...base, sensingGeneEnabled: false, sizeGeneEnabled: false, fatEnabled: false, memoryEnabled: false, metabolismGeneEnabled: false }).config;
     const cost = (carnivory: number, eff: number) => metabolismCost(makeTestOrganism({ carnivory, carnivoreEfficiency: eff }), config);
     expect(cost(0, 1)).toBeCloseTo(cost(0, 0));
     expect(cost(1, 1) - cost(1, 0)).toBeCloseTo(config.carnivoreUpkeepRate);
@@ -300,7 +302,7 @@ describe('Gene 5: carnivoreEfficiency (carrion and meat digestion)', () => {
 
   it('a bite on a carcass gives energy scaled by the gene, and the rest is lost', () => {
     const run = (eff: number) => {
-      const world = new World({ ...base, gridWidth: 8, gridHeight: 8, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0, immigrationInterval: 0, seasonLength: 0, foodRegionCount: 0, tickMetabolismCost: 0, carryUpkeep: 0, abilityUpkeep: 0, memoryEnabled: false, fatEnabled: false, torporEnabled: false, sensingGeneEnabled: false, carnivoreUpkeepRate: 0 });
+      const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, ...base, gridWidth: 8, gridHeight: 8, initialOrganisms: 0, initialFoodPatches: 0, obstacleDensity: 0, immigrationInterval: 0, seasonLength: 0, foodRegionCount: 0, tickMetabolismCost: 0, carryUpkeep: 0, abilityUpkeep: 0, memoryEnabled: false, fatEnabled: false, torporEnabled: false, sensingGeneEnabled: false, carnivoreUpkeepRate: 0 });
       world.carrion.set('3,3', { x: 3, y: 3, stock: 50, expiresAt: 1000 });
       const wolf = makeTestOrganism({ x: 3, y: 3, energy: 20, carnivory: 1, carnivoreEfficiency: eff, brain: { ...createHeadStartBrain(new PRNG(0)) } });
       world.organisms.set(wolf.id, wolf);
@@ -313,7 +315,7 @@ describe('Gene 5: carnivoreEfficiency (carrion and meat digestion)', () => {
   });
 
   it('children inherit it within [0, 1] under mutation', () => {
-    const world = new World({ seed: 'carn-inherit', traitMutationRate: 1 });
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'carn-inherit', traitMutationRate: 1 });
     for (let i = 0; i < 300; i++) world.step();
     for (const o of world.organisms.values()) {
       expect(o.carnivoreEfficiency).toBeGreaterThanOrEqual(0);
@@ -322,7 +324,7 @@ describe('Gene 5: carnivoreEfficiency (carrion and meat digestion)', () => {
   }, 30_000);
 
   it('survives the genome round trip', () => {
-    const world = new World({ seed: 'carn-dna' });
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 'carn-dna' });
     for (const o of world.organisms.values()) expect(o.carnivoreEfficiency).toBe(world.config.carnivoreFounder);
   });
 });

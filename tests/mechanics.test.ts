@@ -7,12 +7,14 @@ import type { Organism, SimulationConfig } from '../src/sim/types';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { createHeadStartBrain } from '../src/sim/brain';
 
+// Every world here sets the three 2026-10-29 DNA defaults (continuous abilities, split diets, variation) off, so each test isolates its own mechanism on the legacy costs.
+
 const TEST_BRAIN = createHeadStartBrain(new PRNG(0));
 
 describe('Artificial Life Core Mechanics', () => {
   it('1. World initialization with a fixed seed is completely deterministic', () => {
-    const world1 = new World({ seed: 777 });
-    const world2 = new World({ seed: 777 });
+    const world1 = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 777 });
+    const world2 = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 777 });
 
     expect(world1.obstacles.size).toBe(world2.obstacles.size);
     expect(Array.from(world1.obstacles).sort()).toEqual(
@@ -40,7 +42,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('2. Energy bounds and action costs', () => {
-    const world = new World({
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
       seed: 101,
       initialOrganisms: 1,
       initialFoodPatches: 0,
@@ -90,7 +92,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('3. Illegal movement and obstacle blocking', () => {
-    const world = new World({
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
       seed: 42,
       gridWidth: 10,
       gridHeight: 10,
@@ -171,7 +173,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('4. Finite food consumption and regeneration', () => {
-    const world = new World({
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
       plantsEnabled: false,
       seed: 99,
       gridWidth: 10,
@@ -258,7 +260,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('5. Fair conflict resolution when two organisms claim the same cell', () => {
-    const world = new World({
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
       seed: 1234,
       gridWidth: 10,
       gridHeight: 10,
@@ -402,7 +404,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('6. Reproduction energy transfer and adjacent-cell rules', () => {
-    const world = new World({
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
       seed: 42,
       gridWidth: 10,
       gridHeight: 10,
@@ -594,7 +596,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('9. Extended multi-generation run demonstrates continuous life cycle', () => {
-    const world = new World({ seed: 42 });
+    const world = new World({ dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, seed: 42 });
     const initialPop = world.organisms.size;
     expect(initialPop).toBeGreaterThanOrEqual(15);
 

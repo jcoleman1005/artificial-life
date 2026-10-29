@@ -65,6 +65,8 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
 /** An empty world where only movement costs energy, with all mobility options on (organisms here hold all abilities by default). */
 function mobileWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed: 21,
     gridWidth: 12,
     gridHeight: 12,

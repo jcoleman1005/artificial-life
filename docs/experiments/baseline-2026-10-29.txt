@@ -1,0 +1,215 @@
+# Default-world baseline (roadmap A1)
+# commit ea58622, 2026-10-29, dhcp-10-56-164-95, 3 workers
+# command: npm run experiment -- --compare dnaEnabled=true --seeds 1-8 --ticks 10000 --workers 3 --json docs/experiments/baseline-2026-10-29.json
+# 'dnaEnabled=true' is the default, so this is a single-arm run of the unmodified defaults.
+
+
+> artificial-life@0.2.0 experiment
+> vite-node scripts/experiment.ts -- --compare dnaEnabled=true --seeds 1-8 --ticks 10000 --workers 3 --json docs/experiments/baseline-2026-10-29.json
+
+8 runs (8 seeds × 1 variants of dnaEnabled), 10000 ticks each, 3 workers
+  done: seed 2, dnaEnabled=true (1/8)
+  done: seed 1, dnaEnabled=true (2/8)
+  done: seed 3, dnaEnabled=true (3/8)
+  done: seed 5, dnaEnabled=true (4/8)
+  done: seed 4, dnaEnabled=true (5/8)
+  done: seed 6, dnaEnabled=true (6/8)
+  done: seed 8, dnaEnabled=true (7/8)
+  done: seed 7, dnaEnabled=true (8/8)
+
+Finished in 89.7 min. Means per variant; Δ = mean per-seed difference.
+
+metric | true
+--- | ---
+avgPop | 669
+finalPop | 913
+leanLow | 629
+inRegion% | 80.2
+regionMovesPer1k | 11.9
+signal% | 4.50
+signalOnFood% | 1.84
+movesTowardSignal% | 51.8
+signalOnWindfall% | 6.87
+births | 52788
+deaths | 51905
+giftsToOthers | 789
+giftsToChildren | 534
+kills | 26541
+killsOfStrangers% | 4.70
+killsOfKin% | 81.3
+matings | 763
+matingChildren | 655
+clutchesFailed | 0.00
+birthsFromMating% | 1.37
+matingsAlike% | 94.5
+matingsOfStrangers% | 1.38
+matingsParentChild% | 32.0
+readyPairsAlike% | 87.0
+readyPairsParentChild% | 4.82
+mateAsks | 277628
+asksAlike% | 86.7
+offeredAlike% | 86.7
+carrionEaten | 58756
+carnivory | 0.50
+meatEaters | 444
+largestGroup | 301
+lookAlikeNeighbours | 0.91
+lookAlikeByChance | 0.56
+carryCapacity | 0.84
+dispersal | 1.63
+memorySpan | 9.23
+windfallEaten% | 57.3
+birthDistance | 1.69
+ability.diagonal | 0.42
+ability.squeeze | 0.24
+ability.leap | 0.07
+ability.none | 0.11
+extinct | 0.00
+energy | 52.1
+meanMaturity | 0.93
+juvenile% | 17.3
+senescent% | 0.09
+meanAge | 242
+meanLifespan | 131
+deathsOldAge | 0.00
+growthHeat | 51744
+growthDuration | 117
+growthDuration.t2000 | 105
+growthDuration.t4000 | 116
+growthDuration.t6000 | 116
+growthDuration.t8000 | 124
+growthDuration.t10000 | 117
+hatchMaturity | 0.69
+hatchMaturity.t2000 | 0.40
+hatchMaturity.t4000 | 0.57
+hatchMaturity.t6000 | 0.63
+hatchMaturity.t8000 | 0.67
+hatchMaturity.t10000 | 0.69
+held.diagonal | 0.76
+eff.diagonal | 0.54
+effSd.diagonal | 0.27
+atOne.diagonal | 0.18
+held.squeeze | 0.63
+eff.squeeze | 0.37
+effSd.squeeze | 0.29
+atOne.squeeze | 0.14
+held.leap | 0.24
+eff.leap | 0.28
+effSd.leap | 0.20
+atOne.leap | 0.07
+herbivory | 0.97
+generalists | 444
+meatSpecialists | 0.88
+avgPlants | 959
+avgEdible | 541
+finalPlants | 1097
+edibleGrownPerTick | 36.7
+grazedPerTick | 26.4
+seedRain | 572
+plantDeaths.grazed | 229
+plantDeaths.shaded | 12037
+plantDeaths.lean | 17236
+plantDeaths.starved | 41.4
+plant.growthRate | 0.33
+plant.maxBiomass | 6.46
+plant.seedSize | 0.92
+plant.seedThreshold | 0.41
+plant.dispersal | 3.34
+plant.rootShare | 0.35
+plant.leanDormancy | 0.30
+plant.defense | 0.16
+usPerOrganismTick | 277
+genes.mean | 577
+genes.sd | 52.6
+genes.min | 493
+genes.max | 697
+genes.atCap% | 0.00
+genes.mean@20% | 480
+genes.sd@20% | 6.82
+genes.mean@40% | 504
+genes.sd@40% | 16.2
+genes.mean@60% | 527
+genes.sd@60% | 20.8
+genes.mean@80% | 550
+genes.sd@80% | 34.3
+genes.mean@100% | 577
+genes.sd@100% | 52.6
+genes.body | 8.56
+genes.register | 54.4
+genes.brainSkip | 60.1
+genes.brainHidden | 380
+genes.brainHiddenBias | 6.73
+genes.brainOut | 6.22
+genes.brainOutBias | 0.76
+genes.silent | 59.9
+dup.multiCopySlots | 106
+dup.identical% | 10.6
+dup.spread(sd) | 3.35
+blockedMoveFrac | 0.66
+timeInPatch | 35.8
+departureFoodLevel | 0.04
+occupancyGini | 0.74
+scoutFraction | 0.12
+topo.acquiredUnits | 0.00
+topo.acquiredConnections | 0.00
+topo.connections | 0.00
+topo.withAcquired% | 0.00
+topo.effectiveUnits | 0.00
+topo.withEffective% | 0.00
+brainDrift | 0.73
+hiddenStrength | 0.36
+b.isSignal | -0.10
+b.signalOnFood | 0.00
+b.signalHunger | -0.04
+b.moveSignal | 0.18
+b.moveSignalAlike | 0.36
+b.isAttack | -0.50
+b.attackKillChance | 1.19
+b.attackAlike | -0.21
+b.attackFamily | -1.99
+b.attackHunger | 1.59
+b.moveCarrion | 0.81
+b.isMate | -0.06
+b.mateFullness | 2.57
+b.mateAlike | -0.09
+b.mateFamily | -0.15
+b.mateReady | -0.19
+w.foodAttraction | 0.91
+w.obstacleAvoidance | 0.71
+w.crowdingAvoidance | 0.16
+w.exploreTendency | 0.42
+w.eatDrive | 0.93
+w.reproduceDrive | 0.65
+w.kinAffinity | 0.22
+w.shareWithKin | 0.29
+w.shareWithStrangers | -0.02
+w.careForChildren | 1.30
+w.forageDrive | 0.27
+w.eatPriority | 1.53
+w.hungerUrgency | 1.44
+w.followFoodParent | 0.80
+w.signalOnFood | -0.10
+w.signalWhenHungry | -0.09
+w.followSignal | -0.04
+w.restDrive | 0.13
+w.avoidOccupied | 1.33
+w.leapEagerness | -0.24
+act.eat% | 4.41
+act.moveFailed% | 29.7
+act.move% | 14.7
+act.reproduceFailed% | 25.5
+act.mateFailed% | 2.86
+act.leap% | 0.23
+act.attackFailed% | 2.71
+act.rest% | 13.9
+act.signal% | 4.50
+act.reproduce% | 0.88
+act.attack% | 0.38
+act.pick% | 0.14
+act.give% | 0.02
+act.leapFailed% | 0.12
+act.mate% | 0.01
+
+Ship-on gate vs true: median per-seed ratio (avgPop ≥ 0.8, leanLow ≥ 0.7); new extinctions (finalPop 0 where true survived)
+
+Raw results saved to docs/experiments/baseline-2026-10-29.json

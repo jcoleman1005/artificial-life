@@ -90,7 +90,8 @@ describe('Memory: the inherited span and its cost', () => {
 
   it('charges upkeep per tick of span, only when memory is on', () => {
     const org = { carryCapacity: 0, memorySpan: 50, abilities: { diagonal: 0, squeeze: 0, leap: 0 } } as unknown as Organism;
-    const base = { ...DEFAULT_CONFIG, carryUpkeep: 0, abilityUpkeep: 0, memoryUpkeep: 0.001 };
+    // Legacy ability costs (2026-10-29 DNA defaults off) so only memory upkeep is measured.
+    const base = { ...DEFAULT_CONFIG, dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, carryUpkeep: 0, abilityUpkeep: 0, memoryUpkeep: 0.001 };
     expect(metabolismCost(org, { ...base, memoryEnabled: true })).toBeCloseTo(base.tickMetabolismCost + 0.05);
     expect(metabolismCost(org, { ...base, memoryEnabled: false })).toBeCloseTo(base.tickMetabolismCost);
   });

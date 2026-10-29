@@ -29,6 +29,8 @@ const ZERO_POLICY: PolicyWeights = {
 /** An empty, free-of-upkeep world on the dials controller, so one weight decides what an organism does. */
 function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     ...ALL_OFF,
     seed: 3,
     gridWidth: 12,
@@ -98,7 +100,8 @@ describe('life-history genes: switches and inheritance', () => {
 
   it('a genome-decoded world and a directly-inherited world stay identical', () => {
     const run = (dnaEnabled: boolean) => {
-      const w = new World({ seed: 11, dnaEnabled, traitMutationRate: 0.5, eggFounder: 0.3 });
+    // Stage 1 equivalence: the 2026-10-29 defaults (continuous abilities, split diets, variation) deliberately make DNA differ from legacy.
+      const w = new World({ seed: 11, dnaEnabled, dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false, traitMutationRate: 0.5, eggFounder: 0.3 });
       for (let t = 0; t < 250; t++) w.step();
       return JSON.stringify([
         Array.from(w.organisms.values()).map((o) => [o.id, o.x, o.y, o.energy, o.fat, ...lifeFields(o)]),

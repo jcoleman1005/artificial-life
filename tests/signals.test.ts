@@ -62,6 +62,8 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
 /** A 15×15 world where only signals and eating change energy. */
 function signalWorld(overrides: Partial<SimulationConfig> = {}): World {
   return new World({
+    // Isolate mechanisms from the 2026-10-29 DNA defaults: legacy ability costs, diets and mutation.
+    dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false,
     seed: 'signals',
     gridWidth: 15,
     gridHeight: 15,

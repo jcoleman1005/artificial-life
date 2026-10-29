@@ -115,9 +115,9 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   overgrazingRestTicks: 50,
   overgrazingMatchedRandom: false,
   dnaEnabled: true, // Stage 1 is bit-identical to DNA off (docs/specs/dna.md)
-  dnaContinuousAbilities: false, // Stage 1b.1 (needs dnaEnabled)
+  dnaContinuousAbilities: true, // Stage 1b.1 (needs dnaEnabled; signed off on by default 2026-10-29)
   abilityMutationStdDev: 0.1,
-  dnaSplitDiets: false, // Stage 1b.2 (needs dnaEnabled)
+  dnaSplitDiets: true, // Stage 1b.2 (needs dnaEnabled; signed off on by default 2026-10-29)
   dietUpkeep: 0.05, // a founder plant eater (herbivory 1) pays a fifth of base metabolism
   // Life-history genes. Each starts every founder at the world's old fixed value (or a small
   // one) and costs something; the switch is the lock for a control arm.
@@ -190,7 +190,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   carnivoreMin: 0,
   carnivoreMax: 1,
   carnivoreUpkeepRate: 0.04,
-  dnaVariationEnabled: false, // Stage 2 (needs dnaEnabled; docs/specs/dna.md)
+  dnaVariationEnabled: true, // Stage 2 (needs dnaEnabled; docs/specs/dna.md; signed off on by default 2026-10-29, remaining arms still to run in A2)
   dnaInsertionRate: 0.001,
   dnaDeletionRate: 0.001,
   dnaDuplicationRate: 0.001,

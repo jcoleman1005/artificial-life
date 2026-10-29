@@ -29,8 +29,10 @@ import {
 } from '../src/sim/dna';
 import type { Organism } from '../src/sim/types';
 
-const SMALL = { gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 };
-const config = createConfig();
+// Legacy-equivalent DNA stage: the 2026-10-29 defaults (continuous abilities, split diets, variation) change outcomes by design; later stages' tests switch their own flag on.
+const LEGACY_DNA = { dnaContinuousAbilities: false, dnaSplitDiets: false, dnaVariationEnabled: false };
+const SMALL = { ...LEGACY_DNA, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36 };
+const config = createConfig(LEGACY_DNA);
 
 /** A genome of the given (key, dose) genes. */
 function genomeOf(genes: readonly [number, number][]): Uint32Array {
@@ -260,7 +262,7 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
 
 describe('DNA Stage 1b.1: continuous abilities (dnaContinuousAbilities)', () => {
   const on = createConfig({ dnaContinuousAbilities: true });
-  const off = createConfig();
+  const off = createConfig(LEGACY_DNA);
   const at = (e: number) => ({ diagonal: e, squeeze: e, leap: e });
   const step = { leap: false, diagonal: false, squeeze: false };
 
