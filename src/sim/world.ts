@@ -1,4 +1,6 @@
 import { LineageTracker, type AncestorNode } from './lineage';
+import { EnergyLedger, type LedgerReport } from './ledger';
+import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor, type TerrainState } from './terrain';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
 import type {
@@ -48,6 +50,7 @@ import {
   inheritCarryCapacity,
   inheritDispersal,
   metabolismCost,
+  thermalUpkeepFactor,
   plantYield,
   moveEnergyCost,
   splitDiets,
@@ -132,6 +135,8 @@ export interface WorldState {
   readonly weather?: WeatherExportState;
   /** Soil nutrient state (absent in saves from before nutrient cycle, or with it off). */
   readonly soilNutrients?: readonly number[];
+  /** Terrain fields (absent in saves from before terrain, or with it off; such saves load with it off). */
+  readonly terrain?: TerrainState;
   /** Active death pulses (absent in saves before predator-prey arms race, or when empty). */
   readonly deathPulses?: readonly DeathPulse[];
 }
@@ -198,6 +203,8 @@ export class World {
   public tick = 0;
 
   public readonly obstacles = new Set<string>(); // "x,y"
+  /** Observer only: balances the energy the animals hold (never saved, never hashed). */
+  public readonly ledger = new EnergyLedger();
   public readonly foodPatches = new Map<string, FoodPatch>(); // "x,y" -> FoodPatch
   /** What dead organisms left behind, "x,y" -> CarrionPatch (separate from plant food; a cell can hold both). */
   public readonly carrion = new Map<string, CarrionPatch>();
@@ -270,6 +277,8 @@ export class World {
   public cellHealth: CellHealth | null = null;
   /** Weather simulation (null when weatherEnabled is off). */
   public weather: WeatherSimulation | null = null;
+  /** Roughness and cover per cell; made on first use while terrainEnabled (see getTerrain). */
+  private terrainField: TerrainField | null = null;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -331,6 +340,7 @@ export class World {
     this.fertileList = null;
     this.cellHealth = this.config.overgrazingEnabled ? new CellHealth(this.config.gridWidth * this.config.gridHeight) : null;
     this.weather = this.config.weatherEnabled ? new WeatherSimulation(this.config.gridWidth, this.config.gridHeight) : null;
+    this.terrainField = null;
     this.lineageTracker = new LineageTracker();
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -654,6 +664,7 @@ export class World {
       lineage: this.lineageTracker.exportState(),
       ...(this.weather && this.config.weatherEnabled ? { weather: this.weather.exportState() } : {}),
       ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
+      ...(this.config.terrainEnabled ? { terrain: this.getTerrain()!.exportState() } : {}),
       ...(this.deathPulses.length > 0 ? { deathPulses: this.deathPulses.map((dp) => ({ ...dp })) } : {}),
     };
   }
@@ -686,6 +697,9 @@ export class World {
     world.nextOrganismSeq = state.nextOrganismSeq;
     // Saves from before a field existed load with its neutral default.
     for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
+    // Saves from before terrain load with it off (their world was made without it).
+    if (!state.terrain && (state.config as Partial<SimulationConfig>).terrainEnabled === undefined) world.config.terrainEnabled = false;
+    world.terrainField = state.terrain ? TerrainField.fromState(state.terrain, world.config) : null;
     world.obstacles.clear();
     for (const key of state.obstacles) world.obstacles.add(key);
     world.foodRegions.length = 0;
@@ -852,11 +866,13 @@ export class World {
    * Enforces simultaneous decisions, fair seeded tie-breakers, and explicit energy accounting.
    */
   public step(): void {
+    if (this.config.ledgerEnabled && !this.ledger.started) this.ledger.begin(this.storedEnergy(), this.tick);
     if (this.organisms.size === 0) {
       // Same order as a populated tick: advance, then update the environment.
       this.tick++;
       this.updateEnvironment();
       this.updateMetrics();
+      this.checkLedger();
       return;
     }
 
@@ -1080,6 +1096,11 @@ export class World {
     // Requests to mate, matched up after all actions: a child needs both to ask each other.
     const pendingMatings: { organism: Organism; mateId: string }[] = [];
 
+    const terrain = this.getTerrain();
+    // Wear from this tick's moves and bites, applied after all actions so no body is affected by the order they act in.
+    const wearing = terrain !== null && this.config.terrainWearEnabled;
+    const trampled: { index: number; size: number }[] = [];
+    const grazed: number[] = [];
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
       const startCell = { x: organism.x, y: organism.y };
@@ -1089,19 +1110,21 @@ export class World {
       if (this.weather && this.config.weatherEnabled) {
         const season = seasonAt(this.tick, this.config)?.season ?? null;
         const temp = this.weather.getTemperature(organism.x, organism.y, season);
-        if (temp < 0) {
-          metabolism *= (1 + this.config.weatherChillCoeff * Math.abs(temp));
-        }
+        // Cover shelters a body from the swing in temperature.
+        const felt = terrain ? temp * coverExposure(terrain.coverAt(organism.x, organism.y), this.config) : temp;
+        metabolism *= thermalUpkeepFactor(organism, felt, this.config);
       }
       // Resting saves upkeep in proportion to torpor depth.
       if (this.config.torporEnabled && chosenAction.type === 'REST') metabolism *= torporUpkeepFactor(organism, this.config);
       let energyDelta = -metabolism;
       let spentEnergy = metabolism;
       organism.energy -= metabolism;
+      this.ledger.upkeep += metabolism;
       if (this.config.torporEnabled && organism.rested && chosenAction.type !== 'REST') {
         // Acting right after a rest costs energy to wake, more the deeper the rest.
         const wakeCost = this.config.torporWakeCost * (organism.torporDepth ?? 0);
         organism.energy -= wakeCost;
+        this.ledger.wake += wakeCost;
         energyDelta -= wakeCost;
         spentEnergy += wakeCost;
       }
@@ -1130,6 +1153,7 @@ export class World {
                 if (unneutralized > 0.3) {
                   const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
                   organism.energy -= malaise;
+                  this.ledger.malaise += malaise;
                   energyDelta -= malaise;
                   spentEnergy += malaise;
                 }
@@ -1138,11 +1162,12 @@ export class World {
             organism.lastBiteYield = Number(biteEfficiency.toFixed(3));
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
-            this.storeSurplus(organism, meal - energyGain);
+            this.ledger.plantMeal += energyGain + this.storeSurplus(organism, meal - energyGain);
             if (fromPatch) {
               patch.stock -= 1;
               grazePlant(patch, this.tick, this.plantCounters);
               this.biteCell(patch);
+              if (wearing) grazed.push(patch.y * this.config.gridWidth + patch.x);
             } else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
@@ -1168,6 +1193,7 @@ export class World {
               yieldMultiplier = Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized);
               if (unneutralized > 0.3) {
                 const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                this.ledger.malaise += Math.min(organism.energy, malaise);
                 organism.energy = Math.max(0, organism.energy - malaise);
               }
             }
@@ -1180,7 +1206,7 @@ export class World {
               Math.min(1, organism.carnivory * digestiveEfficiencyOf(organism, this.config) * carnivoreEfficiencyOf(organism, this.config));
             const energyGain = Math.min(maxEnergyOf(organism, this.config) - organism.energy, meal);
             organism.energy += energyGain;
-            this.storeSurplus(organism, meal - energyGain);
+            this.ledger.eggMealLoss += egg.child.energy - energyGain - this.storeSurplus(organism, meal - energyGain);
             this.eggs.delete(egg.child.id);
             organism.foodEatenCount++;
             this.eggsEatenTotal++;
@@ -1194,6 +1220,7 @@ export class World {
               yieldMultiplier = Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized);
               if (unneutralized > 0.3) {
                 const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+                this.ledger.malaise += Math.min(organism.energy, malaise);
                 organism.energy = Math.max(0, organism.energy - malaise);
               }
             }
@@ -1206,9 +1233,12 @@ export class World {
             const maxEnergy = maxEnergyOf(organism, this.config);
             const energyGain = Math.min(maxEnergy - organism.energy, meal);
             organism.energy += energyGain;
-            this.storeSurplus(organism, meal - energyGain);
+            this.ledger.carrionMealLoss += taken - energyGain - this.storeSurplus(organism, meal - energyGain);
             patch.stock -= taken;
-            if (patch.stock <= 1e-9) this.carrion.delete(`${patch.x},${patch.y}`);
+            if (patch.stock <= 1e-9) {
+              this.ledger.carrionRot += patch.stock;
+              this.carrion.delete(`${patch.x},${patch.y}`);
+            }
             organism.foodEatenCount++;
             this.carrionEatenTotal++;
             energyDelta += energyGain;
@@ -1226,6 +1256,7 @@ export class World {
           // The bite lands after all actions (below), if the prey is still
           // within reach; the cost is paid either way.
           organism.energy -= this.config.attackCost;
+          this.ledger.attack += this.config.attackCost;
           energyDelta -= this.config.attackCost;
           spentEnergy += this.config.attackCost;
           if (chosenAction.preyId) {
@@ -1270,19 +1301,25 @@ export class World {
           );
           if (this.weather && this.config.weatherEnabled) {
             const rain = this.weather.getRain(organism.x, organism.y);
-            const mudDrag = 1 + this.config.weatherMudCoeff * rain;
+            const exposure = terrain ? coverExposure(terrain.coverAt(organism.x, organism.y), this.config) : 1;
+            const mudDrag = 1 + this.config.weatherMudCoeff * rain * exposure;
             const wind = this.weather.getWind(organism.x, organism.y);
             const target = chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined);
             const dx = target ? target.x - organism.x : 0;
             const dy = target ? target.y - organism.y : 0;
             const dist = Math.hypot(dx, dy);
             const align = dist > 0 ? (dx * wind.wx + dy * wind.wy) / dist : 0;
-            const windMultiplier = Math.max(0.5, 1.0 - this.config.weatherWindCoupling * align);
+            const windMultiplier = Math.max(0.5, 1.0 - this.config.weatherWindCoupling * align * exposure);
             cost *= (mudDrag * windMultiplier);
           }
+          // The cell entered: rough ground costs more to enter, more for a larger footprint, and crossings wear it.
+          const entered = terrain ? (chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined)) : undefined;
+          if (terrain && entered) cost *= roughnessMoveFactor(terrain.roughnessAt(entered.x, entered.y), sizeOf(organism, this.config), this.config);
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
+            this.ledger.move += cost;
+            if (wearing && entered) trampled.push({ index: entered.y * this.config.gridWidth + entered.x, size: sizeOf(organism, this.config) });
             energyDelta -= cost;
             spentEnergy += cost;
             pendingSwaps.set([organism.id, item.swapWithId].sort().join('|'), {
@@ -1294,6 +1331,8 @@ export class World {
             organism.x = chosenAction.target.x;
             organism.y = chosenAction.target.y;
             organism.energy -= cost;
+            this.ledger.move += cost;
+            if (wearing) trampled.push({ index: organism.y * this.config.gridWidth + organism.x, size: sizeOf(organism, this.config) });
             energyDelta -= cost;
             spentEnergy += cost;
             outcome = 'success';
@@ -1327,6 +1366,7 @@ export class World {
               const birth = this.birthCell(organism, chosenAction.target, organism.energy - totalReproCost, birthBlocked);
               const birthCost = totalReproCost + birth.extraCost;
               organism.energy -= birthCost;
+              this.ledger.birthCosts += birthCost - childEnergy;
               organism.offspringCount++;
               energyDelta -= birthCost;
               birthBlocked.add(`${birth.x},${birth.y}`);
@@ -1365,6 +1405,7 @@ export class World {
             patch.stock -= 1;
             grazePlant(patch, this.tick, this.plantCounters);
             this.biteCell(patch);
+            if (wearing) grazed.push(patch.y * this.config.gridWidth + patch.x);
             organism.carriedFood += 1;
             outcome = 'success';
           } else {
@@ -1393,6 +1434,7 @@ export class World {
 
         case 'SIGNAL': {
           organism.energy -= this.config.signalCost;
+          this.ledger.signal += this.config.signalCost;
           energyDelta -= this.config.signalCost;
           spentEnergy += this.config.signalCost;
           organism.signalTick = this.tick;
@@ -1432,19 +1474,21 @@ export class World {
 
       // Growth: a fed juvenile adds maturity (1 / its growth duration) and pays heat for it
       // (more per tick the shorter its duration, see growthCostOf); a hungry one stalls.
-      let energyCap = this.config.maxEnergy;
+      const energyCap = maxEnergyOf(organism, this.config);
       if (this.config.growthEnabled && (organism.maturity ?? 1) < 1) {
         if (organism.energy >= this.config.growthEnergyFloor * maxEnergyOf(organism, this.config)) {
           const heat = growthCostOf(organism, this.config);
           organism.maturity = Math.min(1, (organism.maturity ?? 1) + growthRateOf(organism, this.config));
           organism.energy -= heat;
+          this.ledger.upkeep += heat;
           energyDelta -= heat;
           this.growthHeatTotal += heat;
         }
-        energyCap = Math.min(energyCap, maxEnergyOf(organism, this.config));
       }
 
       // Clamp energy [0, maxEnergy]
+      if (organism.energy > energyCap) this.ledger.overCap += organism.energy - energyCap;
+      else if (organism.energy < 0) this.ledger.overdraft += -organism.energy;
       organism.energy = Math.max(0, Math.min(energyCap, organism.energy));
       organism.age++;
 
@@ -1469,6 +1513,11 @@ export class World {
       if (organism.recentHistory.length > 8) {
         organism.recentHistory.pop();
       }
+    }
+
+    if (wearing) {
+      for (const t of trampled) terrain.trample(t.index, t.size, this.config);
+      for (const g of grazed) terrain.graze(g, this.config);
     }
 
     // Matings: pairs who asked each other (in id order, once per pair). Both
@@ -1506,7 +1555,7 @@ export class World {
       const maxEnergy = maxEnergyOf(recipient, this.config);
       const gain = Math.min(maxEnergy - recipient.energy, meal);
       recipient.energy += gain;
-      this.storeSurplus(recipient, meal - gain);
+      this.ledger.plantMeal += gain + this.storeSurplus(recipient, meal - gain);
       recipient.foodReceived += 1;
       recipient.foodEatenCount++;
     }
@@ -1524,6 +1573,7 @@ export class World {
       if (Math.max(Math.abs(prey.x - attacker.x), Math.abs(prey.y - attacker.y)) > 1) continue;
       if (roll >= attack.chance) continue;
       bodies.set(prey.id, prey.energy);
+      this.ledger.killed += prey.energy;
       if (this.config.predationDefenseEnabled !== false) {
         const attackerStealth = stealthOf(attacker, this.config);
         const preyStealth = stealthOf(prey, this.config);
@@ -1550,6 +1600,7 @@ export class World {
             attacker.lastBiteYield = Number(Math.max(0, 1 - this.config.defenseYieldPenalty * unneutralized).toFixed(3));
             if (unneutralized > 0.3) {
               const malaise = this.config.toxinMalaiseCost * (unneutralized - 0.3);
+              this.ledger.malaise += Math.min(attacker.energy, malaise);
               attacker.energy = Math.max(0, attacker.energy - malaise);
             }
           }
@@ -1572,7 +1623,7 @@ export class World {
     }
 
     // Phase 5: Deaths. With carrion on, every body is left where it fell:
-    // carrionBodyEnergy plus carrionEfficiency of the energy it still held (a
+    // carrionBodyEnergy × size plus carrionEfficiency of the energy it still held (a
     // starved body holds none; a killed one usually some).
     for (const [id, org] of Array.from(this.organisms.entries())) {
       // Ageing: a body that reaches maxAge dies, leaving carrion like any body (its remaining energy counts as body energy).
@@ -1580,22 +1631,25 @@ export class World {
       if (oldAge) {
         this.deathsOldAgeTotal++;
         bodies.set(id, org.energy);
+        this.ledger.killed += org.energy; // the body's energy moves into carrion (or is lost), as at a kill
       }
       if (org.energy <= 0 || oldAge) {
         this.deceasedCount++;
         this.deceasedLifespanSum += org.age;
         this.deathsTotal++;
         this.organisms.delete(id);
+        this.ledger.deathFat += org.fat ?? 0;
         if (this.config.carrionEnabled) {
-          const energy = carrionFromBody(bodies.get(id) ?? 0, this.config);
+          const energy = carrionFromBody(bodies.get(id) ?? 0, this.config, sizeOf(org, this.config));
           if (energy > 0) {
+            this.ledger.carrionCreated += energy;
             const tox = toxicityOf(org, this.config);
             this.addCarrion(org.x, org.y, energy, tox > 0 ? tox : undefined);
           } else {
-            this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+            this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
           }
         } else {
-          this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * this.config.nutrientCarrionDecomp);
+          this.depositNutrients(org.x, org.y, this.config.carrionBodyEnergy * sizeOf(org, this.config) * this.config.nutrientCarrionDecomp);
         }
       }
     }
@@ -1612,6 +1666,7 @@ export class World {
 
     // Recompute world metrics
     this.updateMetrics();
+    this.checkLedger();
 
     // Periodic pruning of dead lineage branches with no living descendants (every 500 ticks)
     if (this.tick % 500 === 0) {
@@ -1684,6 +1739,7 @@ export class World {
       signalTick: -1,
       recentHistory: [],
     };
+    this.ledger.birthClamp += energy - child.energy;
     this.lineageTracker.recordBirth(child, parent, mate, this.tick);
     return child;
   }
@@ -1742,6 +1798,7 @@ export class World {
     ]);
     a.energy -= shareA + tax;
     b.energy -= shareB + tax;
+    this.ledger.birthCosts += 2 * tax;
     if (config.metabolismGeneEnabled) for (const o of [a, b]) o.nextBirthTick = this.tick + birthCooldownOf(o, config);
     this.matingsTotal++;
     const similarity = tagSimilarity(a.tag, b.tag);
@@ -1777,6 +1834,7 @@ export class World {
       while (viableCount < targetCount && needSum + needs[viableCount] <= pool) needSum += needs[viableCount++];
       const energies = needs.slice(0, viableCount).map((n) => (viableCount === targetCount ? (pool * n) / needSum : n));
       let born = 0;
+      let given = 0; // what the placed children were given, for the ledger
       if (viableCount === 0) {
         this.clutchesFailedTotal++;
         this.matingChildrenLostTotal += targetCount;
@@ -1800,14 +1858,17 @@ export class World {
           const target = this.prng.choice(cells);
           const birth = this.birthCell(carrier, target, carrier.energy, blocked);
           carrier.energy -= birth.extraCost;
+          this.ledger.birthCosts += birth.extraCost;
           paid.set(carrier, (paid.get(carrier) ?? 0) + birth.extraCost);
           blocked.add(`${birth.x},${birth.y}`);
           this.birthDistanceSum += birth.distance;
           newBorns.push(this.bearChild(conceived[k], carrier, other, birth, energies[k]));
+          given += energies[k];
           born++;
         }
         this.matingChildrenLostTotal += targetCount - viableCount;
       }
+      this.ledger.matingHeat += pool - given;
       return this.finishMating(carrier, other, paid, born);
     }
 
@@ -1815,12 +1876,14 @@ export class World {
     const viableCount = Math.min(targetCount, maxViable);
 
     let born = 0;
+    let perChildEnergy = 0; // what each placed child was given, for the ledger
     if (viableCount === 0) {
       this.clutchesFailedTotal++;
       this.matingChildrenLostTotal += targetCount;
       this.matingEnergyLostTotal += pool;
     } else {
       const perChild = viableCount === targetCount ? pool / targetCount : config.minViableChildEnergy;
+      perChildEnergy = perChild;
       const poolAllocated = perChild * viableCount;
       const heatSurplus = pool - poolAllocated;
       this.matingEnergyLostTotal += heatSurplus;
@@ -1843,6 +1906,7 @@ export class World {
         const target = this.prng.choice(cells);
         const birth = this.birthCell(carrier, target, carrier.energy, blocked);
         carrier.energy -= birth.extraCost;
+        this.ledger.birthCosts += birth.extraCost;
         paid.set(carrier, (paid.get(carrier) ?? 0) + birth.extraCost);
         blocked.add(`${birth.x},${birth.y}`);
         this.birthDistanceSum += birth.distance;
@@ -1851,6 +1915,7 @@ export class World {
       }
       this.matingChildrenLostTotal += (targetCount - viableCount);
     }
+    this.ledger.matingHeat += pool - perChildEnergy * born;
     return this.finishMating(carrier, other, paid, born);
   }
 
@@ -1874,11 +1939,44 @@ export class World {
     return true;
   }
 
-  /** Food energy beyond what an organism can hold becomes fat, at a loss, up to its capacity. */
-  private storeSurplus(organism: Organism, surplus: number): void {
+  /** Food energy beyond what an organism can hold becomes fat, at a loss, up to its capacity. Returns the fat stored. */
+  private storeSurplus(organism: Organism, surplus: number): number {
     const room = fatRoom(organism, this.config);
-    if (room <= 0 || surplus <= 0) return;
-    organism.fat = (organism.fat ?? 0) + Math.min(room, surplus * this.config.fatStoreEfficiency);
+    if (room <= 0 || surplus <= 0) return 0;
+    const stored = Math.min(room, surplus * this.config.fatStoreEfficiency);
+    organism.fat = (organism.fat ?? 0) + stored;
+    return stored;
+  }
+
+  /** The terrain fields, made on first use (from the world's seed) while terrainEnabled; null when it is off. */
+  public getTerrain(): TerrainField | null {
+    if (!this.config.terrainEnabled) return null;
+    if (!this.terrainField || this.terrainField.width !== this.config.gridWidth || this.terrainField.height !== this.config.gridHeight) {
+      this.terrainField = generateTerrain(this.config);
+    }
+    return this.terrainField;
+  }
+
+  /** Energy the animals hold: organisms (energy and fat), eggs, and carrion. The ledger's system. */
+  private storedEnergy(): number {
+    let total = 0;
+    for (const o of this.organisms.values()) total += o.energy + (o.fat ?? 0);
+    for (const e of this.eggs.values()) total += e.child.energy;
+    for (const c of this.carrion.values()) total += c.stock;
+    return total;
+  }
+
+  /** Close the ledger's window every `ledgerCheckInterval` ticks (observer only). */
+  private checkLedger(): void {
+    if (!this.config.ledgerEnabled) return;
+    const interval = Math.max(1, Math.floor(this.config.ledgerCheckInterval));
+    if (this.tick % interval !== 0) return;
+    this.ledger.check(this.storedEnergy(), this.tick);
+  }
+
+  /** The ledger's last completed check, if any. */
+  public ledgerReport(): LedgerReport | null {
+    return this.ledger.report();
   }
 
   /**
@@ -1896,6 +1994,7 @@ export class World {
           egg.shell -= 1;
         } else {
           this.eggs.delete(id);
+          this.ledger.eggDecay += egg.child.energy;
           this.eggsDecayedTotal++;
           this.depositNutrients(egg.x, egg.y, (egg.child.energy + (egg.shell ?? 0)) * this.config.nutrientCarrionDecomp);
           continue;
@@ -1914,9 +2013,11 @@ export class World {
       this.eggsHatchedTotal++;
       this.birthsTotal++;
       const { child } = egg;
+      const hatchEnergy = Math.max(1, Math.floor(child.energy * eggHatchEfficiency));
+      this.ledger.hatchLoss += child.energy - hatchEnergy;
       this.organisms.set(child.id, {
         ...child,
-        energy: Math.max(1, Math.floor(child.energy * eggHatchEfficiency)),
+        energy: hatchEnergy,
         lineage: { ...child.lineage, birthTick: this.tick },
         memory: newMemory(egg.x, egg.y),
       });
@@ -2078,6 +2179,12 @@ export class World {
       gridHeight,
     } = this.config;
 
+    // Worn ground drifts back toward the original terrain.
+    if (this.config.terrainEnabled && this.config.terrainWearEnabled) {
+      const interval = Math.max(1, Math.floor(this.config.terrainRecoveryInterval));
+      if (this.tick % interval === 0) this.getTerrain()?.recover(interval, this.config);
+    }
+
     // Lean times: food regrows more slowly and no new patches appear. With
     // regions, each region may be in its own season.
     const leanRegrowInterval = foodRegenInterval * Math.max(1, this.config.leanSlowdown);
@@ -2114,6 +2221,7 @@ export class World {
       }
       if (c.expiresAt <= this.tick) {
         this.carrionUnitsRotted += c.stock;
+        this.ledger.carrionRot += c.stock;
         this.depositNutrients(c.x, c.y, c.stock * this.config.nutrientCarrionDecomp);
         this.carrion.delete(key);
       }
@@ -2211,6 +2319,7 @@ export class World {
         const key = `${x},${y}`;
         if (this.obstacles.has(key) || occupied.has(key)) continue;
         const immigrant = this.createFounder(x, y);
+        this.ledger.immigrants += immigrant.energy + (immigrant.fat ?? 0);
         this.organisms.set(immigrant.id, immigrant);
         occupied.add(key);
         this.immigrantsTotal++;

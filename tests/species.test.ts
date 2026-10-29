@@ -284,7 +284,15 @@ describe('Species as an observer of a running world', () => {
   });
 
   it('puts every living organism in at most one species, and counts add up', () => {
-    const { world, tracker } = run(true);
+    // Stop on a tick the tracker has just clustered (it runs at tick 1, then every speciesInterval): its counts are from
+    // that tick, so comparing them with a later population would depend on deaths in between.
+    const world = new World({ ...SMALL });
+    const tracker = new SpeciesTracker();
+    const stop = 1 + Math.floor((TICKS - 1) / world.config.speciesInterval) * world.config.speciesInterval;
+    for (let t = 0; t < stop; t++) {
+      world.step();
+      tracker.observe(world);
+    }
     const snap = tracker.snapshot(world.tick, false);
     const living = snap.species.filter((s) => s.extinct === null);
     expect(living.reduce((n, s) => n + s.count, 0)).toBeLessThanOrEqual(world.organisms.size);

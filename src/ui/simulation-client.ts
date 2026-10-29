@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG } from '../sim/config';
 import type { HistorySample } from '../sim/history';
+import { TerrainField } from '../sim/terrain';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
 import type { BrainTrace } from '../sim/brain-trace';
@@ -106,6 +107,7 @@ export class SimulationClient implements WorldView {
   public deathPulses: readonly DeathPulse[] = [];
   public foodRegions: readonly FoodRegion[] = [];
   public obstacles: ReadonlySet<string> = new Set();
+  public terrain: TerrainField | null = null;
   public weather: WorldView['weather'] = null;
   /** Ticks per second the worker actually ran over the last second. */
   public ticksPerSecond = 0;
@@ -225,6 +227,7 @@ export class SimulationClient implements WorldView {
       case 'static':
         this.config = message.config;
         this.obstacles = new Set(message.obstacles);
+        this.terrain = message.terrain ? TerrainField.forView(message.terrain) : null;
         this.foodRegions = message.foodRegions;
         this.worldEvents = [...message.events];
         this.heatmap = null;
@@ -235,6 +238,7 @@ export class SimulationClient implements WorldView {
       case 'frame': {
         this.events.beforeFrame();
         this.tick = message.tick;
+        if (message.terrain) this.terrain = TerrainField.forView(message.terrain, this.terrain?.originalFields());
         this.organisms = new Map(message.organisms.map((o) => [o.id, o]));
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));

@@ -89,6 +89,7 @@ function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
     squeezeEnabled: false,
     leapEnabled: false,
     weatherEnabled: false,
+    terrainEnabled: false, // exact move costs: rough ground would add to them (terrain has its own tests)
     ...overrides,
   });
 }
