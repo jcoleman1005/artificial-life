@@ -31,3 +31,15 @@ describe('paintTerrain', () => {
     expect(Array.from(natural.data)).not.toEqual(Array.from(map.data));
   });
 });
+
+describe('paintTerrain over water', () => {
+  it('leaves cells that hold water clear', () => {
+    const t = field();
+    const water = new Uint8Array(400);
+    water[5 * 20 + 5] = 120;
+    const p = paintTerrain(t, 4, false, water);
+    const o = ((5 * 4 + 1) * p.width + (5 * 4 + 1)) * 4;
+    expect(p.data[o + 3]).toBe(0);
+    expect(p.data[((9 * 4 + 1) * p.width + 9 * 4 + 1) * 4 + 3]).toBeGreaterThan(0);
+  });
+});
