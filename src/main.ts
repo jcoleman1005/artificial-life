@@ -336,8 +336,12 @@ function refreshPanels(): void {
   const status = statusText();
   settingsView.setStatus(status);
 
-  const shown = selectedEggId ? null : selectedForDisplay();
-  if (selectedEggId && lastSelectedEgg) {
+  const shown = selectedEggId || selectedPlantId ? null : selectedForDisplay();
+  if (selectedPlantId) {
+    const livePlant = findPlant(selectedPlantId);
+    if (livePlant) lastPlantPatch = livePlant;
+    if (lastPlantPatch) card.renderPlant(lastPlantPatch, sim.tick, livePlant !== undefined);
+  } else if (selectedEggId && lastSelectedEgg) {
     const eggLive = sim.eggs.get(selectedEggId);
     if (eggLive) lastSelectedEgg = eggLive;
     card.renderEgg(lastSelectedEgg, sim.config, nameOf, eggLive !== undefined);
