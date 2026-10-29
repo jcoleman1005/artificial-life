@@ -14,7 +14,7 @@ Replace "fixed 30° hue buckets" as the meaning of a group with **species**: clu
 ## Clustering (stable ids)
 Run every `speciesInterval` (50) ticks on the host side from a pre-tick snapshot of living organisms.
 1. Each existing species keeps a **representative** (the medoid of its last members; stored, not recomputed from scratch, so ids don't flicker).
-2. Assign each organism to the nearest representative if distance ≤ `speciesThreshold` (0.15), else to an unassigned pool.
+2. Assign each organism to the nearest representative if distance ≤ `speciesThreshold` (0.2; was 0.15 until 2026-10-29), else to an unassigned pool.
 3. Cluster the pool greedily (seeded order by organism id, no PRNG): a pool cluster with ≥ `speciesMinSize` (5) members that stays distinct for `speciesPersistTicks` (200) becomes a new species. If its nearest parent species is known, record `parentSpeciesId` (speciation = a split), else it is an immigrant/founder species.
 4. A species with 0 members for `speciesExtinctTicks` (100) is extinct; keep its record (id, name, born tick, extinct tick, peak count, parent).
 5. Medoids update with hysteresis (move only if the new medoid is ≥ 0.02 closer) to avoid id churn.
@@ -66,7 +66,7 @@ As specified, with these details:
 - Organisms born since the last run are placed for display by nearest representative within the threshold; the next run assigns them for real. Organisms in no species have id 0 (the map then falls back to the tag hue).
 
 ### Config (flat, all observer-only)
-`speciesEnabled` true, `speciesInterval` 50, `speciesThreshold` 0.15, `speciesMinSize` 5, `speciesPersistTicks` 200, `speciesExtinctTicks` 100, `speciesBrainWeight` 0.3, `speciesTagWeight` 0.1. Settings has a Species section (on/off) with an Advanced fold for the numbers.
+`speciesEnabled` true, `speciesInterval` 50, `speciesThreshold` 0.2, `speciesMinSize` 5, `speciesPersistTicks` 200, `speciesExtinctTicks` 100, `speciesBrainWeight` 0.3, `speciesTagWeight` 0.1. Settings has a Species section (on/off) with an Advanced fold for the numbers.
 
 ### Protocol (all optional, append-only)
 - `FromWorker` frame: `speciesIds?: number[]`, parallel to `organisms`.

@@ -253,7 +253,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   // Species detection: an observer, so none of these can change a fingerprint (docs/specs/species.md).
   speciesEnabled: true,
   speciesInterval: 50,
-  speciesThreshold: 0.15,
+  speciesThreshold: 0.2,
   speciesMinSize: 5,
   speciesPersistTicks: 200,
   speciesExtinctTicks: 100,
