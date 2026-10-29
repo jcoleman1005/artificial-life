@@ -530,7 +530,7 @@ async function main() {
         new Promise<void>((resolve, reject) => {
           const child = spawn(
             process.execPath,
-            ['node_modules/vite-node/vite-node.mjs', 'scripts/experiment.ts', '--', '--jobs', JSON.stringify(slice)],
+            ['node_modules/vite-node/dist/cli.mjs', 'scripts/experiment.ts', '--', '--jobs', JSON.stringify(slice)],
             { stdio: ['ignore', 'pipe', 'inherit'] }
           );
           let buffer = '';
