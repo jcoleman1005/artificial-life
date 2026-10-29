@@ -272,6 +272,13 @@ function runJob(job: Job): RunResult {
     carryCapacity: mean((o) => o.carryCapacity),
     dispersal: mean((o) => o.dispersal),
     memorySpan: mean((o) => o.memorySpan),
+    // Body genes (absent on a body whose gene is switched off, so the world's fixed value is used).
+    size: mean((o) => o.size ?? 1),
+    metabolicRate: mean((o) => o.metabolicRate ?? 1),
+    fatCapacity: mean((o) => o.fatCapacity ?? 0),
+    sensingRadius: mean((o) => o.sensingRadius ?? world.config.sensingRadius),
+    digestiveEfficiency: mean((o) => o.digestiveEfficiency ?? 1),
+    detox: mean((o) => o.detox ?? 0),
     ...(world.windfallUnitsPlaced > startWindfall.placed
       ? {
           // Windfall food eaten before it rotted (leftovers still on the ground count as uneaten).
