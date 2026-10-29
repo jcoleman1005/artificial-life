@@ -39,6 +39,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Thermal physics (2026-10-28, decided, not built): cold and heat both cost, scaled by surface-area-to-volume, fat and metabolic rate; no thermal gene; `thermalPhysicsEnabled` switch.
 - Line of sight (2026-10-28, decided, conditional on a perf budget, not built): walls and bodies block sight inside the sensing window; `lineOfSightEnabled` switch; weather coupling is held.
 - Growth (2026-10-29, decided, not built): born small, grow toward the genetic size by spending energy; `growthEnabled` switch; senescence deferred.
+- Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger, optimisation, baseline runs first, re-rank after; food physics left as is, weather coupling held, terrain undecided.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.

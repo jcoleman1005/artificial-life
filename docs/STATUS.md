@@ -3,7 +3,7 @@
 Where the project stands, what the experiments found, and what's next.
 Read this and `AGENTS.md` at the start of a session; update this at the end. Detail lives in `docs/findings.md` (experiment results, engine), `docs/history.md` (feature inventory, hosting plan, future ideas) and `docs/decisions.md` (design decisions).
 
-_Last updated: 2026-10-28 (Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D ballistic leaping trajectory & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
+_Last updated: 2026-10-29 (Physics build order agreed (ledger, optimisation pass, baseline runs, then thermal, growth, footprint, wounds, combat, line of sight, tempo); S21 engine benchmark recorded; Responsive landscape desktop layout with top landscape canvas & bottom multi-column stats dashboard; Organism adaptation card with quantitative evolutionary trait badges; 2.5D ballistic leaping trajectory & terrain drop shadow overhaul; World canvas plant defense spines; downwind-deflected signal waves; 3-stage carrion decomposition; acute toxin malaise distress spasm glyphs; Inspector microclimate, scavenging, kin pull, and detox senses; Biosphere nutrient and atmospheric weather dashboard metric cards; Settings panel feature alignment; Nutrients; Weather; Genome Lineage Map; Egg inspection; DNA growable brain)._
 
 ## Branches
 
@@ -173,6 +173,36 @@ Not targets to hardcode: conditions to build so they *can* happen, then watch.
 
   Not guaranteed: groups may keep blending, and it may take very long runs (the always-on server). Asexual reproduction stays, as the brain's other choice. Agreed next pieces: neutral marker genes, then hybrid cost from genetic distance, then species detection.
 
+## Physics build order (agreed 2026-10-29; supersedes nothing in the Roadmap below, it orders the physics decisions)
+
+Ranked by protection, phone cost and what each unlocks. The decisions themselves are in `docs/decisions.md`. Rules for every item: a `...Enabled` switch (the control arm), a perf check against the S21 profile before it ships on by default, a Parameter-log entry for any new constant, a matched on/off experiment, a new fingerprint recorded here, and `npm run verify`.
+
+**Phone baseline (Termux, 2026-10-28, `docs/findings.md`):** ~177 µs per organism-tick, ~2.9× the dev container; at ~800 organisms single ticks already take 130–172 ms against a 167 ms budget at 1×. Features that add per-organism work default OFF for the phone profile unless the optimisation pass buys headroom.
+
+**Fingerprint now** (branch `claude/blissful-cerf-w1gdbk`, after the energy-cap fix and size-scaled corpses): `large dials 38c0a9a328b0de87 · large brain d6e185c2c5b848ae` (pop 632 / 773, births 3095 / 3268).
+
+| Rank | Item | Why here | Phone cost | Status |
+|---|---|---|---|---|
+| 0 | Energy cap uses `maxEnergyOf` everywhere; corpse energy scales with size | Bug fix and the agreed size rule | none | Built 2026-10-28 |
+| 1 | Energy ledger (observer; in minus out equals change in stored) | Protects every later change; the cap bug would have shown at once | small; sampled every N ticks on the phone | Decided |
+| 2 | Single-thread engine optimisation pass (garbage collection, brain scoring), proven by an unchanged fingerprint | The phone has almost no headroom; this buys it for everything below | negative (a saving) | Prompt written for agy; not yet run |
+| 3 | Long baseline runs on the server (100k+ ticks) with the existing genes; re-run the Termux benchmark on the optimised branch | Shows which genes drift and where selection is weak, so ranks 5–10 are chosen by evidence, not taste | none | To do (needs the server installed; roadmap item 13) |
+| 4 | Thermal physics: cold and heat cost, scaled by surface-area-to-volume, fat and metabolic rate | Replaces an existing per-organism rule, so the cost is about zero; gives size a downside and regions different niches (species goal) | ~0 | Decided |
+| 5 | Growth: born small, grow to the genetic size by spending energy | One extra state value; makes size a trajectory; needed before footprint and wound ceilings mean much | small | Decided |
+| 6 | Footprint space rule: derived radius, overlap crowding, size-gated squeeze and leap | Reuses the sensing pass; gives growth a visible and mechanical effect | small; measure | Decided |
+| 7 | Wound load (one scalar, upkeep, impairment, energy-paid healing, size-scaled ceiling) | Foundation for combat; one append-only brain input, so batch it with any other new brain input in a single `upgradeBrain` | small, one input | Decided |
+| 8 | Combat as one resolution function over a combatant record (force from mass and energy; damage into wound load); no combat-specific genes | Needs wounds and size physics first | small | Outline only; needs a short spec before building |
+| 9 | Line of sight inside the sensing window | The most expensive item on the phone; server first, phone off by default unless within the ~15% budget | high | Decided, conditional on the budget |
+| 10 | Tempo: sub-step clock from metabolic rate and size, capped at 2 actions per tick | Biggest engine change and a cost multiplier; server only | high | Decided; `tempoEnabled` off for the phone profile |
+
+**Left as is or held (revisit after rank 3):**
+- Weather coupling (rain drag and headwind scaled by body): held until the baseline run shows whether wind and mud drive selection.
+- Food physics (bite size scaling, handling time): left as is; no evidence a one-unit bite limits anything.
+- Terrain types (movement cost, shelter, habitat): not decided. It is the likely precondition for habitat specialisation and the colour-group split, so reconsider it after rank 3.
+- Senescence (declining wound ceiling and healing with age): deferred until growth is built.
+
+**Re-rank rule:** after rank 3, reorder ranks 4–10 by what the long runs show. Do not build anything from rank 9 or 10 on the phone profile before the Termux benchmark is repeated on the optimised branch.
+
 ## Roadmap (agreed 2026-10-25; build in this order)
 
 There is no target outcome: new features go in on by default and the world is left to see what happens over time. Measuring a feature against a control is optional. Give each feature a performance budget checked with `npm run perf` (target ~500 organisms on the S21).
@@ -199,7 +229,7 @@ There is no target outcome: new features go in on by default and the world is le
     3. Stage 2: plant `defense`, organism `detox` (inherited, with upkeep), a last-bite-yield sense, then the coevolution probe (one tick's plants in another tick's world).
     4. Stage 3: plant `hue` and an organism `plantHue` sense (a possible route to colour groups splitting).
     Also still open: plant events in the feed; seed bank and seeds carried by organisms.
-11. Growth and size, then bite.
+11. Growth and size, then bite. (Growth decided 2026-10-29; bite scaling left as is. See "Physics build order" above.)
 12. Tending (pairs with plants; depends on kin clustering, which dispersal controls).
 
 **Phase 4: slow burners on the always-on server**
@@ -228,4 +258,4 @@ There is no target outcome: new features go in on by default and the world is le
   The small 30×30 world was dropped: it dies out around tick 650–770 on almost every seed (its first lean season), as did seed `'fingerprint'` in both worlds.
 - `npm run verify` on a 4-core container: Vitest now runs with `fileParallelism: false` in `vitest.config.ts` to prevent worker thread IPC starvation and `Timeout calling "onTaskUpdate"`. Long-running simulation tests yield to the event loop and have generous timeouts (60–180s) to run reliably under load.
 - UI toggles aligned (2026-10-28): Web app Settings panel exposes toggles for Weather (`weatherEnabled`), Nutrients (`nutrientCycleEnabled`), and Overgrazing (`overgrazingEnabled`) under World & Climate; Predation (`predationEnabled`), Mating (`sexEnabled`), and Carrion (`carrionEnabled`) under Behaviour; and Growable brain (`dnaGrowableBrain`), Continuous abilities (`dnaContinuousAbilities`), and Split diets (`dnaSplitDiets`) under Genetics & DNA.
-- The S21 check (roadmap item 1) is still to do on the phone itself.
+- The S21 check (roadmap item 1): the engine benchmark in Termux was done 2026-10-28 (see `docs/findings.md`); the browser check (touch, frame rate, ticks/s at 10×) is still to do on the phone itself.
