@@ -770,6 +770,7 @@ describe('DNA Stage 3: choice-invariant inputs', () => {
       'weatherTemp',
       'weatherRain',
       'lastBiteYield',
+      'cover',
     ]);
     expect(ACTION_INVARIANT_MASK.length).toBe(I);
     BRAIN_INPUTS.forEach((name, i) => expect(ACTION_INVARIANT_MASK[i]).toBe(ACTION_INVARIANT_INPUTS.includes(name) ? 1 : 0));

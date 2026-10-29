@@ -11,7 +11,7 @@ const TOLERANCE = (r: { totalIn: number; totalOut: number; stored: number }) => 
 describe('Energy ledger', () => {
   it('balances every tick in a world that lays eggs, mates, hunts, scavenges and takes in immigrants', () => {
     // eggFounder and immigration are raised so the egg and immigrant paths are exercised.
-    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5, ledgerCheckInterval: 1, eggFounder: 0.6, immigrationEnabled: true });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  landSensingEnabled: false, /* keeps the hand-built brains and head-start draws these tests pin free of the land inputs */ seed: 5, ledgerCheckInterval: 1, eggFounder: 0.6, immigrationEnabled: true });
     for (let t = 0; t < 700; t++) {
       w.step();
       const r = w.ledgerReport()!;

@@ -535,7 +535,7 @@ describe('DNA Stage 2: variation operators (dnaVariationEnabled)', () => {
     const off = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 's2-off', dnaVariationEnabled: false });
     const flat = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 's2-off', dnaVariationEnabled: true, dnaInsertionRate: 0, dnaDeletionRate: 0, dnaDuplicationRate: 0, dnaKeyFlipFraction: 0, dnaUpkeepPerGene: 0 });
     for (let t = 0; t < 150; t++) { off.step(); flat.step(); }
-    const founderLength = geneCount(encodeOrganismDNA(phenotypeOf(Array.from(flat.organisms.values())[0])));
+    const founderLength = geneCount(encodeOrganismDNA(phenotypeOf(Array.from(flat.organisms.values())[0]), flat.config));
     for (const o of flat.organisms.values()) expect(geneCount(o.genome!)).toBe(founderLength);
   }, 60_000);
 

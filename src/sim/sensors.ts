@@ -299,7 +299,7 @@ export function senseEnvironment(
 
   const remembered = recall(organism.memory, organism.memorySpan, x, y, snapshot.tick, config);
 
-  return {
+  const sensed: SensedInputs = {
     currentEnergy: energy,
     energyRatio: Math.min(1, Math.max(0, energy / maxEnergy)),
     currentCellFood,
@@ -332,4 +332,8 @@ export function senseEnvironment(
     weatherRain,
     weatherWind,
   };
+  // The land fields ride along as a hidden reference: the brain reads them, but they are not part of what the
+  // organism "sensed" that is recorded in its history, saved or hashed (they would copy the whole map into every entry).
+  if (snapshot.land) Object.defineProperty(sensed, 'land', { value: snapshot.land, enumerable: false });
+  return sensed;
 }

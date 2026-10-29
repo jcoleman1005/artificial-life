@@ -2,7 +2,9 @@
  * Core types and data structures for the Artificial Life simulation.
  */
 import type { Brain, Circuit } from './brain';
+import type { ElevationField } from './elevation';
 import type { MemoryState, Recalled } from './memory';
+import type { TerrainField } from './terrain';
 
 export interface Point {
   readonly x: number;
@@ -208,6 +210,14 @@ export interface SensedInputs {
   readonly weatherRain?: number;
   /** Local wind vector at this cell, or null when weather is off. */
   readonly weatherWind?: { readonly wx: number; readonly wy: number } | null;
+  /** The elevation and terrain fields the land-sensing brain inputs read (shared references); absent when landSensingEnabled is off. */
+  readonly land?: LandView | null;
+}
+
+/** Read-only references to the land fields, for the brain's land inputs. */
+export interface LandView {
+  readonly elevation: ElevationField | null;
+  readonly terrain: TerrainField | null;
 }
 
 export interface ActionScore {
@@ -606,6 +616,7 @@ export interface SimulationConfig {
   elevationWaterChill: number; // Temperature lost standing in water
   elevationRiparianReach: number; // Cells from water over which the shore's wetness fades to nothing
   elevationFertilityMean: number; // Average fertility of dry land (the soil map is scaled to this); the old disc world averaged about 0.6
+  landSensingEnabled: boolean; // Brain inputs moveSlope, moveWater, moveRough, cover; off freezes them (bit-identical to before)
   swimGeneEnabled: boolean; // Inherited swimming (trait 57), only with elevation; off: deep water is a wall for all
   swimFounder: number;
   swimStep: number;
@@ -1010,6 +1021,8 @@ export interface WorldSnapshot {
   readonly obstacleGrid: Uint8Array;
   /** 1 on deep water (also 1 in obstacleGrid): swimmers may cross it. Shared and never mutated; absent without deep water. */
   readonly deepGrid?: Uint8Array;
+  /** The land fields (references, never copied) for the land-sensing brain inputs; absent when they are off. */
+  readonly land?: LandView;
   /** Food stock in each cell (0 when no patch or empty). */
   readonly foodGrid: Int32Array;
   /** Carrion energy in each cell (0 when none). */

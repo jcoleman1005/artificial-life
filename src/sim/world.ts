@@ -21,6 +21,7 @@ import type {
   SimulationConfig,
   WorldMetrics,
   WorldSnapshot,
+  LandView,
 } from './types';
 import { createConfig } from './config';
 import { isParentOrChild } from './family';
@@ -895,6 +896,7 @@ export class World {
       organismAt,
       obstacleGrid,
       ...(this.deepWater.size > 0 ? { deepGrid: this.deepGrid() } : {}),
+      ...(this.config.landSensingEnabled && (this.config.elevationEnabled || this.config.terrainEnabled) ? { land: this.landView() } : {}),
       foodGrid,
       carrionGrid,
       eggGrid,
@@ -2065,6 +2067,14 @@ export class World {
       grid[Number(key.slice(comma + 1)) * gridWidth + Number(key.slice(0, comma))] = 1;
     }
     return (this.deepGridCache = grid);
+  }
+
+  /** The land fields as read-only references for the brain's land inputs. */
+  private landView(): LandView {
+    return {
+      elevation: this.config.elevationEnabled ? this.getElevation() : null,
+      terrain: this.config.terrainEnabled ? this.getTerrain() : null,
+    };
   }
 
   /** Whether this body may stand on the cell: not rock, and deep water only for a swimmer. */

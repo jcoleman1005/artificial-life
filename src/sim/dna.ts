@@ -1,5 +1,5 @@
 import type { PRNG } from './prng';
-import { ACTION_INVARIANT_MASK, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, MATURITY_INPUT, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
+import { ACTION_INVARIANT_MASK, BRAIN_HIDDEN, BRAIN_INPUT_COUNT, HEAD_START_SKIP, MATURITY_INPUT, brainInputActive, WEIGHT_LIMIT, growableBrain, mutateWeight, type Brain, type Circuit } from './brain';
 import { MEMORY_WEIGHT_COUNT, inheritMemorySpan } from './memory';
 import { inheritTag } from './tags';
 import { lifeOf, LIFE_GENES, LIFE_TRAIT_BASE, LIFE_TRAIT_COUNT, clampLife, geneForTrait, inheritLifeValue, type LifeValues } from './lifehistory';
@@ -149,7 +149,8 @@ export function encodeOrganismDNA(p: Readonly<Phenotype>, config?: Readonly<Simu
   p.brain.skip.forEach((w, i) => {
     if (i >= 52 && i < 55 && !weatherOn) return;
     if (i >= 55 && i < MATURITY_INPUT && !plantDefenseOn) return;
-    if (i >= MATURITY_INPUT && !growthOn) return; // growth off: no gene for the maturity input (keeps that world bit-identical)
+    if (i >= MATURITY_INPUT && !growthOn && i === MATURITY_INPUT) return; // growth off: no gene for the maturity input (keeps that world bit-identical)
+    if (i > MATURITY_INPUT && !brainInputActive(i, config)) return; // land sensing off or its field off: no gene
     add(GeneClass.brainSkip, i, w);
   });
   const inputs = p.brain.skip.length;
@@ -157,7 +158,8 @@ export function encodeOrganismDNA(p: Readonly<Phenotype>, config?: Readonly<Simu
     const i = k % inputs;
     if (i >= 52 && i < 55 && !weatherOn) return;
     if (i >= 55 && i < MATURITY_INPUT && !plantDefenseOn) return;
-    if (i >= MATURITY_INPUT && !growthOn) return;
+    if (i === MATURITY_INPUT && !growthOn) return;
+    if (i > MATURITY_INPUT && !brainInputActive(i, config)) return;
     add(GeneClass.brainHidden, (Math.floor(k / inputs) << 8) | i, w);
   });
   p.brain.hiddenBias.forEach((w, h) => add(GeneClass.brainHiddenBias, h, w));
@@ -725,7 +727,7 @@ export function phenotypeOf(o: Readonly<Organism>): Phenotype {
  */
 export function upgradeGenome(dna: ArrayLike<number>, savedInputs: number, config?: Readonly<SimulationConfig>): Uint32Array {
   // The maturity input only gets a gene in a world with growth on.
-  const missing = HEAD_START_SKIP.map((_, i) => i).filter((i) => i >= savedInputs && (i < MATURITY_INPUT || config?.growthEnabled !== false));
+  const missing = HEAD_START_SKIP.map((_, i) => i).filter((i) => i >= savedInputs && (i < MATURITY_INPUT ? true : i === MATURITY_INPUT ? config?.growthEnabled !== false : brainInputActive(i, config)));
   const out = new Uint32Array((geneCount(dna) + missing.length) * GENE_WORDS);
   out.set(Array.from(dna).slice(0, geneCount(dna) * GENE_WORDS));
   missing.forEach((i, k) => writeGene(out, (geneCount(dna) + k) * GENE_WORDS, geneKey(GeneClass.brainSkip, i), HEAD_START_SKIP[i]));
@@ -797,9 +799,9 @@ export function isExpressed(key: number, config: Readonly<SimulationConfig>): bo
         (geneForTrait(index)?.enabled(config) ?? false)
       );
     case GeneClass.brainSkip:
-      return index < BRAIN_INPUT_COUNT && (index < MATURITY_INPUT || config.growthEnabled);
+      return inputLive(index, config);
     case GeneClass.brainHidden:
-      return (index & 0xff) < BRAIN_INPUT_COUNT && ((index & 0xff) < MATURITY_INPUT || config.growthEnabled) && mapUnitField(index >>> 8, M) !== SILENT;
+      return inputLive(index & 0xff, config) && mapUnitField(index >>> 8, M) !== SILENT;
     case GeneClass.brainHiddenBias:
     case GeneClass.brainOut:
       return mapUnitField(index, M) !== SILENT; // switch off (M = 6): units < 6 only
@@ -823,6 +825,7 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
   const ladder = config.plantDefenseEnabled ? MATURITY_INPUT : config.weatherEnabled ? 55 : 52;
   const slotInputs = Array.from({ length: ladder }, (_, i) => i);
   if (config.growthEnabled) slotInputs.push(MATURITY_INPUT);
+  for (let i = MATURITY_INPUT + 1; i < BRAIN_INPUT_COUNT; i++) if (brainInputActive(i, config)) slotInputs.push(i);
   for (const i of slotInputs) keys.push(geneKey(GeneClass.brainSkip, i));
   for (let h = 0; h < units; h++) {
     for (const i of slotInputs) keys.push(geneKey(GeneClass.brainHidden, (h << 8) | i));
@@ -831,15 +834,22 @@ function slotKeys(config: Readonly<SimulationConfig>, units: number): number[] {
   keys.push(geneKey(GeneClass.brainOutBias, 0));
   return keys;
 }
-let slotCache: { split: boolean; weather: boolean; plantDefense: boolean; growth: boolean; units: number; keys: number[] } | null = null;
+/** Whether a genome's input index has a live meaning in this world (the maturity and land inputs follow their switches). */
+function inputLive(i: number, config: Readonly<SimulationConfig>): boolean {
+  if (i >= BRAIN_INPUT_COUNT) return false;
+  if (i < MATURITY_INPUT) return true;
+  return i === MATURITY_INPUT ? config.growthEnabled : brainInputActive(i, config);
+}
+let slotCache: { land: string; split: boolean; weather: boolean; plantDefense: boolean; growth: boolean; units: number; keys: number[] } | null = null;
 function slotsFor(config: Readonly<SimulationConfig>): number[] {
   const split = splitDiets(config);
   const weather = config.weatherEnabled;
   const plantDefense = config.plantDefenseEnabled;
   const growth = config.growthEnabled;
+  const land = `${brainInputActive(MATURITY_INPUT + 1, config)}${brainInputActive(MATURITY_INPUT + 3, config)}`;
   const units = growableBrain(config) ? internalUnits(config) : BRAIN_HIDDEN;
-  if (slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.plantDefense !== plantDefense || slotCache?.growth !== growth || slotCache?.units !== units) {
-    slotCache = { split, weather, plantDefense, growth, units, keys: slotKeys(config, units) };
+  if (slotCache?.land !== land || slotCache?.split !== split || slotCache?.weather !== weather || slotCache?.plantDefense !== plantDefense || slotCache?.growth !== growth || slotCache?.units !== units) {
+    slotCache = { land, split, weather, plantDefense, growth, units, keys: slotKeys(config, units) };
   }
   return slotCache.keys;
 }

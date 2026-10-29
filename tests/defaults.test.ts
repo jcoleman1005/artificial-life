@@ -240,7 +240,7 @@ describe('Default world', () => {
       maxAge: 8000,
     });
     // The maturity input starts with no weight, so no founder is born with an opinion about it.
-    expect(BRAIN_INPUTS[BRAIN_INPUTS.length - 1]).toBe('maturity');
+    expect(BRAIN_INPUTS[BRAIN_INPUTS.indexOf('maturity') + 1]).toBe('moveSlope');
     expect(HEAD_START_SKIP[BRAIN_INPUTS.indexOf('maturity')]).toBe(0);
   });
 

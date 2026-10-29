@@ -7,7 +7,8 @@ import type { Organism, SimulationConfig } from '../src/sim/types';
 import { DEFAULT_CONFIG } from '../src/sim/config';
 import { createHeadStartBrain } from '../src/sim/brain';
 
-const TEST_BRAIN = createHeadStartBrain(new PRNG(0));
+// The land inputs are left out so the brain (and its draws) are those the tests were written against.
+const TEST_BRAIN = createHeadStartBrain(new PRNG(0), { landSensingEnabled: false } as SimulationConfig);
 
 describe('Artificial Life Core Mechanics', () => {
   it('1. World initialization with a fixed seed is completely deterministic', () => {
@@ -90,7 +91,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('3. Illegal movement and obstacle blocking', () => {
-    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
+    const world = new World({ landSensingEnabled: false, /* keeps the hand-built brains and head-start draws these tests pin free of the land inputs */ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 42,
       gridWidth: 10,
       gridHeight: 10,

@@ -97,6 +97,7 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   elevationRiparianReach: 5, // wetness fades out over five cells from water
   elevationFertilityMean: 0.6, // about the old disc world's total food, now spread by water, slope and height
   elevationFertilityMin: 0.04,
+  landSensingEnabled: true, // four brain inputs: slope, water and roughness of the cell a move enters, and cover underfoot (zero when their field is off)
   swimGeneEnabled: true, // inherited swimming (trait 57); only with elevation. Off: nobody can cross deep water
   swimFounder: 0, // founders cannot swim; it has to arise by mutation near the shore
   swimStep: 0.05,

@@ -127,18 +127,18 @@ describe('Ageing', () => {
 });
 
 describe('Brain input', () => {
-  it('appends maturity last (after the weather and Red Queen inputs); weights exist only while growth is on', () => {
-    expect(BRAIN_INPUTS[BRAIN_INPUTS.length - 1]).toBe('maturity');
+  it('appends maturity after the weather and Red Queen inputs (the land inputs follow it); weights exist only while growth is on', () => {
+    expect(BRAIN_INPUTS[MATURITY_INPUT]).toBe('maturity');
     expect(MATURITY_INPUT).toBe(56);
     expect(BRAIN_INPUTS[MATURITY_INPUT - 1]).toBe('lastBiteYield');
-    expect(BRAIN_INPUT_COUNT).toBe(57);
+    expect(BRAIN_INPUT_COUNT).toBe(61);
     // Founders start with zero weight on it (direct and hidden), growth on or off.
-    const on = createHeadStartBrain(new PRNG(1), { growthEnabled: true } as SimulationConfig);
+    const on = createHeadStartBrain(new PRNG(1), { growthEnabled: true, landSensingEnabled: false } as SimulationConfig);
     expect(on.skip[MATURITY_INPUT]).toBe(0);
     // With growth on the hidden weights are ordinary small draws (they can evolve); off they are zero and never drawn.
     expect(on.hidden.filter((_, i) => i % BRAIN_INPUT_COUNT === MATURITY_INPUT).some((w) => w !== 0)).toBe(true);
     const prngOff = new PRNG(1);
-    const off = createHeadStartBrain(prngOff, { growthEnabled: false } as SimulationConfig);
+    const off = createHeadStartBrain(prngOff, { growthEnabled: false, landSensingEnabled: false } as SimulationConfig);
     expect(off.hidden.filter((_, i) => i % BRAIN_INPUT_COUNT === MATURITY_INPUT).every((w) => w === 0)).toBe(true);
     // Switch-off identity: the draws consumed equal the pre-growth count (BRAIN_HIDDEN rows of 56 weights, then 6 + 6).
     const ref = new PRNG(1);
