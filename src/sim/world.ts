@@ -647,7 +647,7 @@ export class World {
     for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
     // Saves from before terrain load with it off (their world was made without it).
     if (!state.terrain && (state.config as Partial<SimulationConfig>).terrainEnabled === undefined) world.config.terrainEnabled = false;
-    world.terrainField = state.terrain ? TerrainField.fromState(state.terrain) : null;
+    world.terrainField = state.terrain ? TerrainField.fromState(state.terrain, world.config) : null;
     world.obstacles.clear();
     for (const key of state.obstacles) world.obstacles.add(key);
     world.foodRegions.length = 0;
@@ -1022,6 +1022,10 @@ export class World {
     const pendingMatings: { organism: Organism; mateId: string }[] = [];
 
     const terrain = this.getTerrain();
+    // Wear from this tick's moves and bites, applied after all actions so no body is affected by the order they act in.
+    const wearing = terrain !== null && this.config.terrainWearEnabled;
+    const trampled: { index: number; size: number }[] = [];
+    const grazed: number[] = [];
     for (const item of intentions.values()) {
       const { organism, sensed, scores, chosenAction, approved } = item;
       const startCell = { x: organism.x, y: organism.y };
@@ -1088,6 +1092,7 @@ export class World {
               patch.stock -= 1;
               grazePlant(patch, this.tick, this.plantCounters);
               this.biteCell(patch);
+              if (wearing) grazed.push(patch.y * this.config.gridWidth + patch.x);
             } else organism.carriedFood -= 1;
             organism.foodEatenCount++;
             energyDelta += energyGain;
@@ -1202,15 +1207,14 @@ export class World {
             const windMultiplier = Math.max(0.5, 1.0 - this.config.weatherWindCoupling * align * exposure);
             cost *= (mudDrag * windMultiplier);
           }
-          if (terrain) {
-            // Rough ground costs more to enter, more for a larger footprint.
-            const entered = chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined);
-            if (entered) cost *= roughnessMoveFactor(terrain.roughnessAt(entered.x, entered.y), sizeOf(organism, this.config), this.config);
-          }
+          // The cell entered: rough ground costs more to enter, more for a larger footprint, and crossings wear it.
+          const entered = terrain ? (chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined)) : undefined;
+          if (terrain && entered) cost *= roughnessMoveFactor(terrain.roughnessAt(entered.x, entered.y), sizeOf(organism, this.config), this.config);
           if (approved && item.swapWithId) {
             // Trade places with the other organism after all actions (see below).
             organism.energy -= cost;
             this.ledger.move += cost;
+            if (wearing && entered) trampled.push({ index: entered.y * this.config.gridWidth + entered.x, size: sizeOf(organism, this.config) });
             energyDelta -= cost;
             spentEnergy += cost;
             pendingSwaps.set([organism.id, item.swapWithId].sort().join('|'), {
@@ -1223,6 +1227,7 @@ export class World {
             organism.y = chosenAction.target.y;
             organism.energy -= cost;
             this.ledger.move += cost;
+            if (wearing) trampled.push({ index: organism.y * this.config.gridWidth + organism.x, size: sizeOf(organism, this.config) });
             energyDelta -= cost;
             spentEnergy += cost;
             outcome = 'success';
@@ -1280,6 +1285,7 @@ export class World {
             patch.stock -= 1;
             grazePlant(patch, this.tick, this.plantCounters);
             this.biteCell(patch);
+            if (wearing) grazed.push(patch.y * this.config.gridWidth + patch.x);
             organism.carriedFood += 1;
             outcome = 'success';
           } else {
@@ -1374,6 +1380,11 @@ export class World {
       if (organism.recentHistory.length > 8) {
         organism.recentHistory.pop();
       }
+    }
+
+    if (wearing) {
+      for (const t of trampled) terrain.trample(t.index, t.size, this.config);
+      for (const g of grazed) terrain.graze(g, this.config);
     }
 
     // Matings: pairs who asked each other (in id order, once per pair). Both
@@ -1880,6 +1891,12 @@ export class World {
       gridWidth,
       gridHeight,
     } = this.config;
+
+    // Worn ground drifts back toward the original terrain.
+    if (this.config.terrainEnabled && this.config.terrainWearEnabled) {
+      const interval = Math.max(1, Math.floor(this.config.terrainRecoveryInterval));
+      if (this.tick % interval === 0) this.getTerrain()?.recover(interval, this.config);
+    }
 
     // Lean times: food regrows more slowly and no new patches appear. With
     // regions, each region may be in its own season.

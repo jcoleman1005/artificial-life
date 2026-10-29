@@ -42,6 +42,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Physics build order (2026-10-29): ranked in `docs/STATUS.md`; ledger, thermal and terrain built; optimisation, baseline runs next, re-rank after; weather coupling, food physics and the signal layer are open hook points.
 - Physics contract (2026-10-29; `docs/specs/physics.md`): quantities, laws and a gene-fit test every new gene must pass; weather coupling, food physics, terrain, signal layer and senescence are open hook points.
 - Terrain fields (2026-10-29, built; `src/sim/terrain.ts`, `terrainEnabled`): per-cell roughness (move cost × √size) and cover (shelters temperature, rain and wind) from seeded noise independent of food regions; switch off is bit-identical; brain inputs batched with wound load (not built); wetness and dynamic terrain later.
+- Terrain wear (2026-10-29, built; `terrainWearEnabled`): trampling smooths roughness and strips cover (× √size), grazing strips cover, worn ground recovers toward the original; applied after all actions; no new action. Active dig/build later.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.

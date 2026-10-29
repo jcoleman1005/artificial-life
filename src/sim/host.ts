@@ -258,8 +258,19 @@ export class SimulationHost {
     this.timer = null;
   }
 
+  /** The terrain last sent to the page, to send a new copy only when it has worn. */
+  private terrainSentFor: ReturnType<World['getTerrain']> = null;
+  private terrainSentVersion = -1;
+  private terrainSentAt = 0;
+
   private postStatic(only?: Viewer): void {
     const { world } = this;
+    if (!only) {
+      // Everyone gets the current terrain with a reset; a single new viewer does not stop the others' updates.
+      this.terrainSentFor = world.getTerrain();
+      this.terrainSentVersion = this.terrainSentFor?.version ?? -1;
+      this.terrainSentAt = this.env.now();
+    }
     const message: FromWorker = {
       kind: 'static',
       config: { ...world.config },
@@ -328,7 +339,19 @@ export class SimulationHost {
       this.pendingEvents = []; // nobody to tell; a new viewer gets the recent events with the terrain
       return;
     }
-    const base = this.baseFrame(fromStep);
+    // Worn terrain goes along with a frame when it has changed, at most about once a second.
+    const terrain = this.world.getTerrain();
+    const terrainDue =
+      terrain !== null &&
+      withPanels &&
+      (this.terrainSentFor !== terrain || this.terrainSentVersion !== terrain.version) &&
+      this.env.now() - this.terrainSentAt >= 1000;
+    const base = { ...this.baseFrame(fromStep), ...(terrainDue ? { terrain: terrain.exportState() } : {}) };
+    if (terrainDue) {
+      this.terrainSentFor = terrain;
+      this.terrainSentVersion = terrain.version;
+      this.terrainSentAt = this.env.now();
+    }
     let metrics: ReturnType<World['getMetrics']> | null = null;
     if (withPanels) {
       this.lastPanels = this.env.now();

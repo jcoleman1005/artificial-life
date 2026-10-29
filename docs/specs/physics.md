@@ -36,7 +36,7 @@ Constants are today's values in `src/sim/config.ts`. A law is a scaling rule, no
 | Thermal | Upkeep × cold `1 + 0.4·max(0,−T)·size^(−1/3)·(1 − 0.5·fatRatio)/rate`, or heat `1 + 0.4·max(0,T−0.1)·size^(1/3)·(1 + 0.5·fatRatio)·rate`; T = season ±0.1 plus fronts; a founder body pays the old cold cost | Built (2026-10-29, `thermalUpkeepFactor`) |
 | Food yield | `25 × (1 − 0.6 × carnivory) × digestive efficiency`, cut by plant defence unless detox covers it; malaise `8 × (unneutralised − 0.3)` | Built |
 | Corpse | Carrion = `10 × size + 0.7 × energy held`; a meal is `taken × carnivory × digestion × meat efficiency`, bite cap 30; eating a newborn must return less than making it | Built (size scaling 2026-10-28) |
-| Terrain | Entering a cell costs `× (1 + 1.0 × roughness × √size)`; cover scales temperature felt, and rain and wind exposure, by `1 − 0.6 × cover` | Built (2026-10-29, `src/sim/terrain.ts`) |
+| Terrain | Entering a cell costs `× (1 + 1.0 × roughness × √size)`; cover scales temperature felt, and rain and wind exposure, by `1 − 0.6 × cover`. Wear: each crossing removes 0.5% of roughness and 0.3% of cover (× √size), each plant bite 0.4% of cover; worn cells recover toward the original at 0.2% of the gap per tick | Built (2026-10-29, `src/sim/terrain.ts`) |
 | Birth | Child energy = `floor(energy × investment)`; plus tax 5 and egg extra `3 × eggAllocation`; cooldown `12 / metabolicRate` | Built |
 | Matter return | 0.5% of spent energy to soil; corpses and plants return a share on decay | Built |
 | Kill chance | Attacker's energy share × `(0.2 + 0.8 × carnivory)` | Built; to be replaced by the combat function |
@@ -93,7 +93,8 @@ Reopened 2026-10-29 as places gene ideas will need. Each lists what the lever wo
 **5.3 Terrain fields** (Built 2026-10-29: roughness and cover; brain inputs, wetness and dynamic terrain still open)
 - *Lever:* continuous per-cell fields instead of named types. Version 1 has **roughness** (raises the cost of entering a cell, scaled by footprint) and **cover** (shelter: cuts thermal swing and rain/wind exposure, partly blocks sight). Generated once from smooth seeded noise, independent of the food regions, static for the run. Today a cell is open or wall, and walls stay.
 - *Unlocks:* habitat specialists, cover and ambush, burrowers, camouflage, cold shelter, and the habitat split that could push colour groups into separate species.
-- *Still open:* a wetness field tied to the weather moisture baseline, dynamic terrain (rivers, fire), and which body-dependent costs besides footprint apply.
+- *Wear (Built 2026-10-29):* bodies change the terrain passively. Trampling smooths roughness and strips cover, grazing strips cover, and worn ground recovers toward the original. An active dig or build action is a later step.
+- *Still open:* a wetness field tied to the weather moisture baseline, world-driven change (rivers, fire), brain inputs for terrain, and which body-dependent costs besides footprint apply.
 
 **5.4 Persistent signal layer**
 - *Lever:* cells hold a decaying signal value (trails, scent marks) that bodies can deposit and sense, drifting with wind.

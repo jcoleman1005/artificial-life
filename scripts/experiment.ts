@@ -279,6 +279,13 @@ function runJob(job: Job): RunResult {
     sensingRadius: mean((o) => o.sensingRadius ?? world.config.sensingRadius),
     digestiveEfficiency: mean((o) => o.digestiveEfficiency ?? 1),
     detox: mean((o) => o.detox ?? 0),
+    ...(world.getTerrain()
+      ? (() => {
+          const t = world.getTerrain()!;
+          const avg = (a: Uint16Array) => a.reduce((x, y) => x + y, 0) / a.length / 65535;
+          return { wornCells: t.wornCells(), meanRoughness: avg(t.roughness), meanCover: avg(t.cover) };
+        })()
+      : {}),
     ...(world.windfallUnitsPlaced > startWindfall.placed
       ? {
           // Windfall food eaten before it rotted (leftovers still on the ground count as uneaten).

@@ -2,7 +2,7 @@ import type { CarrionPatch, FoodPatch, Plant, SimulationConfig } from '../sim/ty
 import { plantHue } from '../sim/plants';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import type { HeatmapKind } from '../sim/activity';
-import type { TerrainField } from '../sim/terrain';
+import { TERRAIN_FULL, type TerrainField } from '../sim/terrain';
 import { regionSeasonAt, seasonAt } from '../sim/seasons';
 import { isLeapAction, isMoveAction, unitDirectionOf } from '../sim/directions';
 import type { ActionType } from '../sim/types';
@@ -995,8 +995,8 @@ export class CanvasRenderer {
       if (!lctx) return;
       const image = lctx.createImageData(terrain.width, terrain.height);
       for (let i = 0; i < terrain.roughness.length; i++) {
-        const a1 = (terrain.roughness[i] / 255) * 0.3; // brown
-        const a2 = (terrain.cover[i] / 255) * 0.26; // green
+        const a1 = (terrain.roughness[i] / TERRAIN_FULL) * 0.3; // brown
+        const a2 = (terrain.cover[i] / TERRAIN_FULL) * 0.26; // green
         const aOut = a1 + a2 * (1 - a1);
         const o = i * 4;
         if (aOut > 0) {

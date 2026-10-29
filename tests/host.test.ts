@@ -146,4 +146,16 @@ describe('Simulation host (the Web Worker side)', () => {
     expect(posted.at(-1)).toMatchObject({ kind: 'error' });
     expect(host.world.tick).toBe(1);
   });
+
+  it('sends worn terrain along with a frame, at most about once a second, and only when it changed', () => {
+    const { env, advance, frames } = fakeEnv();
+    const host = new SimulationHost(env, { ...SMALL, foodRegionCount: 2 });
+    host.handle({ kind: 'speed', ticksPerSecond: 20 });
+    host.handle({ kind: 'play' });
+    advance(6000);
+    const withTerrain = frames().filter((f) => f.terrain);
+    expect(withTerrain.length).toBeGreaterThan(0);
+    expect(withTerrain.length).toBeLessThanOrEqual(7); // about once a second over 6 seconds
+    expect(withTerrain[0].terrain!.format).toBe(2);
+  });
 });

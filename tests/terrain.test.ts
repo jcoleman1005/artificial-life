@@ -3,7 +3,7 @@ import { World } from '../src/sim/world';
 import { PRNG } from '../src/sim/prng';
 import { createConfig } from '../src/sim/config';
 import { createHeadStartBrain } from '../src/sim/brain';
-import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor } from '../src/sim/terrain';
+import { TERRAIN_FULL, TerrainField, coverExposure, generateTerrain, roughnessMoveFactor } from '../src/sim/terrain';
 import { thermalUpkeepFactor } from '../src/sim/traits';
 import type { Organism, PolicyWeights } from '../src/sim/types';
 
@@ -38,7 +38,7 @@ describe('Terrain generation', () => {
     expect(Array.from(a.cover)).toEqual(Array.from(b.cover));
     expect(Array.from(a.roughness)).not.toEqual(Array.from(c.roughness));
     expect(a.roughness.length).toBe(60 * 60);
-    expect(Math.max(...a.roughness)).toBeLessThanOrEqual(255);
+    expect(Math.max(...a.roughness)).toBeLessThanOrEqual(TERRAIN_FULL);
     // Rough and open ground both exist, and the two fields are not the same.
     const open = Array.from(a.roughness).filter((v) => v === 0).length;
     expect(open).toBeGreaterThan(0.2 * 3600);
@@ -93,12 +93,12 @@ describe('Terrain physics', () => {
     // a single organism that is made to move pays the extra. Weather off so only terrain differs.
     const run = (rough: number) => {
       const world = new World({
-        seed: 4, gridWidth: 12, gridHeight: 12, weatherEnabled: false, terrainEnabled: true, obstacleDensity: 0,
+        seed: 4, gridWidth: 12, gridHeight: 12, weatherEnabled: false, terrainEnabled: true, terrainWearEnabled: false, obstacleDensity: 0,
         initialOrganisms: 0, initialFoodPatches: 0, torporEnabled: false, ledgerCheckInterval: 1, controller: 'dials',
         plantsEnabled: false,
       });
-      const roughness = new Uint8Array(144).fill(rough);
-      (world as unknown as { terrainField: TerrainField }).terrainField = new TerrainField(12, 12, roughness, new Uint8Array(144));
+      const roughness = new Uint16Array(144).fill(rough * 257);
+      (world as unknown as { terrainField: TerrainField }).terrainField = TerrainField.fresh(12, 12, roughness, new Uint16Array(144));
       const mover = body({ id: 'mover', x: 6, y: 6, energy: 80, policy: { ...ZERO_POLICY, exploreTendency: 2 } });
       world.organisms.set(mover.id, mover);
       world.step();
@@ -136,4 +136,99 @@ describe('Terrain in saved worlds', () => {
     for (let t = 0; t < 300; t++) w.step();
     expect(w.ledgerReport()!.violations).toBe(0);
   }, 120_000);
+});
+
+describe('Terrain wear and recovery', () => {
+  const cfg = createConfig({});
+  const field = (rough = TERRAIN_FULL, cover = TERRAIN_FULL) =>
+    TerrainField.fresh(10, 10, new Uint16Array(100).fill(rough), new Uint16Array(100).fill(cover));
+
+  it('wears roughness and cover down multiplicatively, more for a bigger footprint, and never below zero', () => {
+    const a = field();
+    const b = field();
+    a.trample(0, 1, cfg);
+    b.trample(0, 4, cfg); // footprint √4 = 2
+    expect(a.roughnessAt(0, 0)).toBeCloseTo(1 - cfg.terrainTrampleRoughness, 3);
+    expect(b.roughnessAt(0, 0)).toBeCloseTo(1 - 2 * cfg.terrainTrampleRoughness, 3);
+    expect(b.coverAt(0, 0)).toBeLessThan(a.coverAt(0, 0));
+    for (let i = 0; i < 5000; i++) a.trample(0, 2.5, cfg);
+    expect(a.roughnessAt(0, 0)).toBeGreaterThanOrEqual(0);
+    expect(a.coverAt(0, 0)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('leaves open ground untouched (nothing to wear) and grazing wears only cover', () => {
+    const open = field(0, 0);
+    open.trample(5, 1, cfg);
+    open.graze(5, cfg);
+    expect(open.wornCells()).toBe(0);
+    const f = field();
+    f.graze(7, cfg);
+    expect(f.roughnessAt(7, 0)).toBe(1);
+    expect(f.coverAt(7, 0)).toBeCloseTo(1 - cfg.terrainGrazeCover, 3);
+    expect(f.wornCells()).toBe(1);
+  });
+
+  it('recovers toward the original terrain: busy cells stay worn longer, and healed cells are no longer worn', () => {
+    const f = field();
+    for (let i = 0; i < 300; i++) f.trample(1, 1, cfg); // a busy path
+    for (let i = 0; i < 20; i++) f.trample(2, 1, cfg); // a quiet cell
+    const busy0 = f.roughnessAt(1, 0);
+    const quiet0 = f.roughnessAt(2, 0);
+    expect(busy0).toBeLessThan(quiet0);
+    f.recover(10, cfg);
+    expect(f.roughnessAt(1, 0)).toBeGreaterThan(busy0); // moved back toward 1
+    expect(f.roughnessAt(1, 0)).toBeLessThan(1); // but not all the way
+    for (let i = 0; i < 2000; i++) f.recover(10, cfg);
+    expect(f.roughnessAt(1, 0)).toBe(1);
+    expect(f.coverAt(1, 0)).toBe(1);
+    expect(f.wornCells()).toBe(0);
+  });
+
+  it('wears the ground in a real world, and not at all with wear switched off', () => {
+    const worn = (terrainWearEnabled: boolean) => {
+      const w = new World({ seed: 12, terrainWearEnabled });
+      for (let t = 0; t < 250; t++) w.step();
+      return w.getTerrain()!.wornCells();
+    };
+    expect(worn(true)).toBeGreaterThan(0);
+    expect(worn(false)).toBe(0);
+  }, 120_000);
+
+  it('a crossing leaves the cell entered smoother, and no other cell changes', () => {
+    const world = new World({
+      seed: 4, gridWidth: 12, gridHeight: 12, weatherEnabled: false, terrainEnabled: true, obstacleDensity: 0,
+      initialOrganisms: 0, initialFoodPatches: 0, torporEnabled: false, controller: 'dials', plantsEnabled: false,
+    });
+    (world as unknown as { terrainField: TerrainField }).terrainField = TerrainField.fresh(12, 12, new Uint16Array(144).fill(TERRAIN_FULL), new Uint16Array(144));
+    const mover = body({ id: 'mover', x: 6, y: 6, energy: 80, policy: { ...ZERO_POLICY, exploreTendency: 2 } });
+    world.organisms.set(mover.id, mover);
+    world.step();
+    expect([mover.x, mover.y]).not.toEqual([6, 6]);
+    const t = world.getTerrain()!;
+    expect(t.wornCells()).toBe(1);
+    expect(t.roughnessAt(mover.x, mover.y)).toBeLessThan(1);
+    expect(t.roughnessAt(6, 6)).toBe(1); // the cell it left is untouched
+  });
+
+  it('survives a save and restore bit for bit, worn ground included, and then continues identically', () => {
+    const a = new World({ seed: 21 });
+    for (let t = 0; t < 120; t++) a.step();
+    expect(a.getTerrain()!.wornCells()).toBeGreaterThan(0);
+    const b = World.fromState(a.exportState());
+    expect(b.getTerrain()!.wornCells()).toBe(a.getTerrain()!.wornCells());
+    expect(b.stateHash()).toBe(a.stateHash());
+    for (let t = 0; t < 40; t++) {
+      a.step();
+      b.step();
+    }
+    expect(b.stateHash()).toBe(a.stateHash());
+  }, 120_000);
+
+  it('reads terrain saved as bytes by an earlier version', () => {
+    const a = generateTerrain(createConfig({ seed: 5 }));
+    const bytes = Array.from(a.roughness, (v) => Math.round(v / 257));
+    const state = { width: 60, height: 60, roughness: bytes, cover: bytes };
+    const restored = TerrainField.fromState(state, createConfig({ seed: 5 }));
+    expect(restored.roughness[10]).toBe(bytes[10] * 257);
+  });
 });

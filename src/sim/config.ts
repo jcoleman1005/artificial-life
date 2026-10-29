@@ -84,6 +84,12 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   terrainScale: 8, // patches about 8 cells across on the 60×60 grid
   terrainThreshold: 0.5, // about half of the ground is open
   terrainRoughnessCoeff: 1.0, // the roughest ground doubles a size-1 body's move cost
+  terrainWearEnabled: true, // off keeps the terrain as first made (the control arm)
+  terrainTrampleRoughness: 0.005, // a path takes a few hundred crossings to wear down
+  terrainTrampleCover: 0.003,
+  terrainGrazeCover: 0.004,
+  terrainRecoveryRate: 0.002, // about 500 ticks to close most of the gap
+  terrainRecoveryInterval: 10,
   terrainCoverShelter: 0.6, // full cover removes 60% of the temperature swing and the rain and wind exposure
   ledgerEnabled: true, // observer only; never changes the world
   ledgerCheckInterval: 25, // a check sums the animals' stored energy once; 1 checks every tick (tests)

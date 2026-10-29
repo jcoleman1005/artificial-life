@@ -576,6 +576,12 @@ export interface SimulationConfig {
   terrainScale: number; // Cells per noise lattice step: larger gives broader patches
   terrainThreshold: number; // Noise below this is open ground (0..1); higher means less rough and sheltered ground
   terrainRoughnessCoeff: number; // Extra move cost entering a fully rough cell, for a size-1 body (× √size for larger ones)
+  terrainWearEnabled: boolean; // Bodies wear the terrain (trampling, grazing) and worn ground recovers; off keeps it static (needs terrainEnabled)
+  terrainTrampleRoughness: number; // Share of a cell's roughness a crossing removes, × √size (multiplicative)
+  terrainTrampleCover: number; // Share of a cell's cover a crossing removes, × √size
+  terrainGrazeCover: number; // Share of a cell's cover a plant bite removes
+  terrainRecoveryRate: number; // Share of the gap to the original terrain a worn cell closes per tick
+  terrainRecoveryInterval: number; // Ticks between recovery steps (the step closes the share for all of them)
   terrainCoverShelter: number; // Share of temperature swing and rain/wind exposure a fully covered cell removes (0..1)
   ledgerEnabled: boolean; // Observer: balance the energy the animals hold every ledgerCheckInterval ticks (docs/decisions.md, Energy ledger)
   ledgerCheckInterval: number; // Ticks between ledger checks; flows are summed every tick, stored energy only at a check

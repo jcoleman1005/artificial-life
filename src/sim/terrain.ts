@@ -8,45 +8,139 @@ import type { SimulationConfig } from './types';
  * - roughness: raises the cost of entering the cell (scaled by the mover's footprint, √size);
  * - cover: shelter, which cuts the temperature a body feels and its exposure to rain and wind.
  *
- * Each is a byte (0..255 meaning 0..1) so a lookup is one array read. Walls stay as they are
+ * Each is a 16-bit fixed-point value (0..65535 meaning 0..1) so a lookup is one array read. Walls stay as they are
  * (`World.obstacles`); terrain is independent of them and of the food regions, so habitat and
- * food can differ. The noise comes from its own random stream, derived from the world's seed, so
+ * food can differ. Bodies wear it (see TerrainField) and worn ground recovers toward the original. The noise comes from its own random stream, derived from the world's seed, so
  * making it draws nothing from the simulation's stream.
  */
+
+/** Cell values are 16-bit fixed point, 0..FULL meaning 0..1: wear steps are smaller than a byte. */
+export const TERRAIN_FULL = 65535;
 
 export interface TerrainState {
   readonly width: number;
   readonly height: number;
+  /** 2: values 0..65535. Absent (older saves): bytes 0..255. */
+  readonly format?: 2;
   readonly roughness: readonly number[];
   readonly cover: readonly number[];
 }
 
+/**
+ * The terrain now and the terrain it came from. Bodies wear the current fields (trampling lowers
+ * roughness and cover, grazing lowers cover) and worn cells drift back toward the original, which
+ * is regenerated from the seed and so is never saved. `dirty` lists the cells that differ from it,
+ * so wear and recovery cost nothing where nothing has happened.
+ */
 export class TerrainField {
+  /** Bumped whenever a value changes; lets the host send the page an update only when needed. Not saved. */
+  public version = 0;
+  private readonly dirty = new Set<number>();
+
   constructor(
     public readonly width: number,
     public readonly height: number,
-    public readonly roughness: Uint8Array,
-    public readonly cover: Uint8Array
-  ) {}
+    public readonly roughness: Uint16Array,
+    public readonly cover: Uint16Array,
+    private readonly baseRoughness: Uint16Array,
+    private readonly baseCover: Uint16Array
+  ) {
+    for (let i = 0; i < roughness.length; i++) if (roughness[i] !== baseRoughness[i] || cover[i] !== baseCover[i]) this.dirty.add(i);
+  }
 
   /** Roughness of a cell in 0..1 (0 off the grid). */
   public roughnessAt(x: number, y: number): number {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
-    return this.roughness[y * this.width + x] / 255;
+    return this.roughness[y * this.width + x] / TERRAIN_FULL;
   }
 
   /** Cover of a cell in 0..1 (0 off the grid). */
   public coverAt(x: number, y: number): number {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return 0;
-    return this.cover[y * this.width + x] / 255;
+    return this.cover[y * this.width + x] / TERRAIN_FULL;
   }
 
+  /** How many cells are worn (differ from the original). */
+  public wornCells(): number {
+    return this.dirty.size;
+  }
+
+  /** A body of `size` entered a cell: roughness and cover wear down, more for a bigger footprint (√size). */
+  public trample(index: number, size: number, config: Readonly<SimulationConfig>): void {
+    const weight = Math.sqrt(size);
+    this.wear(index, config.terrainTrampleRoughness * weight, config.terrainTrampleCover * weight);
+  }
+
+  /** A plant bite at a cell: its cover wears down. */
+  public graze(index: number, config: Readonly<SimulationConfig>): void {
+    this.wear(index, 0, config.terrainGrazeCover);
+  }
+
+  private wear(index: number, roughnessShare: number, coverShare: number): void {
+    const r = this.roughness[index];
+    const c = this.cover[index];
+    const nr = roughnessShare > 0 ? Math.round(r * (1 - Math.min(1, roughnessShare))) : r;
+    const nc = coverShare > 0 ? Math.round(c * (1 - Math.min(1, coverShare))) : c;
+    if (nr === r && nc === c) return;
+    this.roughness[index] = nr;
+    this.cover[index] = nc;
+    this.dirty.add(index);
+    this.version++;
+  }
+
+  /**
+   * Worn cells drift back toward the original: each step closes `1 − (1 − terrainRecoveryRate)^ticks` of the
+   * gap (ticks since the last step), and a cell within a hair of the original snaps back and is no longer worn.
+   */
+  public recover(ticks: number, config: Readonly<SimulationConfig>): void {
+    if (this.dirty.size === 0) return;
+    const share = 1 - Math.pow(1 - Math.min(1, config.terrainRecoveryRate), ticks);
+    for (const i of this.dirty) {
+      const r = this.roughness[i];
+      const c = this.cover[i];
+      const br = this.baseRoughness[i];
+      const bc = this.baseCover[i];
+      let nr = r + recoveryStep(br - r, share);
+      let nc = c + recoveryStep(bc - c, share);
+      if (Math.abs(br - nr) < 3) nr = br;
+      if (Math.abs(bc - nc) < 3) nc = bc;
+      this.roughness[i] = nr;
+      this.cover[i] = nc;
+      if (nr === br && nc === bc) this.dirty.delete(i);
+    }
+    this.version++;
+  }
+
+  /** The current fields only; the original is regenerated from the seed. */
   public exportState(): TerrainState {
-    return { width: this.width, height: this.height, roughness: Array.from(this.roughness), cover: Array.from(this.cover) };
+    return { width: this.width, height: this.height, format: 2, roughness: Array.from(this.roughness), cover: Array.from(this.cover) };
   }
 
-  public static fromState(state: TerrainState): TerrainField {
-    return new TerrainField(state.width, state.height, Uint8Array.from(state.roughness), Uint8Array.from(state.cover));
+  /** Current fields from a saved state, with the original regenerated from the world's seed. */
+  public static fromState(state: TerrainState, config: Readonly<SimulationConfig>): TerrainField {
+    const scale = state.format === 2 ? 1 : 257; // older saves held bytes
+    const original = generateTerrain({ ...config, gridWidth: state.width, gridHeight: state.height });
+    return new TerrainField(
+      state.width,
+      state.height,
+      Uint16Array.from(state.roughness, (v) => v * scale),
+      Uint16Array.from(state.cover, (v) => v * scale),
+      original.baseRoughness,
+      original.baseCover
+    );
+  }
+
+  /** The current fields for a page that only draws them (no original kept, so no recovery to run). */
+  public static forView(state: TerrainState): TerrainField {
+    const scale = state.format === 2 ? 1 : 257;
+    const roughness = Uint16Array.from(state.roughness, (v) => v * scale);
+    const cover = Uint16Array.from(state.cover, (v) => v * scale);
+    return new TerrainField(state.width, state.height, roughness, cover, roughness.slice(), cover.slice());
+  }
+
+  /** Fresh terrain: the original, with a separate copy as the current. */
+  public static fresh(width: number, height: number, roughness: Uint16Array, cover: Uint16Array): TerrainField {
+    return new TerrainField(width, height, roughness.slice(), cover.slice(), roughness, cover);
   }
 }
 
@@ -77,15 +171,21 @@ function valueNoise(width: number, height: number, scale: number, prng: PRNG): F
   return out;
 }
 
-/** Noise in 0..1 mapped so cells below `threshold` are 0 (open ground) and the rest rise to 1, as bytes. */
-function toBytes(noise: Float64Array, threshold: number): Uint8Array {
-  const bytes = new Uint8Array(noise.length);
+/** One recovery step across a gap: the share of it, but at least one unit, so a cell near its original cannot stall short. */
+function recoveryStep(gap: number, share: number): number {
+  const step = Math.round(gap * share);
+  return step === 0 ? Math.sign(gap) : step;
+}
+
+/** Noise in 0..1 mapped so cells below `threshold` are 0 (open ground) and the rest rise to 1, as fixed point. */
+function toFixed(noise: Float64Array, threshold: number): Uint16Array {
+  const out = new Uint16Array(noise.length);
   const span = Math.max(1e-9, 1 - threshold);
   for (let i = 0; i < noise.length; i++) {
     const v = Math.max(0, Math.min(1, (noise[i] - threshold) / span));
-    bytes[i] = Math.round(v * 255);
+    out[i] = Math.round(v * TERRAIN_FULL);
   }
-  return bytes;
+  return out;
 }
 
 /** The terrain for a world: roughness then cover, from a stream of their own. */
@@ -93,9 +193,9 @@ export function generateTerrain(config: Readonly<SimulationConfig>): TerrainFiel
   const { gridWidth: width, gridHeight: height } = config;
   const prng = new PRNG(`terrain:${String(config.seed)}`);
   const scale = Math.max(2, config.terrainScale);
-  const roughness = toBytes(valueNoise(width, height, scale, prng), config.terrainThreshold);
-  const cover = toBytes(valueNoise(width, height, scale, prng), config.terrainThreshold);
-  return new TerrainField(width, height, roughness, cover);
+  const roughness = toFixed(valueNoise(width, height, scale, prng), config.terrainThreshold);
+  const cover = toFixed(valueNoise(width, height, scale, prng), config.terrainThreshold);
+  return TerrainField.fresh(width, height, roughness, cover);
 }
 
 /**

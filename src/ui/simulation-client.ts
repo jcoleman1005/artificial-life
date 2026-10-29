@@ -185,7 +185,7 @@ export class SimulationClient implements WorldView {
       case 'static':
         this.config = message.config;
         this.obstacles = new Set(message.obstacles);
-        this.terrain = message.terrain ? TerrainField.fromState(message.terrain) : null;
+        this.terrain = message.terrain ? TerrainField.forView(message.terrain) : null;
         this.foodRegions = message.foodRegions;
         this.worldEvents = [...message.events];
         this.heatmap = null;
@@ -194,6 +194,7 @@ export class SimulationClient implements WorldView {
       case 'frame': {
         this.events.beforeFrame();
         this.tick = message.tick;
+        if (message.terrain) this.terrain = TerrainField.forView(message.terrain);
         this.organisms = new Map(message.organisms.map((o) => [o.id, o]));
         this.foodPatches = new Map(message.foodPatches.map((p) => [`${p.x},${p.y}`, p]));
         this.carrion = new Map((message.carrion ?? []).map((c) => [`${c.x},${c.y}`, c]));

@@ -215,6 +215,8 @@ export type FromWorker =
         readonly fronts: readonly WeatherFront[];
         readonly wind: { readonly wx: number; readonly wy: number };
       };
+      /** Worn terrain, sent when it has changed (at most about once a second; absent with terrain off). */
+      readonly terrain?: TerrainState;
       /** Ticks run in the last second (measured in the worker). */
       readonly ticksPerSecond: number;
       /** Whether the world is playing, and at what speed (another viewer may have changed them). */
