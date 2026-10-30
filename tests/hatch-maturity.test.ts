@@ -23,8 +23,8 @@ function withHatch(w: World, o: Organism, h: number, extra: Partial<Organism> = 
 }
 
 function emptyWorld(config: Partial<SimulationConfig> = {}): { world: World; donor: Organism } {
-  const donor = new World({ seed: 7, ...config }).organisms.values().next().value as Organism;
-  const world = new World({ seed: 7, initialOrganisms: 0, initialFoodPatches: 0, foodRegionCount: 0, obstacleDensity: 0, ...config });
+  const donor = new World({ seed: 7, landSensingEnabled: false, ...config }).organisms.values().next().value as Organism;
+  const world = new World({ seed: 7, landSensingEnabled: false, initialOrganisms: 0, initialFoodPatches: 0, foodRegionCount: 0, obstacleDensity: 0, ...config }); // land inputs off: the test pins exact clutch counts
   return { world, donor };
 }
 

@@ -1,6 +1,7 @@
 import { DEFAULT_CONFIG } from '../sim/config';
 import type { HistorySample } from '../sim/history';
 import { TerrainField } from '../sim/terrain';
+import { ElevationField } from '../sim/elevation';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
 import type { BrainTrace } from '../sim/brain-trace';
@@ -108,6 +109,7 @@ export class SimulationClient implements WorldView {
   public foodRegions: readonly FoodRegion[] = [];
   public obstacles: ReadonlySet<string> = new Set();
   public terrain: TerrainField | null = null;
+  public elevation: ElevationField | null = null;
   public weather: WorldView['weather'] = null;
   /** Ticks per second the worker actually ran over the last second. */
   public ticksPerSecond = 0;
@@ -228,6 +230,7 @@ export class SimulationClient implements WorldView {
         this.config = message.config;
         this.obstacles = new Set(message.obstacles);
         this.terrain = message.terrain ? TerrainField.forView(message.terrain) : null;
+        this.elevation = message.elevation ? ElevationField.forView(message.elevation) : null;
         this.foodRegions = message.foodRegions;
         this.worldEvents = [...message.events];
         this.heatmap = null;

@@ -11,7 +11,7 @@ const TOLERANCE = (r: { totalIn: number; totalOut: number; stored: number }) => 
 describe('Energy ledger', () => {
   it('balances every tick in a world that lays eggs, mates, hunts, scavenges and takes in immigrants', () => {
     // eggFounder and immigration are raised so the egg and immigrant paths are exercised.
-    const w = new World({ seed: 5, ledgerCheckInterval: 1, eggFounder: 0.6, immigrationEnabled: true });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  landSensingEnabled: false, /* keeps the hand-built brains and head-start draws these tests pin free of the land inputs */ seed: 5, ledgerCheckInterval: 1, eggFounder: 0.6, immigrationEnabled: true });
     for (let t = 0; t < 700; t++) {
       w.step();
       const r = w.ledgerReport()!;
@@ -31,14 +31,14 @@ describe('Energy ledger', () => {
 
   it('balances for the dials controller, with carrion off, and with sex off', () => {
     for (const overrides of [{ controller: 'dials' as const }, { carrionEnabled: false }, { sexEnabled: false }]) {
-      const w = new World({ seed: 7, ledgerCheckInterval: 1, ...overrides });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 7, ledgerCheckInterval: 1, ...overrides });
       for (let t = 0; t < 400; t++) w.step();
       expect(w.ledgerReport()!.violations).toBe(0);
     }
   }, 120_000);
 
   it('balances over longer windows too (the check only sums stored energy every interval)', () => {
-    const w = new World({ seed: 3, ledgerCheckInterval: 25 });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 3, ledgerCheckInterval: 25 });
     for (let t = 0; t < 500; t++) w.step();
     const r = w.ledgerReport()!;
     expect(r.checks).toBe(20);
@@ -47,7 +47,7 @@ describe('Energy ledger', () => {
   }, 120_000);
 
   it('catches energy created from nothing', () => {
-    const w = new World({ seed: 5, ledgerCheckInterval: 1 });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5, ledgerCheckInterval: 1 });
     for (let t = 0; t < 50; t++) w.step();
     expect(w.ledgerReport()!.violations).toBe(0);
     [...w.organisms.values()][0].energy += 50; // a leak
@@ -59,7 +59,7 @@ describe('Energy ledger', () => {
 
   it('is an observer: switched off, the world is identical', () => {
     const run = (ledgerEnabled: boolean) => {
-      const w = new World({ seed: 11, ledgerEnabled });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 11, ledgerEnabled });
       for (let t = 0; t < 300; t++) w.step();
       const { config: _config, ...state } = w.exportState();
       return JSON.stringify(state);
@@ -68,7 +68,7 @@ describe('Energy ledger', () => {
   }, 120_000);
 
   it('starts fresh from a saved world and still balances', () => {
-    const a = new World({ seed: 2, ledgerCheckInterval: 1 });
+    const a = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 2, ledgerCheckInterval: 1 });
     for (let t = 0; t < 120; t++) a.step();
     const b = World.fromState(a.exportState());
     expect(b.ledgerReport()).toBeNull();

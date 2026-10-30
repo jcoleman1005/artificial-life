@@ -217,6 +217,15 @@ export function computeOrganismBadges(org: OrganismView, config: SimulationConfi
       score: 59 + org.stealth! * 20,
     });
   }
+  if (config.swimGeneEnabled && config.elevationEnabled && (org.swim ?? 0) >= 0.15) {
+    standouts.push({
+      icon: '🏊',
+      label: org.swim! >= config.swimDeepThreshold ? 'Swimmer' : 'Wader',
+      value: `${Math.round(org.swim! * 100)}%`,
+      category: 'mobility',
+      score: 60 + org.swim! * 20,
+    });
+  }
   const senseR = config.sensingGeneEnabled ? (org.sensingRadius ?? config.sensingRadius) : config.sensingRadius;
   if (senseR > 2.2) {
     standouts.push({

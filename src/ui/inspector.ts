@@ -60,6 +60,9 @@ export function lifeHistoryPills(o: Readonly<Organism>, c: Readonly<SimulationCo
   if (c.stealthGeneEnabled && o.stealth !== undefined) {
     out.push(pill('Stealth', `${Math.round(o.stealth * 100)}%`));
   }
+  if (c.swimGeneEnabled && c.elevationEnabled && o.swim !== undefined) {
+    out.push(pill('Swimming', `${Math.round(o.swim * 100)}%`));
+  }
   return out.join('');
 }
 

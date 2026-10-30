@@ -61,7 +61,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
 
 /** A 15×15 world where only signals and eating change energy. */
 function signalWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 'signals',
     gridWidth: 15,
     gridHeight: 15,

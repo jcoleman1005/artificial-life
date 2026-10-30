@@ -88,6 +88,11 @@ export const BRAIN_INPUTS = [
   'lastBiteYield',
   // Growth (growthEnabled, append-only): how grown the body is, 0..1 (1 when grown, and with growth off).
   'maturity',
+  // Land sensing (landSensingEnabled, append-only): the slope, water and roughness of the cell a move enters, and the cover underfoot.
+  'moveSlope',
+  'moveWater',
+  'moveRough',
+  'cover',
 ] as const;
 
 export type BrainInput = (typeof BRAIN_INPUTS)[number];
@@ -98,6 +103,8 @@ export const BRAIN_INPUT_COUNT = BRAIN_INPUTS.length;
 const WEATHER_INPUT_START = BASE_BRAIN_INPUT_COUNT;
 const DEFENSE_INPUT_START = BASE_BRAIN_INPUT_COUNT + 3;
 export const MATURITY_INPUT = BRAIN_INPUTS.indexOf('maturity');
+/** First of the four land-sensing inputs: slope and water need elevation, roughness and cover need terrain. */
+export const LAND_INPUT_START = MATURITY_INPUT + 1;
 
 /**
  * Whether input i has weights in a world with this config. Brains always have
@@ -105,11 +112,16 @@ export const MATURITY_INPUT = BRAIN_INPUTS.indexOf('maturity');
  * weights that are never drawn, mutated or encoded as genes, so that world is
  * bit-identical to one built before the input existed. (No config: all active.)
  */
-export function brainInputActive(i: number, config?: Readonly<Pick<SimulationConfig, 'weatherEnabled' | 'plantDefenseEnabled' | 'growthEnabled'>>): boolean {
+export function brainInputActive(
+  i: number,
+  config?: Readonly<Pick<SimulationConfig, 'weatherEnabled' | 'plantDefenseEnabled' | 'growthEnabled' | 'landSensingEnabled' | 'elevationEnabled' | 'terrainEnabled'>>
+): boolean {
   if (i < WEATHER_INPUT_START) return true;
   if (i < DEFENSE_INPUT_START) return config?.weatherEnabled !== false;
   if (i < MATURITY_INPUT) return config?.plantDefenseEnabled !== false;
-  return config?.growthEnabled !== false;
+  if (i === MATURITY_INPUT) return config?.growthEnabled !== false;
+  if (config?.landSensingEnabled === false) return false;
+  return i < LAND_INPUT_START + 2 ? config?.elevationEnabled !== false : config?.terrainEnabled !== false;
 }
 export const BRAIN_HIDDEN = 6;
 export const WEIGHT_LIMIT = 40;
@@ -133,6 +145,7 @@ export const ACTION_INVARIANT_INPUTS: readonly BrainInput[] = [
   'weatherTemp',
   'weatherRain',
   'lastBiteYield',
+  'cover',
 ];
 
 /** 1 at the BRAIN_INPUTS index of each ACTION_INVARIANT_INPUTS entry. */
@@ -233,7 +246,8 @@ export function mutateBrain(parent: Brain, config: Readonly<SimulationConfig>, p
   const growthOn = config.growthEnabled !== false;
   const mutate = (w: number): number => mutateWeight(w, config, prng);
   // Appended inputs are frozen while weather is off (as before); the growth input also while growth is off.
-  const frozen = (i: number): boolean => i >= BASE_BRAIN_INPUT_COUNT && (!weatherOn || (i === MATURITY_INPUT && !growthOn));
+  const frozen = (i: number): boolean =>
+    i >= BASE_BRAIN_INPUT_COUNT && (!weatherOn || (i === MATURITY_INPUT && !growthOn) || (i >= LAND_INPUT_START && !brainInputActive(i, config)));
   const skip = parent.skip.map((w, i) => (frozen(i) ? w : mutate(w)));
   const hidden = parent.hidden.map((w, k) => (frozen(k % BRAIN_INPUT_COUNT) ? w : mutate(w)));
   return {
@@ -380,6 +394,30 @@ function fillBrainFeatures(
       : 0; // moveWindAlignment
   out[o++] = organism.lastBiteYield ?? 1; // lastBiteYield
   out[o++] = maturityOf(organism, config); // maturity (1 for a grown body, and with growth off)
+  // Land sensing: what the cell a move enters is like, and what is underfoot (all 0 when their field is off).
+  let moveSlope = 0;
+  let moveWater = 0;
+  let moveRough = 0;
+  let cover = 0;
+  const land = sensed.land;
+  if (land) {
+    const target = isMove ? action.target : undefined;
+    const elevation = land.elevation;
+    if (elevation && target) {
+      const from = organism.y * elevation.width + organism.x;
+      const to = target.y * elevation.width + target.x;
+      moveSlope = Math.max(-1, Math.min(1, (elevation.elev01(to) - elevation.elev01(from)) * 10));
+      moveWater = Math.min(1, elevation.depth01(to) / Math.max(1e-9, config.elevationDeepThreshold));
+    }
+    if (land.terrain) {
+      if (target) moveRough = land.terrain.roughnessAt(target.x, target.y);
+      cover = land.terrain.coverAt(organism.x, organism.y);
+    }
+  }
+  out[o++] = moveSlope; // moveSlope (climbing positive)
+  out[o++] = moveWater; // moveWater (0 land .. 1 deep)
+  out[o++] = moveRough; // moveRough
+  out[o++] = cover; // cover
 }
 
 /** Score for one feature vector, with the per-input direct contributions. */

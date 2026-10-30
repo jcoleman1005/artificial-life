@@ -67,7 +67,7 @@ let legacySample: Organism[] | null = null;
 /** Evolved legacy organisms (DNA off): varied traits, mutated brains. */
 function legacyOrganisms(): Organism[] {
   if (!legacySample) {
-    const world = new World({ ...SMALL, seed: 'dna-legacy', dnaEnabled: false });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-legacy', dnaEnabled: false });
     for (let t = 0; t < 200; t++) world.step();
     legacySample = Array.from(world.organisms.values());
   }
@@ -209,8 +209,8 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
   });
 
   it.each(['brain', 'dials'] as const)('a world with DNA on runs bit-identically to one with it off (%s)', (controller) => {
-    const legacy = new World({ ...SMALL, seed: 'dna-gate', controller, dnaEnabled: false });
-    const dna = new World({ ...SMALL, seed: 'dna-gate', controller, dnaEnabled: true });
+    const legacy = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-gate', controller, dnaEnabled: false });
+    const dna = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-gate', controller, dnaEnabled: true });
     for (let t = 1; t <= 200; t++) {
       legacy.step();
       dna.step();
@@ -226,7 +226,7 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
 
   it('two DNA runs from one seed give identical state hashes', () => {
     const runs = [0, 1].map(() => {
-      const w = new World({ ...SMALL, seed: 'dna-hash', dnaEnabled: true });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-hash', dnaEnabled: true });
       for (let t = 0; t < 150; t++) w.step();
       return hash(w.exportState());
     });
@@ -234,7 +234,7 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
   }, 30_000);
 
   it('a DNA world saved through JSON continues exactly, genomes included', () => {
-    const original = new World({ ...SMALL, seed: 'dna-snap', dnaEnabled: true });
+    const original = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-snap', dnaEnabled: true });
     for (let t = 0; t < 100; t++) original.step();
     const restored = World.fromState(JSON.parse(JSON.stringify(original.exportState())) as WorldState);
     for (let t = 0; t < 100; t++) {
@@ -247,7 +247,7 @@ describe('DNA (Stage 1: behaviour-neutral)', () => {
 
   it('switching DNA on mid-run encodes parents at their next birth and changes nothing', () => {
     // The hybrid cost needs genomes, so it is off here: this test isolates DNA's own Stage 1 neutrality.
-    const legacy = new World({ ...SMALL, seed: 'dna-switch', dnaEnabled: false, hybridIncompatibilityEnabled: false });
+    const legacy = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-switch', dnaEnabled: false, hybridIncompatibilityEnabled: false });
     for (let t = 0; t < 60; t++) legacy.step();
     const dna = World.fromState({ ...legacy.exportState(), config: { ...legacy.config, dnaEnabled: true } });
     for (let t = 0; t < 140; t++) {
@@ -296,7 +296,7 @@ describe('DNA Stage 1b.1: continuous abilities (dnaContinuousAbilities)', () => 
   });
 
   it('a world runs with efficiencies that mutate continuously, every organism decoding from its genome', () => {
-    const world = new World({ ...SMALL, seed: 'dna-continuous', dnaContinuousAbilities: true });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-continuous', dnaContinuousAbilities: true });
     for (let t = 0; t < 200; t++) world.step();
     const effs = [...world.organisms.values()].flatMap((o) => [o.abilities.diagonal, o.abilities.squeeze, o.abilities.leap]);
     expect(effs.every((e) => e >= 0 && e <= 1)).toBe(true);
@@ -305,8 +305,8 @@ describe('DNA Stage 1b.1: continuous abilities (dnaContinuousAbilities)', () => 
   }, 30_000);
 
   it('is ignored without DNA: the world is exactly the legacy one', () => {
-    const legacy = new World({ ...SMALL, seed: 'dna-cont-off', dnaEnabled: false });
-    const flagged = new World({ ...SMALL, seed: 'dna-cont-off', dnaEnabled: false, dnaContinuousAbilities: true });
+    const legacy = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-cont-off', dnaEnabled: false });
+    const flagged = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-cont-off', dnaEnabled: false, dnaContinuousAbilities: true });
     for (let t = 0; t < 100; t++) {
       legacy.step();
       flagged.step();
@@ -330,7 +330,7 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
   });
 
   it('founders are full plant eaters with no taste for meat, both written in their genome; a missing herbivory gene means 0', () => {
-    const world = new World({ ...SMALL, seed: 'dna-split', dnaSplitDiets: true });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-split', dnaSplitDiets: true });
     for (const o of world.organisms.values()) {
       expect(o.herbivory).toBe(1);
       expect(o.carnivory).toBe(0);
@@ -343,7 +343,7 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
   it('both efficiencies evolve independently in a running world', () => {
     // traitMutationRate 0.2 (default 0.1) so both traits mutate within 200 ticks on any PRNG stream:
     // at 0.1 whether a carnivory mutation survives depends on the seed's luck (it did not once mating joined).
-    const world = new World({ ...SMALL, seed: 'dna-split', dnaSplitDiets: true, traitMutationRate: 0.2 });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-split', dnaSplitDiets: true, traitMutationRate: 0.2 });
     for (let t = 0; t < 200; t++) world.step();
     const organisms = [...world.organisms.values()];
     expect(organisms.some((o) => o.herbivory !== 1)).toBe(true);
@@ -356,7 +356,7 @@ describe('DNA Stage 1b.2: split diets (dnaSplitDiets)', () => {
   }, 30_000);
 
   it('switched on mid-run, older organisms keep the plant yield their carnivory gave them, and pass it on as a gene', () => {
-    const legacy = new World({ ...SMALL, seed: 'dna-split-switch' });
+    const legacy = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 'dna-split-switch' });
     for (let t = 0; t < 60; t++) legacy.step();
     const config = { ...legacy.config, dnaSplitDiets: true };
     const old = [...legacy.organisms.values()][0];
@@ -532,10 +532,10 @@ describe('DNA Stage 2: variation operators (dnaVariationEnabled)', () => {
   }, 60_000);
 
   it('with the structural rates at 0 and no key flips, genomes keep their length (the stage-off world is the Stage 1 one, tested above)', () => {
-    const off = new World({ ...SMALL, seed: 's2-off', dnaVariationEnabled: false });
-    const flat = new World({ ...SMALL, seed: 's2-off', dnaVariationEnabled: true, dnaInsertionRate: 0, dnaDeletionRate: 0, dnaDuplicationRate: 0, dnaKeyFlipFraction: 0, dnaUpkeepPerGene: 0 });
+    const off = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 's2-off', dnaVariationEnabled: false });
+    const flat = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...SMALL, seed: 's2-off', dnaVariationEnabled: true, dnaInsertionRate: 0, dnaDeletionRate: 0, dnaDuplicationRate: 0, dnaKeyFlipFraction: 0, dnaUpkeepPerGene: 0 });
     for (let t = 0; t < 150; t++) { off.step(); flat.step(); }
-    const founderLength = geneCount(encodeOrganismDNA(phenotypeOf(Array.from(flat.organisms.values())[0])));
+    const founderLength = geneCount(encodeOrganismDNA(phenotypeOf(Array.from(flat.organisms.values())[0]), flat.config));
     for (const o of flat.organisms.values()) expect(geneCount(o.genome!)).toBe(founderLength);
   }, 60_000);
 

@@ -80,6 +80,36 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   attackCost: 2,
   bitePowerMin: 0.2,
   sexEnabled: true,
+  elevationEnabled: true, // off reproduces the world without continents (the control arm)
+  elevationPlateCount: 6, // three continental and three oceanic plates
+  elevationContinentalShare: 0.5,
+  elevationSeaFraction: 0.38, // about 38% of the map is ocean, leaving large continents
+  elevationMinContinent: 150, // fragments below this many cells are flooded
+  elevationNoise: 0.12,
+  elevationRidge: 0.25,
+  elevationDeepThreshold: 0.2, // deeper than a fifth of the depth range cannot be crossed
+  elevationRiverFraction: 0.03,
+  elevationSlopeUp: 5, // a steep step of 0.1 of the height range costs 50% more
+  elevationSlopeDown: 2, // and the same step down saves 20%
+  elevationLapse: 0.4, // the highest peaks are 0.4 colder
+  elevationWadeDrag: 1, // the deepest wadeable water doubles a size-1 body's move cost
+  elevationWaterChill: 0.25, // standing in water is 0.25 colder
+  elevationRiparianReach: 5, // wetness fades out over five cells from water
+  elevationFertilityMean: 0.6, // about the old disc world's total food, now spread by water, slope and height
+  elevationFertilityMin: 0.04,
+  landSensingEnabled: true, // four brain inputs: slope, water and roughness of the cell a move enters, and cover underfoot (zero when their field is off)
+  swimGeneEnabled: true, // inherited swimming (trait 57); only with elevation. Off: nobody can cross deep water
+  swimFounder: 0, // founders cannot swim; it has to arise by mutation near the shore
+  swimStep: 0.05,
+  swimMin: 0,
+  swimMax: 1,
+  swimDeepThreshold: 0.5, // swimming needed to cross deep water
+  swimUpkeepRate: 0.02, // upkeep per tick per unit of (swim * sizeFactor): fins and fat cost on land too
+  swimLandDrag: 0.5, // a full swimmer pays 50% more to move on dry land
+  swimDeepDrag: 1, // a swimmer at the threshold pays 1 + this x (1 - swim) in deep water
+  marineEnabled: true, // plants also grow under water (shallows richest); seeds stay in their own medium
+  marineFertility: 0.5, // soil fertility of the shallowest water, 0..1
+  marineDeepLight: 0.25, // share of that fertility left at the deepest water
   terrainEnabled: true, // off reproduces the world without terrain (the control arm)
   terrainScale: 8, // patches about 8 cells across on the 60×60 grid
   terrainThreshold: 0.5, // about half of the ground is open

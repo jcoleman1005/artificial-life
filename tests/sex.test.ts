@@ -93,7 +93,7 @@ function makeOrganism(id: string, x: number, y: number, overrides: Partial<Organ
  * are unchanged (tests/defaults.test.ts).
  */
 function quietWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 'sex',
     gridWidth: 12,
     gridHeight: 12,
@@ -377,7 +377,7 @@ describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual rep
       const o = makeOrganism(id, x, 5, { energy: 80, brain: ASKER, memoryWeights: new Array<number>(30).fill(0) });
       return { ...o, genome: genes([...pairs(encodeOrganismDNA(phenotypeOf(o))), ...silent(from)]) };
     };
-    const own = geneCount(encodeOrganismDNA(phenotypeOf(parent('p', 0, 0))));
+    const own = geneCount(encodeOrganismDNA(phenotypeOf(parent('p', 0, 0)), createConfig({ elevationEnabled: false }))); // the world below has no elevation, so no slope or water genes
     const cap = own + 5; // the crossed genome carries ~60 of the 120 silent genes
     const world = quietWorld({ reproductionThreshold: 40, dnaMaxGenes: cap, hybridIncompatibilityEnabled: false }); // hybrid cost off: these parents differ by ~120 silent genes, so a seed-dependent draw could lose the child
     addAll(world, parent('a', 5, 0), parent('b', 6, 1000));
@@ -416,7 +416,7 @@ describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual rep
 
   it('with Stage 2 off, gives the same child as mating with DNA off (same picks, same PRNG draws)', () => {
     const child = (dnaEnabled: boolean, seed: number) => {
-      const world = quietWorld({ seed, reproductionThreshold: 40, dnaEnabled, brainMutationRate: 0.5, traitMutationRate: 0.5, abilityMutationRate: 0.5 });
+      const world = quietWorld({ elevationEnabled: true, /* every brain input live: the two routes draw per gene and per slot, so they only agree when no input is silent */ seed, reproductionThreshold: 40, dnaEnabled, brainMutationRate: 0.5, traitMutationRate: 0.5, abilityMutationRate: 0.5 });
       const brain = (v: number): Brain => ({ ...brainWith({ isMate: 100 }), hidden: new Array<number>(BRAIN_HIDDEN * BRAIN_INPUT_COUNT).fill(v), out: new Array<number>(BRAIN_HIDDEN).fill(v) });
       addAll(
         world,
@@ -579,8 +579,8 @@ describe('Mating rule (2026-10-27): own threshold, own cost, the carrier\'s clut
   });
 
   it('with clutchGeneEnabled false: no clutch field, no clutch gene, and no extra PRNG draws', () => {
-    const off = new World({ seed: 5, clutchGeneEnabled: false, initialOrganisms: 5 });
-    const on = new World({ seed: 5, initialOrganisms: 5 });
+    const off = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5, clutchGeneEnabled: false, initialOrganisms: 5 });
+    const on = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5, initialOrganisms: 5 });
     const clutchKey = geneKey(GeneClass.trait, 46);
     for (const o of off.organisms.values()) {
       expect(o.clutchSize).toBeUndefined();

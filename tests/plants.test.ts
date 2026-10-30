@@ -14,7 +14,7 @@ import type { Organism, Plant, PlantGenome, SimulationConfig } from '../src/sim/
 
 /** An empty, flat world with plants on and nothing random happening. */
 function plantWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     seed: 'plants',
     gridWidth: 20,
     gridHeight: 20,
@@ -151,7 +151,7 @@ describe('Plants', () => {
   });
 
   it('replace classic patches: founders are plants and no patches spawn', () => {
-    const world = new World({ seed: 'plant-founders', plantsEnabled: true });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'plant-founders', plantsEnabled: true });
     expect(world.foodPatches.size).toBeGreaterThan(20);
     for (const p of world.foodPatches.values()) expect(p.plant).toBeDefined();
     for (let t = 0; t < 200; t++) world.step();
@@ -174,7 +174,7 @@ describe('Plants', () => {
 
   it('stay sound over a long run and repeat exactly with the same seed', async () => {
     const run = async () => {
-      const w = new World({ seed: 'plant-long', plantsEnabled: true, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'plant-long', plantsEnabled: true, gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
       for (let t = 0; t < 1000; t++) {
         w.step();
         if (t % 100 !== 0) continue;
@@ -198,7 +198,7 @@ describe('Plants', () => {
   }, 180_000);
 
   it('draw nothing extra from the PRNG when off', () => {
-    const a = new World({ plantsEnabled: false, seed: 'plants-off', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
+    const a = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  plantsEnabled: false, seed: 'plants-off', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22 });
     for (let t = 0; t < 200; t++) a.step();
     expect(a.getMetrics().plants).toBeNull();
     for (const p of a.foodPatches.values()) expect(p.plant).toBeUndefined();
@@ -207,7 +207,7 @@ describe('Plants', () => {
 
 /** A hungry organism that will eat what is underfoot (food first). */
 function makeEater(world: World, x: number, y: number): Organism {
-  const template = new World({ seed: 'eater', gridWidth: 10, gridHeight: 10, initialOrganisms: 1, initialFoodPatches: 0, obstacleDensity: 0 });
+  const template = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'eater', gridWidth: 10, gridHeight: 10, initialOrganisms: 1, initialFoodPatches: 0, obstacleDensity: 0 });
   const org = Array.from(template.organisms.values())[0];
   org.x = x;
   org.y = y;

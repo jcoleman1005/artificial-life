@@ -12,6 +12,7 @@ import type { WorldEvent } from './events';
 import type { HeatmapKind } from './activity';
 import type { AncestorNode } from './lineage';
 import type { TerrainField, TerrainState } from './terrain';
+import type { ElevationField, ElevationState } from './elevation';
 export type { AncestorNode, TraitSnapshot, CrossoverInfo } from './lineage';
 import type {
   Abilities,
@@ -68,6 +69,7 @@ export interface OrganismView {
   readonly toughness?: number;
   readonly toxicity?: number;
   readonly stealth?: number;
+  readonly swim?: number;
   readonly lastBiteYield?: number;
   /** Life-history genes the colour modes and card read (absent while their switch is off). */
   readonly metabolicRate?: number;
@@ -107,6 +109,8 @@ export interface WorldView {
   readonly obstacles: ReadonlySet<string>;
   /** Roughness and cover per cell (null or absent with terrain off). */
   readonly terrain?: TerrainField | null;
+  /** Continents, sea, rivers and lakes (null or absent with elevation off). */
+  readonly elevation?: ElevationField | null;
   readonly deathPulses?: readonly DeathPulse[];
   readonly weather?: {
     readonly fronts: readonly WeatherFront[];
@@ -145,6 +149,7 @@ export function toOrganismView(org: Readonly<Organism>): OrganismView {
     ...(org.toughness !== undefined ? { toughness: org.toughness } : {}),
     ...(org.toxicity !== undefined ? { toxicity: org.toxicity } : {}),
     ...(org.stealth !== undefined ? { stealth: org.stealth } : {}),
+    ...(org.swim !== undefined ? { swim: org.swim } : {}),
     ...(org.lastBiteYield !== undefined ? { lastBiteYield: org.lastBiteYield } : {}),
     ...(org.circuit && org.circuit.effectiveAcquiredUnits > 0
       ? { acquiredBrainUnits: org.circuit.effectiveAcquiredUnits }
@@ -217,6 +222,8 @@ export interface WorldStatic {
   readonly obstacles: readonly string[];
   /** Terrain fields (absent with terrain off). */
   readonly terrain?: TerrainState;
+  /** Elevation and water (absent with elevation off); static for the run. */
+  readonly elevation?: ElevationState;
   readonly foodRegions: readonly FoodRegion[];
   /** Recent world events, oldest first (the feed starts from these). */
   readonly events: readonly WorldEvent[];

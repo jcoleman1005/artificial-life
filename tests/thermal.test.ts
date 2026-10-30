@@ -77,7 +77,7 @@ describe('Thermal physics', () => {
   });
 
   it('is applied to a body\'s upkeep in a world step, and the ledger still balances', () => {
-    const world = new World({
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 7, gridWidth: 30, gridHeight: 30, weatherEnabled: true, thermalPhysicsEnabled: true,
       torporEnabled: false, // so a rest does not discount the upkeep being measured
       initialOrganisms: 0, initialFoodPatches: 0, ledgerCheckInterval: 1,

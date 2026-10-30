@@ -191,6 +191,12 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
       ? config.stealthUpkeepRate * organism.stealth * sizeFactor
       : 0;
 
+  // Swimming upkeep: fins and buoyancy fat, carried on land too
+  const swimUpkeep =
+    config.swimGeneEnabled && config.elevationEnabled && organism.swim !== undefined && organism.swim > 0
+      ? config.swimUpkeepRate * organism.swim * sizeFactor
+      : 0;
+
   const total =
     baseCost +
     sensoryUpkeep +
@@ -200,6 +206,7 @@ export function metabolismCost(organism: Readonly<Organism>, config: Readonly<Si
     toughnessUpkeep +
     toxicityUpkeep +
     stealthUpkeep +
+    swimUpkeep +
     config.carryUpkeep * organism.carryCapacity +
     (config.fatEnabled && organism.fatCapacity !== undefined ? config.fatUpkeep * organism.fatCapacity : 0) +
     (config.memoryEnabled ? config.memoryUpkeep * organism.memorySpan : 0) +

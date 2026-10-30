@@ -47,6 +47,9 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Terrain fields (2026-10-29, built; `src/sim/terrain.ts`, `terrainEnabled`): per-cell roughness (move cost × √size) and cover (shelters temperature, rain and wind) from seeded noise independent of food regions; switch off is bit-identical; the brain inputs now wait for the signal layer's and go in one upgrade with them (changed from batching with wound load); wetness and dynamic terrain later.
 - Terrain wear (2026-10-29, built; `terrainWearEnabled`): trampling smooths roughness and strips cover (× √size), grazing strips cover, worn ground recovers toward the original; applied after all actions; no new action. Active dig/build later.
 - Dynamic fertility (2026-10-29, built, **on by default** pending the user's 8×10k gate; `fertilityDynamicEnabled`, `SoilField.baseFertility`): live per-cell soil fertility worn by grazing and trampling, rebuilt by nutrients and rain, floored at `marginFertility`; the discs are only the starting map; off is bit-identical; if the gate fails, flip to off.
+- Elevation and water (2026-10-29, built, **on by default**; `src/sim/elevation.ts`, `docs/specs/elevation-water.md`): plate-based continents, sea, rivers and lakes; deep water impassable, shallow wadeable; slope and height-temperature costs; fertile discs removed, fertility from a soil map (water, slope, height); off is bit-identical. Next in order: swim ability and marine plants, dynamic water and drifting plates, one brain upgrade, structure and build action.
+- Land sensing (2026-10-29, built, on by default; `landSensingEnabled`; `docs/specs/land-sensing.md`): four appended brain inputs (slope, water and roughness of the cell entered, cover underfoot), zero without their field; scent inputs wait for the scent layer.
+- Swimming and marine plants (2026-10-29, built, on by default; `swimGeneEnabled`, `marineEnabled`, trait 57; `docs/specs/swimming-marine.md`): inherited swim opens deep water above a threshold at upkeep and a land drag; plants grow under water, seeds keep to their medium; off is bit-identical. Next: dynamic water and drifting plates, one brain upgrade, structure and build action.
 - Meat digestion (`carnivoreGeneEnabled`, on; trait 50, 2026-10-27): 0..1 multiplier on energy from carrion and eggs; meat eaters eat eggs via EAT_CARRION; founders 0.5.
 - Eggs (`eggsEnabled`, on; trait 44): continuous `eggAllocation` (0..1); upfront envelope synthesis with `shell` degradation buffer, and seasonal diapause break.
 - Dispersal (`dispersalEnabled`): inherited distance, children born up to that far, `dispersalCost` per step.
@@ -64,7 +67,7 @@ One line each; the full text is in `docs/decisions.md` (find it with `grep -n "^
 - Offspring are born adjacent with the parent's tag; compare tribe claims against a sharing-off control.
 - Hybrid controller: hard constraints define legal actions; a weighted policy chooses.
 - Food first as evolvable head starts (`eatPriority`, `hungerUrgency`); prefer head starts over fixed priorities.
-- Two controllers: brain (default; 52 inputs → 6 hidden → score, append-only `BRAIN_INPUTS`, `upgradeBrain`) and dials (readable reference; they only drift under the brain).
+- Two controllers: brain (default; 61 inputs → 6 hidden → score, append-only `BRAIN_INPUTS`, `upgradeBrain`) and dials (readable reference; they only drift under the brain).
 - Memory (`memoryEnabled`, brain only): named memories plus 3 free registers; span is an inherited costed trait.
 - Discrete ticks; simultaneous decisions from one pre-tick snapshot; seeded random tie-breaks.
 - Seeded PRNG only in simulation code; never `Math.random()`.

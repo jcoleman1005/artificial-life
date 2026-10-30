@@ -2,7 +2,9 @@
  * Core types and data structures for the Artificial Life simulation.
  */
 import type { Brain, Circuit } from './brain';
+import type { ElevationField } from './elevation';
 import type { MemoryState, Recalled } from './memory';
+import type { TerrainField } from './terrain';
 
 export interface Point {
   readonly x: number;
@@ -208,6 +210,14 @@ export interface SensedInputs {
   readonly weatherRain?: number;
   /** Local wind vector at this cell, or null when weather is off. */
   readonly weatherWind?: { readonly wx: number; readonly wy: number } | null;
+  /** The elevation and terrain fields the land-sensing brain inputs read (shared references); absent when landSensingEnabled is off. */
+  readonly land?: LandView | null;
+}
+
+/** Read-only references to the land fields, for the brain's land inputs. */
+export interface LandView {
+  readonly elevation: ElevationField | null;
+  readonly terrain: TerrainField | null;
 }
 
 export interface ActionScore {
@@ -341,6 +351,8 @@ export interface Organism {
   readonly toxicity?: number;
   /** Ambush stealth & cry suppression (stealthGeneEnabled), 0..1. Muffles or negates death pulse upon kill/death; ambush surprise boost. */
   readonly stealth?: number;
+  /** Swimming (swimGeneEnabled with elevation), 0..1: crosses deep water above swimDeepThreshold, wades more cheaply, pays upkeep and a drag on land. */
+  readonly swim?: number;
   /** Normalized yield of the organism's most recent plant bite [0..1] (state; brain sensory feedback). */
   lastBiteYield?: number;
   /** Fat held now (state; only with fatEnabled). */
@@ -588,6 +600,36 @@ export interface SimulationConfig {
   attackCost: number; // Energy spent on one attack, hit or miss
   bitePowerMin: number; // Bite strength of a pure plant eater, as a fraction of a full meat eater's
   sexEnabled: boolean; // Allow MATE (brain only): two neighbours who ask each other make a child that mixes their genes
+  elevationEnabled: boolean; // Plates, continents, sea, rivers and lakes (docs/decisions.md, Elevation and water); off draws nothing and changes nothing
+  elevationPlateCount: number; // Tectonic plates (about half continental)
+  elevationContinentalShare: number; // Share of the plates that are continental (high)
+  elevationSeaFraction: number; // Share of the map that is below sea level
+  elevationMinContinent: number; // Land fragments smaller than this many cells are flooded (the largest is always kept)
+  elevationNoise: number; // Amplitude of the height noise (0..1 of the height range)
+  elevationRidge: number; // Height of mountains where two continental plates meet (a coastal range is 40% of it)
+  elevationDeepThreshold: number; // Water this deep (0..1) cannot be crossed; shallower can be waded
+  elevationRiverFraction: number; // Share of land cells that carry a river (the strongest flows)
+  elevationSlopeUp: number; // Extra move cost per unit of height climbed (0..1 of the height range)
+  elevationSlopeDown: number; // Move cost saved per unit of height descended (at least 25% off)
+  elevationLapse: number; // Temperature lost at the highest peak (temperature runs -1..1)
+  elevationWadeDrag: number; // Extra move cost wading into the deepest shallow water, × √size
+  elevationWaterChill: number; // Temperature lost standing in water
+  elevationRiparianReach: number; // Cells from water over which the shore's wetness fades to nothing
+  elevationFertilityMean: number; // Average fertility of dry land (the soil map is scaled to this); the old disc world averaged about 0.6
+  landSensingEnabled: boolean; // Brain inputs moveSlope, moveWater, moveRough, cover; off freezes them (bit-identical to before)
+  swimGeneEnabled: boolean; // Inherited swimming (trait 57), only with elevation; off: deep water is a wall for all
+  swimFounder: number;
+  swimStep: number;
+  swimMin: number;
+  swimMax: number;
+  swimDeepThreshold: number; // Swimming needed to cross deep water, 0..1
+  swimUpkeepRate: number; // Upkeep per tick per unit of (swim * sizeFactor)
+  swimLandDrag: number; // Extra move cost on dry land at swim 1 (shallow wading drag shrinks by the same swim)
+  swimDeepDrag: number; // Deep-water move cost is 1 + this x (1 - swim)
+  marineEnabled: boolean; // Plants grow under water too, richest in the shallows; seeds keep to their own medium
+  marineFertility: number; // Soil fertility of the shallowest water, 0..1
+  marineDeepLight: number; // Share of that fertility left at the deepest water, 0..1
+  elevationFertilityMin: number; // The poorest ground (bare rock, steep slopes), 0..1
   terrainEnabled: boolean; // Per-cell roughness and cover from seeded noise (docs/decisions.md, Terrain fields); off draws nothing and changes nothing
   terrainScale: number; // Cells per noise lattice step: larger gives broader patches
   terrainThreshold: number; // Noise below this is open ground (0..1); higher means less rough and sheltered ground
@@ -954,6 +996,7 @@ export interface LifeMetrics {
   toughness: number | null;
   toxicity: number | null;
   stealth: number | null;
+  swim?: number | null;
   /** Mean fat held, and organisms that rested last tick. */
   fat: number | null;
   resting: number | null;
@@ -976,6 +1019,10 @@ export interface WorldSnapshot {
   readonly organismAt: ReadonlyMap<string, Organism>;
   /** Fast lookups indexed by y * gridWidth + x: 1 where there is an obstacle. */
   readonly obstacleGrid: Uint8Array;
+  /** 1 on deep water (also 1 in obstacleGrid): swimmers may cross it. Shared and never mutated; absent without deep water. */
+  readonly deepGrid?: Uint8Array;
+  /** The land fields (references, never copied) for the land-sensing brain inputs; absent when they are off. */
+  readonly land?: LandView;
   /** Food stock in each cell (0 when no patch or empty). */
   readonly foodGrid: Int32Array;
   /** Carrion energy in each cell (0 when none). */

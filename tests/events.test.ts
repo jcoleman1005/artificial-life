@@ -17,7 +17,7 @@ function run(world: World, ticks: number, detector = new WorldEventDetector()): 
 describe('World events', () => {
   it('reports each region turning lean and back when seasons are staggered', () => {
     // Isolates clock season events with nutrientCycle off
-    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 400, leanFraction: 0.5, staggeredSeasons: true, nutrientCycleEnabled: false });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 400, leanFraction: 0.5, staggeredSeasons: true, nutrientCycleEnabled: false });
     const seasons = run(world, 400).filter((e) => e.kind === 'season');
     // 4 regions × one change each way per cycle
     expect(seasons).toHaveLength(8);
@@ -26,7 +26,7 @@ describe('World events', () => {
 
   it('reports the world season when seasons are in step', () => {
     // Isolates clock season events with nutrientCycle off
-    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 100, leanFraction: 0.5, staggeredSeasons: false, nutrientCycleEnabled: false });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, seasonLength: 100, leanFraction: 0.5, staggeredSeasons: false, nutrientCycleEnabled: false });
     const seasons = run(world, 200).filter((e) => e.kind === 'season');
     expect(seasons.map((e) => (e.kind === 'season' ? [e.tick, e.region, e.season] : null))).toEqual([
       [50, null, 'lean'],
@@ -37,11 +37,11 @@ describe('World events', () => {
   });
 
   it('reports a colour group rising and dying out, and extinction', () => {
-    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, foodRegionCount: 0 });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, foodRegionCount: 0 });
     const detector = new WorldEventDetector();
     detector.observe(world);
     // Put a group of look-alikes in, then remove them.
-    const template = new World({ seed: 'tpl', initialOrganisms: GROUP_ESTABLISHED, immigrationInterval: 0 });
+    const template = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'tpl', initialOrganisms: GROUP_ESTABLISHED, immigrationInterval: 0 });
     for (const o of template.organisms.values()) world.organisms.set(o.id, { ...o, tag: 120 });
     world.step();
     const rise = detector.observe(world);
@@ -54,10 +54,10 @@ describe('World events', () => {
   });
 
   it('reports population records in steps of 100 and a crash below half the recent peak', () => {
-    const world = new World({ seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, foodRegionCount: 0 });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'ev', initialOrganisms: 0, immigrationInterval: 0, foodRegionCount: 0 });
     const detector = new WorldEventDetector();
     detector.observe(world);
-    const template = new World({ seed: 'tpl', gridWidth: 30, gridHeight: 30, initialOrganisms: 230, obstacleDensity: 0, immigrationInterval: 0 });
+    const template = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'tpl', gridWidth: 30, gridHeight: 30, initialOrganisms: 230, obstacleDensity: 0, immigrationInterval: 0 });
     const all = Array.from(template.organisms.values());
     for (const o of all) world.organisms.set(o.id, o);
     world.tick++;
@@ -89,7 +89,7 @@ describe('World events', () => {
 
 describe('Activity heatmaps', () => {
   it('counts meals and deaths where they happen, and fades them over time', async () => {
-    const world = new World({ seed: 'heat', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36, foodRegionCount: 0 });
+    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 'heat', gridWidth: 30, gridHeight: 30, initialOrganisms: 20, initialFoodPatches: 22, maxFoodPatches: 36, foodRegionCount: 0 });
     const maps = new ActivityMaps(30, 30);
     maps.observe(world);
     let meals = 0;

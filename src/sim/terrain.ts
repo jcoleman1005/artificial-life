@@ -173,7 +173,7 @@ export class TerrainField {
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 /** One field of smooth value noise in 0..1: random values on a coarse lattice, blended with a smoothstep. */
-function valueNoise(width: number, height: number, scale: number, prng: PRNG): Float64Array {
+export function valueNoise(width: number, height: number, scale: number, prng: PRNG): Float64Array {
   const cols = Math.ceil(width / scale) + 2;
   const rows = Math.ceil(height / scale) + 2;
   const lattice = new Float64Array(cols * rows);

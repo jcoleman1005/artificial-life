@@ -28,7 +28,7 @@ const ZERO_POLICY: PolicyWeights = {
 
 /** An empty, free-of-upkeep world on the dials controller, so one weight decides what an organism does. */
 function emptyWorld(overrides: Partial<SimulationConfig> = {}): World {
-  return new World({
+  return new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
     ...ALL_OFF,
     seed: 3,
     gridWidth: 12,
@@ -85,20 +85,20 @@ const lifeFields = (o: Organism) => [
 
 describe('life-history genes: switches and inheritance', () => {
   it('founders carry only the genes that are switched on, at their starting values', () => {
-    const off = new World({ ...ALL_OFF, seed: 5 });
+    const off = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...ALL_OFF, seed: 5 });
     for (const o of off.organisms.values()) expect(lifeFields(o).every((v) => v === undefined)).toBe(true);
-    const on = new World({ seed: 5 });
+    const on = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 5 });
     for (const o of on.organisms.values()) {
       expect(lifeFields(o)).toEqual([65, 0.45, 4, 0.1, 0.1, 1, 1, 1, 3, 1]);
     }
-    const one = new World({ ...ALL_OFF, fatEnabled: true, seed: 5 });
+    const one = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  ...ALL_OFF, fatEnabled: true, seed: 5 });
     for (const o of one.organisms.values())
       expect(lifeFields(o)).toEqual([undefined, undefined, 4, undefined, undefined, undefined, undefined, undefined, undefined, undefined]);
   });
 
   it('a genome-decoded world and a directly-inherited world stay identical', () => {
     const run = (dnaEnabled: boolean) => {
-      const w = new World({ seed: 11, dnaEnabled, traitMutationRate: 0.5, eggFounder: 0.3 });
+      const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 11, dnaEnabled, traitMutationRate: 0.5, eggFounder: 0.3 });
       for (let t = 0; t < 250; t++) w.step();
       return JSON.stringify([
         Array.from(w.organisms.values()).map((o) => [o.id, o.x, o.y, o.energy, o.fat, ...lifeFields(o)]),
@@ -109,7 +109,7 @@ describe('life-history genes: switches and inheritance', () => {
   }, 30_000);
 
   it('keeps every evolved value inside its bounds', () => {
-    const w = new World({
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 12,
       traitMutationRate: 1,
       thresholdStep: 40,
@@ -149,7 +149,7 @@ describe('life-history genes: switches and inheritance', () => {
   }, 30_000);
 
   it('a saved world with eggs continues exactly', () => {
-    const w = new World({ seed: 13, eggFounder: 0.6 });
+    const w = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */  seed: 13, eggFounder: 0.6 });
     for (let t = 0; t < 200; t++) w.step();
     expect(w.eggsLaidTotal).toBeGreaterThan(0);
     const copy = World.fromState(JSON.parse(JSON.stringify(w.exportState())));
