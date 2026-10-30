@@ -648,7 +648,7 @@ export class CanvasRenderer {
     ctx.shadowBlur = cellSize * 0.35;
     ctx.shadowOffsetX = cellSize * 0.1;
     ctx.shadowOffsetY = cellSize * 0.16;
-    ctx.fillStyle = '#2b3542';
+    ctx.fillStyle = '#46546a';
     ctx.beginPath();
     const inset = Math.max(0.5, cellSize * 0.07);
     const corner = cellSize * 0.24;
@@ -661,6 +661,10 @@ export class CanvasRenderer {
     }
     ctx.fill();
     ctx.restore();
+    // A pale edge, so the rocks separate from dark ground (the path is still current).
+    ctx.strokeStyle = 'rgba(170, 190, 215, 0.4)';
+    ctx.lineWidth = Math.max(0.75, cellSize * 0.05);
+    ctx.stroke();
 
     // Food: plants (leaves in their strategy's colour, berries for edible
     // units), or berry clusters on a faint disc

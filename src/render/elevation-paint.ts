@@ -30,8 +30,8 @@ export interface ElevationPixels {
   readonly data: Uint8ClampedArray;
 }
 
-const CLIFF_FROM = 0.045;
-const CLIFF_FULL = 0.12;
+const CLIFF_FROM = 0.05;
+const CLIFF_FULL = 0.075;
 
 function sample(field: Float32Array, width: number, height: number, x: number, y: number): number {
   const fx = Math.min(width - 1, Math.max(0, x - 0.5));
@@ -102,14 +102,30 @@ export function paintElevation(input: ElevationInput, px: number): ElevationPixe
       let lg = shadeTone;
       let lb = shadeTone;
       let la = shadeAlpha;
+      // Shadow cast down the slope away from the light: ground with much higher ground just to its north-west.
+      const here = sample(elev, width, height, x, y);
+      const cast = smooth(0.025, 0.1, sample(elev, width, height, x - 1.1, y - 1.1) - here) * 0.4;
+      if (cast > 0) {
+        const aNew = la + cast * (1 - la);
+        lr = (lr * la) / aNew;
+        lg = (lg * la) / aNew;
+        lb = (lb * la) / aNew;
+        la = aNew;
+      }
       if (cliff > 0) {
-        // Bare rock, banded by height and darker on the side facing away from the light.
-        const strata = Math.sin(sample(elev, width, height, x, y) * 38 + grain(pxl >> 1, py >> 1, 5) * 0.8) * 0.06;
-        const tone = 112 * (1 + strata + light * 0.3 + g * 0.1);
-        lr = tone * 1.02;
-        lg = tone * 0.98;
-        lb = tone * 0.92;
-        la = mix(la, 0.82, cliff);
+        // Flat rock: lit on the side facing the light with a warm pale crest, dark on the underside.
+        const crest = Math.max(0, light) * 34 * cliff;
+        const tone = 92 * (1 + light * 0.42 + g * 0.025) + crest;
+        lr = tone * 1.03 + crest * 0.25;
+        lg = tone * 0.97 + crest * 0.1;
+        lb = tone * 0.88;
+        la = mix(la, 0.92, cliff);
+      }
+      // A dark line along the foot, where the face meets the ground below it.
+      const foot = smooth(0.02, 0.07, sample(elev, width, height, x - 0.9, y - 0.9) - here) * (1 - cliff);
+      if (foot > 0.05) {
+        lr = lg = lb = 12;
+        la = Math.max(la, foot * 0.7);
       }
       // A pale rim of wet sand on the land side of the coast.
       if (rim > 0 && waterMix < 0.5) {

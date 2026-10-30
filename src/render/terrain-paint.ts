@@ -111,10 +111,10 @@ function paintNatural(data: Uint8ClampedArray, f: Fields, width: number, height:
       let cb = mix(32, 72, rough);
 
       // Grass over it, mottled, thinner where it is worn away.
-      const grassAmount = Math.max(0, Math.min(0.88, cover * (0.8 + 0.25 * g2) * 1.05));
-      cr = mix(cr, 46 + g2 * 8, grassAmount);
-      cg = mix(cg, 98 + g2 * 14, grassAmount);
-      cb = mix(cb, 52 + g2 * 6, grassAmount);
+      const grassAmount = Math.max(0, Math.min(0.88, cover * (0.86 + 0.12 * g2) * 1.05));
+      cr = mix(cr, 46 + g2 * 4, grassAmount);
+      cg = mix(cg, 98 + g2 * 7, grassAmount);
+      cb = mix(cb, 52 + g2 * 3, grassAmount);
 
       // Packed pale earth where bodies have worn it.
       const wornAmount = Math.sqrt(wear) * 0.78;
@@ -122,7 +122,7 @@ function paintNatural(data: Uint8ClampedArray, f: Fields, width: number, height:
       cg = mix(cg, 148, wornAmount);
       cb = mix(cb, 112, wornAmount);
 
-      const shade = 1 + light * 0.34 + g1 * 0.05;
+      const shade = 1 + light * 0.34 + g1 * 0.02;
       const o = (py * W + pxl) * 4;
       data[o] = cr * shade;
       data[o + 1] = cg * shade;
