@@ -73,6 +73,8 @@ const TRAIL_LENGTH = 12;
 const MOTION_SMOOTHING_MS = 70;
 /** A move longer than this (in cells) is drawn as a jump, not smoothed (e.g. a new world). */
 const MAX_SMOOTHED_JUMP = 4;
+/** How long a newborn takes to bud off its parent on screen (milliseconds; display only). */
+const SPLIT_MS = 560;
 /** Fluid motion: a blob settles into a new cell over about this many frame gaps (bounded below and above, in ms). */
 const FLUID_SETTLE_GAPS = 3;
 const FLUID_SETTLE_MIN_MS = 120;
@@ -159,6 +161,8 @@ export class CanvasRenderer {
   private drawn = new Map<string, { x: number; y: number; vx: number; vy: number; heading: number }>();
   private lastRenderAt = 0;
   private motionSettled = true;
+  /** Newborns still budding off a parent: drawn only, never read by the simulation. */
+  private splits = new Map<string, { parentId: string; start: number }>();
   private motionStyle: MotionStyle = 'fluid';
   /** The expected time between frames (ms), which paces fluid motion. */
   private paceMs = 167;
@@ -405,6 +409,22 @@ export class CanvasRenderer {
       const was = this.drawn.get(org.id);
       const lastType = org.recentHistory[0]?.chosenAction.type;
       const [adx, ady] = lastType ? directionOf(lastType) : [0, 0];
+      if (!was && this.drawn.size > 0 && org.age < 4 && org.lineage.parentId) {
+        // A newborn beside a parent we were already drawing: it starts on the parent and buds out to its cell.
+        const parentDrawn = this.drawn.get(org.lineage.parentId);
+        const parent = this.world.organisms.get(org.lineage.parentId);
+        const parentAct = parent?.recentHistory[0];
+        // Only a cloning or mating parent splits; a hatchling from an egg just appears.
+        const splitting = parentAct !== undefined && parentAct.outcome === 'success' && (parentAct.chosenAction.type.startsWith('REPRODUCE_') || parentAct.chosenAction.type.startsWith('MATE_'));
+        if (parentDrawn && splitting) {
+          const gap = Math.hypot(tx - parentDrawn.x, ty - parentDrawn.y);
+          if (gap > 0.3 && gap <= MAX_SMOOTHED_JUMP) {
+            next.set(org.id, { x: parentDrawn.x, y: parentDrawn.y, vx: 0, vy: 0, heading: Math.atan2(ty - parentDrawn.y, tx - parentDrawn.x) });
+            this.splits.set(org.id, { parentId: org.lineage.parentId, start: now });
+            continue;
+          }
+        }
+      }
       if (!was || Math.abs(tx - was.x) + Math.abs(ty - was.y) > MAX_SMOOTHED_JUMP) {
         const initialHeading = adx !== 0 || ady !== 0 ? Math.atan2(ady, adx) : -Math.PI / 2;
         next.set(org.id, { x: tx, y: ty, vx: 0, vy: 0, heading: initialHeading });
@@ -442,7 +462,81 @@ export class CanvasRenderer {
       next.set(org.id, { x, y, vx, vy, heading });
     }
     this.drawn = next;
-    this.motionSettled = settled;
+    for (const [childId, split] of this.splits) {
+      if (now - split.start >= SPLIT_MS || !this.world.organisms.has(childId) || !this.world.organisms.has(split.parentId)) this.splits.delete(childId);
+    }
+    this.motionSettled = settled && this.splits.size === 0;
+  }
+
+  /** 0..1 progress of a budding newborn (0 just born), or null when it is not splitting. */
+  private splitProgress(childId: string): number | null {
+    const split = this.splits.get(childId);
+    return split ? Math.min(1, (performance.now() - split.start) / SPLIT_MS) : null;
+  }
+
+  /**
+   * Squash and stretch for the two bodies of a split, as a transform about the body's centre: the parent pinches
+   * along the line to its child and swells across it, and the child grows from a small stretched bud.
+   */
+  private splitTransform(org: OrganismView): { sx: number; sy: number; angle: number } | null {
+    const own = this.splitProgress(org.id);
+    if (own !== null) {
+      const parent = this.world.organisms.get(this.splits.get(org.id)!.parentId);
+      if (!parent) return null;
+      const [px, py] = this.displayCentre(parent);
+      const [cx, cy] = this.displayCentre(org);
+      const grow = 0.5 + 0.5 * (1 - Math.pow(1 - own, 3));
+      const stretch = 1 + 0.35 * (1 - own);
+      return { sx: grow * stretch, sy: grow / stretch, angle: Math.atan2(cy - py, cx - px) };
+    }
+    for (const [childId, split] of this.splits) {
+      if (split.parentId !== org.id) continue;
+      const u = this.splitProgress(childId) ?? 1;
+      const child = this.world.organisms.get(childId);
+      if (!child) continue;
+      const [px, py] = this.displayCentre(org);
+      const [cx, cy] = this.displayCentre(child);
+      const pulse = Math.sin(Math.PI * Math.min(1, u / 0.7)) * (u < 0.7 ? 1 : 0);
+      return { sx: 1 + 0.3 * pulse, sy: 1 - 0.18 * pulse, angle: Math.atan2(cy - py, cx - px) };
+    }
+    return null;
+  }
+
+  /** The thinning neck between a parent and the child budding off it, and a ring that fades from the split. */
+  private drawSplitNecks(): void {
+    const { ctx, cellSize } = this;
+    const r0 = cellSize * 0.34;
+    for (const [childId, split] of this.splits) {
+      const child = this.world.organisms.get(childId);
+      const parent = this.world.organisms.get(split.parentId);
+      const u = this.splitProgress(childId);
+      if (!child || !parent || u === null) continue;
+      const [x1, y1] = this.displayCentre(parent);
+      const [x2, y2] = this.displayCentre(child);
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      const hue = Math.round(this.hueOf(parent));
+      // A neck only joins bodies that are close; a child dispersed several cells away just pops out with the ring.
+      if (len > r0 * 0.4 && len < cellSize * 2.2 && u < 0.8) {
+        const nx = -(y2 - y1) / len;
+        const ny = (x2 - x1) / len;
+        const w = r0 * 0.9 * (1 - u / 0.8);
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+        ctx.fillStyle = `hsla(${hue}, 82%, 50%, ${(0.9 * (1 - u)).toFixed(2)})`;
+        ctx.beginPath();
+        ctx.moveTo(x1 + nx * w, y1 + ny * w);
+        ctx.quadraticCurveTo(mx + nx * w * 0.35, my + ny * w * 0.35, x2 + nx * w, y2 + ny * w);
+        ctx.lineTo(x2 - nx * w, y2 - ny * w);
+        ctx.quadraticCurveTo(mx - nx * w * 0.35, my - ny * w * 0.35, x1 - nx * w, y1 - ny * w);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.strokeStyle = `hsla(${hue}, 90%, 78%, ${(0.4 * (1 - u)).toFixed(2)})`;
+      ctx.lineWidth = Math.max(1, cellSize * 0.06);
+      ctx.beginPath();
+      ctx.arc(x1, y1, r0 * (1.1 + 1.3 * u), 0, TAU);
+      ctx.stroke();
+    }
   }
 
   /** Pixel centre of an organism, part-way along its latest move. */
@@ -716,11 +810,25 @@ export class CanvasRenderer {
     // Organisms (with the family overlay, everyone outside the selected lineage is dimmed)
     const family = this.overlay === 'family' && selectedOrg ? selectedOrg.lineage.id : null;
     if (family && selectedOrg) this.drawFamilyLines(selectedOrg);
+    if (this.splits.size > 0) this.drawSplitNecks();
     for (const org of this.world.organisms.values()) {
       if (!inView(org.x, org.y)) continue;
       if (family && org.lineage.id !== family) ctx.globalAlpha = 0.18;
       else if (this.highlightSpecies !== null && this.speciesOf?.(org.id) !== this.highlightSpecies) ctx.globalAlpha = 0.18;
-      this.drawOrganism(org, detail);
+      const split = this.splits.size > 0 ? this.splitTransform(org) : null;
+      if (split) {
+        const [bx, by] = this.displayCentre(org);
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(split.angle);
+        ctx.scale(split.sx, split.sy);
+        ctx.rotate(-split.angle);
+        ctx.translate(-bx, -by);
+        this.drawOrganism(org, detail);
+        ctx.restore();
+      } else {
+        this.drawOrganism(org, detail);
+      }
       ctx.globalAlpha = 1;
     }
     if (selectedOrg) this.drawSelection(selectedOrg);
