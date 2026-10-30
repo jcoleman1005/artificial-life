@@ -416,7 +416,7 @@ describe('Mating with DNA: genomes crossed by key (docs/specs/dna.md, Sexual rep
 
   it('with Stage 2 off, gives the same child as mating with DNA off (same picks, same PRNG draws)', () => {
     const child = (dnaEnabled: boolean, seed: number) => {
-      const world = quietWorld({ elevationEnabled: true, /* every brain input live: the two routes draw per gene and per slot, so they only agree when no input is silent */ seed, reproductionThreshold: 40, dnaEnabled, brainMutationRate: 0.5, traitMutationRate: 0.5, abilityMutationRate: 0.5 });
+      const world = quietWorld({ worldWrapEnabled: false, /* flat: the wrapped map has other water at the parents' cells */ elevationEnabled: true, /* every brain input live: the two routes draw per gene and per slot, so they only agree when no input is silent */ seed, reproductionThreshold: 40, dnaEnabled, brainMutationRate: 0.5, traitMutationRate: 0.5, abilityMutationRate: 0.5 });
       const brain = (v: number): Brain => ({ ...brainWith({ isMate: 100 }), hidden: new Array<number>(BRAIN_HIDDEN * BRAIN_INPUT_COUNT).fill(v), out: new Array<number>(BRAIN_HIDDEN).fill(v) });
       addAll(
         world,

@@ -4,6 +4,7 @@ import { ELEVATION_FULL, ElevationField, elevationTemperature, generateElevation
 import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor, type TerrainState } from './terrain';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
+import { wrapDx, wrapX } from './globe';
 import type {
   ActionScore,
   CarrionPatch,
@@ -359,7 +360,7 @@ export class World {
     this.soilField = null;
     this.fertileList = null;
     this.cellHealth = this.config.overgrazingEnabled ? new CellHealth(this.config.gridWidth * this.config.gridHeight) : null;
-    this.weather = this.config.weatherEnabled ? new WeatherSimulation(this.config.gridWidth, this.config.gridHeight) : null;
+    this.weather = this.config.weatherEnabled ? new WeatherSimulation(this.config.gridWidth, this.config.gridHeight).configure(this.config) : null;
     this.terrainField = null;
     this.elevationField = null;
     this.deepWater.clear();
@@ -789,9 +790,9 @@ export class World {
       });
     }
     world.weather = state.weather
-      ? WeatherSimulation.fromState(state.weather, world.config.gridWidth, world.config.gridHeight)
+      ? WeatherSimulation.fromState(state.weather, world.config.gridWidth, world.config.gridHeight).configure(world.config)
       : world.config.weatherEnabled
-        ? new WeatherSimulation(world.config.gridWidth, world.config.gridHeight)
+        ? new WeatherSimulation(world.config.gridWidth, world.config.gridHeight).configure(world.config)
         : null;
     world.history.importState(state.history);
     if (state.lineage) world.lineageTracker = LineageTracker.fromState(state.lineage);
@@ -1196,7 +1197,7 @@ export class World {
       let metabolism = metabolismCost(organism, this.config);
       if (this.weather && this.config.weatherEnabled) {
         const season = seasonAt(this.tick, this.config)?.season ?? null;
-        const temp = this.weather.getTemperature(organism.x, organism.y, season);
+        const temp = this.weather.getTemperature(organism.x, organism.y, this.seasonAtRow(organism.y) ?? season);
         // Cover shelters a body from the swing in temperature.
         // Height and standing in water change the temperature a body feels (within the temperature range).
         const here = elevation ? Math.max(-1, Math.min(1, temp + elevationTemperature(organism.y * this.config.gridWidth + organism.x, elevation, this.config))) : temp;
@@ -1395,7 +1396,7 @@ export class World {
             const mudDrag = 1 + this.config.weatherMudCoeff * rain * exposure;
             const wind = this.weather.getWind(organism.x, organism.y);
             const target = chosenAction.target ?? (item.swapWithId ? intentions.get(item.swapWithId)?.organism : undefined);
-            const dx = target ? target.x - organism.x : 0;
+            const dx = target ? wrapDx(target.x - organism.x, this.config.gridWidth, this.config.worldWrapEnabled) : 0;
             const dy = target ? target.y - organism.y : 0;
             const dist = Math.hypot(dx, dy);
             const align = dist > 0 ? (dx * wind.wx + dy * wind.wy) / dist : 0;
@@ -1674,7 +1675,7 @@ export class World {
       const prey = this.organisms.get(attack.preyId);
       const roll = this.prng.next(); // drawn for every attack, so outcomes don't shift the stream
       if (!prey || prey.energy <= 0 || attacker.energy <= 0 || bodies.has(attacker.id)) continue;
-      if (Math.max(Math.abs(prey.x - attacker.x), Math.abs(prey.y - attacker.y)) > 1) continue;
+      if (Math.max(Math.abs(wrapDx(prey.x - attacker.x, this.config.gridWidth, this.config.worldWrapEnabled)), Math.abs(prey.y - attacker.y)) > 1) continue;
       if (roll >= attack.chance) continue;
       bodies.set(prey.id, prey.energy);
       this.ledger.killed += prey.energy;
@@ -1874,7 +1875,7 @@ export class World {
     if (a.energy <= shareA + tax || b.energy <= shareB + tax || shareA + shareB <= 0) return false;
 
     const free = (o: Organism) =>
-      DIRECTION_OFFSETS.map(({ dx, dy }) => ({ x: o.x + dx, y: o.y + dy })).filter(
+      DIRECTION_OFFSETS.map(({ dx, dy }) => ({ x: this.col(o.x + dx), y: o.y + dy })).filter(
         (c) =>
           c.x >= 0 &&
           c.y >= 0 &&
@@ -2067,6 +2068,21 @@ export class World {
     return e !== null && e.isWater(y * this.config.gridWidth + x);
   }
 
+  /**
+   * The calendar season at a row. With hemispheric seasons the southern half of the map (the rows below the
+   * equator) runs half a cycle behind the northern half, so a body crossing the equator meets the opposite season.
+   */
+  private seasonAtRow(y: number): 'plenty' | 'lean' | null {
+    const c = this.config;
+    const behind = c.hemisphericSeasonsEnabled && y >= c.gridHeight / 2 ? Math.round(c.seasonLength / 2) : 0;
+    return seasonAt(this.tick + behind, c)?.season ?? null;
+  }
+
+  /** A column wrapped onto the map when the world wraps east to west (unchanged otherwise). */
+  private col(x: number): number {
+    return wrapX(x, this.config.gridWidth, this.config.worldWrapEnabled);
+  }
+
   /** Deep water as a grid (1 = deep), built once and shared with every snapshot. */
   private deepGrid(): Uint8Array {
     if (this.deepGridCache) return this.deepGridCache;
@@ -2252,7 +2268,7 @@ export class World {
   private foodWithin(x: number, y: number, radius: number): boolean {
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
-        if ((this.foodPatches.get(`${x + dx},${y + dy}`)?.stock ?? 0) > 0) return true;
+        if ((this.foodPatches.get(`${this.col(x + dx)},${y + dy}`)?.stock ?? 0) > 0) return true;
       }
     }
     return false;
@@ -2291,8 +2307,10 @@ export class World {
    */
   private placeWindfall(): void {
     const { gridWidth, gridHeight, windfallUnits, windfallPatches, windfallLifetime } = this.config;
-    const free = (x: number, y: number) =>
-      x >= 0 && y >= 0 && x < gridWidth && y < gridHeight && !this.obstacles.has(`${x},${y}`) && !this.foodPatches.has(`${x},${y}`) && !this.isWet(x, y);
+    const free = (x0: number, y: number) => {
+      const x = this.col(x0);
+      return x >= 0 && y >= 0 && x < gridWidth && y < gridHeight && !this.obstacles.has(`${x},${y}`) && !this.foodPatches.has(`${x},${y}`) && !this.isWet(x, y);
+    };
     for (let attempt = 0; attempt < 30; attempt++) {
       const cx = this.prng.nextInt(0, gridWidth - 1);
       const cy = this.prng.nextInt(0, gridHeight - 1);
@@ -2303,7 +2321,7 @@ export class World {
       const cells: [number, number][] = [[cx, cy]];
       for (const [dx, dy] of offsets) {
         if (cells.length >= windfallPatches) break;
-        if (free(cx + dx, cy + dy)) cells.push([cx + dx, cy + dy]);
+        if (free(cx + dx, cy + dy)) cells.push([this.col(cx + dx), cy + dy]);
       }
       // Share the units out evenly; the first patches take any remainder.
       const each = Math.floor(windfallUnits / cells.length);
@@ -2342,7 +2360,7 @@ export class World {
       for (let dx = -reach; dx <= reach; dx++) {
         const distance = Math.abs(dx) + Math.abs(dy);
         if (distance === 0 || distance > reach) continue;
-        const x = parent.x + dx;
+        const x = this.col(parent.x + dx);
         const y = parent.y + dy;
         if (x === target.x && y === target.y) {
           candidates.push({ x, y, distance });
@@ -2434,9 +2452,9 @@ export class World {
     // 0d. Dynamic weather fronts advance
     if (this.config.weatherEnabled) {
       if (!this.weather) {
-        this.weather = new WeatherSimulation(this.config.gridWidth, this.config.gridHeight);
+        this.weather = new WeatherSimulation(this.config.gridWidth, this.config.gridHeight).configure(this.config);
       }
-      this.weather.step(this.tick, this.prng, this.config, seasonAt(this.tick, this.config)?.season ?? null);
+      this.weather.step(this.tick, this.prng, this.config, seasonAt(this.tick, this.config)?.season ?? null, (y) => this.seasonAtRow(y));
     }
 
     // 1a. Plants grow, seed and die in place of classic regrowth and spawning.

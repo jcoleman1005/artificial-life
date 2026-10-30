@@ -3,6 +3,7 @@ import { plantHue } from '../sim/plants';
 import { bodyScaleOf } from '../sim/growth';
 import type { EggView, OrganismView, WorldView } from '../sim/protocol';
 import { speciesHue } from '../sim/species';
+import { wrapX } from '../sim/globe';
 import type { HeatmapKind } from '../sim/activity';
 import { TERRAIN_FULL, type TerrainField } from '../sim/terrain';
 import { ELEVATION_FULL, type ElevationField } from '../sim/elevation';
@@ -381,6 +382,8 @@ export class CanvasRenderer {
   private gridPosition(org: OrganismView): [number, number] {
     const prev = this.previousPositions.get(org.id);
     if (!prev || this.progress >= 1) return [org.x, org.y];
+    // A step across the seam of a cylinder is a hop to the far edge, not a glide back across the whole map.
+    if (this.world.config.worldWrapEnabled && Math.abs(org.x - prev.x) > this.world.config.gridWidth / 2) return [org.x, org.y];
     const t = this.easedGlide ? easeInOut(this.progress) : this.progress;
     return [prev.x + (org.x - prev.x) * t, prev.y + (org.y - prev.y) * t];
   }
@@ -760,9 +763,18 @@ export class CanvasRenderer {
     const { ctx, cellSize } = this;
     const weather = this.world.weather;
 
-    // 1. Draw weather front areas
+    // 1. Draw weather front areas (on a cylinder a storm over the seam is drawn on both sides of it)
+    const wrapW = this.world.config.worldWrapEnabled === true ? this.world.config.gridWidth * cellSize : 0;
+    const drawn: { front: (typeof weather.fronts)[number]; shift: number }[] = [];
     for (const front of weather.fronts) {
-      const cx = front.x * cellSize;
+      drawn.push({ front, shift: 0 });
+      if (wrapW > 0) {
+        if (front.x - front.radius < 0) drawn.push({ front, shift: wrapW });
+        if (front.x + front.radius > this.world.config.gridWidth) drawn.push({ front, shift: -wrapW });
+      }
+    }
+    for (const { front, shift } of drawn) {
+      const cx = front.x * cellSize + shift;
       const cy = front.y * cellSize;
       const r = front.radius * cellSize;
       const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
@@ -1222,7 +1234,8 @@ export class CanvasRenderer {
       if (!lctx) return;
       const image = lctx.createImageData(width, height);
       const deepAt = this.world.config.elevationDeepThreshold;
-      const h = (x: number, y: number) => field.elevation[Math.max(0, Math.min(height - 1, y)) * width + Math.max(0, Math.min(width - 1, x))] / ELEVATION_FULL;
+      const wrapCols = this.world.config.worldWrapEnabled === true;
+      const h = (x: number, y: number) => field.elevation[Math.max(0, Math.min(height - 1, y)) * width + (wrapCols ? wrapX(x, width, true) : Math.max(0, Math.min(width - 1, x)))] / ELEVATION_FULL;
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
           const i = y * width + x;
@@ -1254,7 +1267,7 @@ export class CanvasRenderer {
           // Shore: a pale rim on land next to water.
           let shore = 0;
           for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-            const nx = x + dx;
+            const nx = wrapCols ? wrapX(x + dx, width, true) : x + dx;
             const ny = y + dy;
             if (nx >= 0 && ny >= 0 && nx < width && ny < height && field.isWater(ny * width + nx)) shore = 0.22;
           }

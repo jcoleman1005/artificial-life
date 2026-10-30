@@ -173,7 +173,8 @@ export class TerrainField {
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 /** One field of smooth value noise in 0..1: random values on a coarse lattice, blended with a smoothstep. */
-export function valueNoise(width: number, height: number, scale: number, prng: PRNG): Float64Array {
+export function valueNoise(width: number, height: number, scale: number, prng: PRNG, wrapX = false): Float64Array {
+  if (wrapX) return valueNoiseWrapped(width, height, scale, prng);
   const cols = Math.ceil(width / scale) + 2;
   const rows = Math.ceil(height / scale) + 2;
   const lattice = new Float64Array(cols * rows);
@@ -191,6 +192,33 @@ export function valueNoise(width: number, height: number, scale: number, prng: P
       const b = lattice[y0 * cols + x0 + 1];
       const c = lattice[(y0 + 1) * cols + x0];
       const d = lattice[(y0 + 1) * cols + x0 + 1];
+      out[y * width + x] = (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+    }
+  }
+  return out;
+}
+
+/** Value noise that repeats east to west: the lattice has a whole number of cells across, and the last joins the first. */
+function valueNoiseWrapped(width: number, height: number, scale: number, prng: PRNG): Float64Array {
+  const cycle = Math.max(2, Math.round(width / scale));
+  const sx = width / cycle;
+  const rows = Math.ceil(height / scale) + 2;
+  const lattice = new Float64Array(cycle * rows);
+  for (let i = 0; i < lattice.length; i++) lattice[i] = prng.next();
+  const out = new Float64Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const fy = y / scale;
+    const y0 = Math.floor(fy);
+    const ty = smooth(fy - y0);
+    for (let x = 0; x < width; x++) {
+      const fx = x / sx;
+      const x0 = Math.floor(fx);
+      const x1 = (x0 + 1) % cycle;
+      const tx = smooth(fx - x0);
+      const a = lattice[y0 * cycle + x0];
+      const b = lattice[y0 * cycle + x1];
+      const c = lattice[(y0 + 1) * cycle + x0];
+      const d = lattice[(y0 + 1) * cycle + x1];
       out[y * width + x] = (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
     }
   }
@@ -219,8 +247,8 @@ export function generateTerrain(config: Readonly<SimulationConfig>): TerrainFiel
   const { gridWidth: width, gridHeight: height } = config;
   const prng = new PRNG(`terrain:${String(config.seed)}`);
   const scale = Math.max(2, config.terrainScale);
-  const roughness = toFixed(valueNoise(width, height, scale, prng), config.terrainThreshold);
-  const cover = toFixed(valueNoise(width, height, scale, prng), config.terrainThreshold);
+  const roughness = toFixed(valueNoise(width, height, scale, prng, config.worldWrapEnabled === true), config.terrainThreshold);
+  const cover = toFixed(valueNoise(width, height, scale, prng, config.worldWrapEnabled === true), config.terrainThreshold);
   return TerrainField.fresh(width, height, roughness, cover);
 }
 

@@ -97,6 +97,12 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   elevationRiparianReach: 5, // wetness fades out over five cells from water
   elevationFertilityMean: 0.6, // about the old disc world's total food, now spread by water, slope and height
   elevationFertilityMin: 0.04,
+  climateBeltsEnabled: true, // wind belts and rain bands by latitude (rows): trades, westerlies, polar easterlies; storms track the belts
+  windBeltStrength: 0.35, // zonal wind at the middle of each belt (cells per tick scale, like the prevailing wind)
+  windBeltPoleward: 0.15, // the poleward or equatorward drift that goes with each belt
+  rainBandStrength: 0.7, // 0 = storms form anywhere; 1 = only on the wet bands (equator and mid-latitudes)
+  hemisphericSeasonsEnabled: true, // the southern half of the map runs half a year behind the northern half
+  worldWrapEnabled: true, // the east and west edges join (a cylinder); off: a flat map with walls on every side
   dynamicWaterEnabled: true, // tides lift the sea over low coast, and rain-fed floods rise over river plains; off: water never changes
   waterInterval: 5, // ticks between recomputing standing water
   tideAmplitude: 0.02, // the sea rises this much of the height range at high tide

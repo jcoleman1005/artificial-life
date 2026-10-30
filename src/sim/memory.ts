@@ -1,5 +1,6 @@
 import type { PRNG } from './prng';
 import { mutateWeight } from './brain';
+import { wrapDx } from './globe';
 import type { SensedEntity, SensedInputs, SimulationConfig } from './types';
 
 /**
@@ -67,9 +68,9 @@ export function inheritMemoryWeights(parent: readonly number[], config: Readonly
   return parent.map((w) => mutateWeight(w, config, prng));
 }
 
-function recallPlace(place: RememberedPlace | { x: number; y: number } | null, x: number, y: number, freshness: number): Recalled | null {
+function recallPlace(place: RememberedPlace | { x: number; y: number } | null, x: number, y: number, freshness: number, wrapWidth: number): Recalled | null {
   if (!place || freshness <= 0) return null;
-  const dx = place.x - x;
+  const dx = wrapDx(place.x - x, wrapWidth, wrapWidth > 0);
   const dy = place.y - y;
   return { x: place.x, y: place.y, dx, dy, distance: Math.abs(dx) + Math.abs(dy), freshness: Number(freshness.toFixed(3)) };
 }
@@ -81,16 +82,17 @@ export function recall(
   x: number,
   y: number,
   tick: number,
-  config: Readonly<SimulationConfig>
+  config: Readonly<SimulationConfig>,
+  wrapWidth = 0
 ): { food: Recalled | null; signal: Recalled | null; home: Recalled | null; registers: readonly number[] } {
   if (!config.memoryEnabled || span <= 0) {
     return { food: null, signal: null, home: null, registers: new Array<number>(MEMORY_REGISTERS).fill(0) };
   }
   const fresh = (place: RememberedPlace | null) => (place ? Math.max(0, 1 - (tick - place.tick) / span) : 0);
   return {
-    food: recallPlace(memory.food, x, y, fresh(memory.food)),
-    signal: recallPlace(memory.signal, x, y, fresh(memory.signal)),
-    home: x === memory.home.x && y === memory.home.y ? null : recallPlace(memory.home, x, y, 1),
+    food: recallPlace(memory.food, x, y, fresh(memory.food), wrapWidth),
+    signal: recallPlace(memory.signal, x, y, fresh(memory.signal), wrapWidth),
+    home: x === memory.home.x && y === memory.home.y ? null : recallPlace(memory.home, x, y, 1, wrapWidth),
     registers: memory.registers,
   };
 }

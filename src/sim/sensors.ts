@@ -11,6 +11,7 @@ import { recall } from './memory';
 import { carrionYield, plantYield } from './traits';
 import { fatRoom, maxEnergyOf, sensingRadiusOf, thresholdOf } from './lifehistory';
 import { carryCapacityOf, isMature } from './growth';
+import { wrapDx, wrapX } from './globe';
 
 const NEARBY: number[] = [];
 
@@ -26,6 +27,7 @@ export function senseEnvironment(
   const { x, y, energy } = organism;
   const radius = Math.round(sensingRadiusOf(organism, config));
   const width = snapshot.gridWidth;
+  const wrap = config.worldWrapEnabled === true;
 
   // Current cell food (grids are indexed y * width + x)
   const currentCellFood = snapshot.foodGrid[y * width + x];
@@ -63,8 +65,9 @@ export function senseEnvironment(
   // Scan local window [x - radius, x + radius] x [y - radius, y + radius]. The out-of-bounds
   // cells count as obstacles, but only the nearest one on each side of a row can be the nearest
   // overall, so the rest are skipped.
-  const xLo = Math.max(0, x - radius);
-  const xHi = Math.min(width - 1, x + radius);
+  // On a cylinder there is no west or east wall: the window wraps (and cannot be wider than the world).
+  const xLo = wrap ? -radius : Math.max(0, x - radius);
+  const xHi = wrap ? radius : Math.min(width - 1, x + radius);
   for (let dy = -radius; dy <= radius; dy++) {
     const targetY = y + dy;
     const absDy = dy < 0 ? -dy : dy;
@@ -77,7 +80,7 @@ export function senseEnvironment(
       }
       continue;
     }
-    if (x - radius < 0) {
+    if (!wrap && x - radius < 0) {
       const dx = -x - 1; // the nearest cell off the left edge
       const dist = -dx + absDy;
       if (dist < minObstacleDist) {
@@ -88,10 +91,10 @@ export function senseEnvironment(
     }
     const rowBase = targetY * width;
     for (let targetX = xLo; targetX <= xHi; targetX++) {
-      const dx = targetX - x;
+      const dx = wrap ? targetX : targetX - x;
       if (dx === 0 && dy === 0) continue;
       const manhattanDist = (dx < 0 ? -dx : dx) + absDy;
-      const cell = rowBase + targetX;
+      const cell = rowBase + (wrap ? wrapX(x + targetX, width, true) : targetX);
 
       const occupant = organismGrid[cell];
       if (occupant >= 0) nearbyIndices.push(occupant);
@@ -118,7 +121,7 @@ export function senseEnvironment(
         carrValue = carrion;
       }
     }
-    if (x + radius >= width) {
+    if (!wrap && x + radius >= width) {
       const dx = width - x; // the nearest cell off the right edge
       const dist = dx + absDy;
       if (dist < minObstacleDist) {
@@ -129,13 +132,13 @@ export function senseEnvironment(
     }
   }
   if (minObstacleDist < Infinity) {
-    nearestObstacle = { x: x + obsDx, y: y + obsDy, distance: minObstacleDist, dx: obsDx, dy: obsDy };
+    nearestObstacle = { x: wrapX(x + obsDx, width, wrap), y: y + obsDy, distance: minObstacleDist, dx: obsDx, dy: obsDy };
   }
   if (minFoodDist < Infinity) {
-    nearestFood = { x: x + foodDx, y: y + foodDy, distance: minFoodDist, dx: foodDx, dy: foodDy, value: foodValue };
+    nearestFood = { x: wrapX(x + foodDx, width, wrap), y: y + foodDy, distance: minFoodDist, dx: foodDx, dy: foodDy, value: foodValue };
   }
   if (minCarrionDist < Infinity) {
-    nearestCarrion = { x: x + carrDx, y: y + carrDy, distance: minCarrionDist, dx: carrDx, dy: carrDy, value: carrValue };
+    nearestCarrion = { x: wrapX(x + carrDx, width, wrap), y: y + carrDy, distance: minCarrionDist, dx: carrDx, dy: carrDy, value: carrValue };
   }
 
   // Sense other organisms within local radius, in snapshot order (the sums
@@ -144,7 +147,7 @@ export function senseEnvironment(
   for (const index of nearbyIndices) {
     const other = snapshot.organisms[index];
     if (other.id === organism.id) continue;
-    const dx = other.x - x;
+    const dx = wrapDx(other.x - x, width, wrap);
     const dy = other.y - y;
     {
       surroundingOrganismCount++;
@@ -198,7 +201,7 @@ export function senseEnvironment(
   for (const index of snapshot.signallers) {
     const other = snapshot.organisms[index];
     if (other.id === organism.id) continue;
-    const dx = other.x - x;
+    const dx = wrapDx(other.x - x, width, wrap);
     const dy = other.y - y;
     const distance = Math.abs(dx) + Math.abs(dy);
     let effectiveDist = distance;
@@ -223,7 +226,7 @@ export function senseEnvironment(
   // Involuntary death pulses from violently killed organisms also propagate into the signal grid
   if (snapshot.deathPulses) {
     for (const pulse of snapshot.deathPulses) {
-      const dx = pulse.x - x;
+      const dx = wrapDx(pulse.x - x, width, wrap);
       const dy = pulse.y - y;
       const distance = Math.abs(dx) + Math.abs(dy);
       let effectiveDist = distance;
@@ -255,7 +258,7 @@ export function senseEnvironment(
     let temp = 0;
     let rain = 0;
     for (const f of snapshot.weather.fronts) {
-      const fdx = x - f.x;
+      const fdx = wrapDx(x - f.x, width, wrap);
       const fdy = y - f.y;
       const d2 = fdx * fdx + fdy * fdy;
       if (d2 <= f.radius * f.radius) {
@@ -289,15 +292,17 @@ export function senseEnvironment(
   // Can reproduce if energy threshold met and at least one orthogonal cell is inside bounds and not an obstacle
   let canReproduce = energy >= thresholdOf(organism, config) && snapshot.tick >= (organism.nextBirthTick ?? 0) && isMature(organism, config);
   if (canReproduce) {
-    const open = (nx: number, ny: number) =>
-      nx >= 0 && nx < snapshot.gridWidth && ny >= 0 && ny < snapshot.gridHeight && snapshot.obstacleGrid[ny * width + nx] === 0;
+    const open = (nx0: number, ny: number) => {
+      const nx = wrapX(nx0, width, wrap);
+      return nx >= 0 && nx < snapshot.gridWidth && ny >= 0 && ny < snapshot.gridHeight && snapshot.obstacleGrid[ny * width + nx] === 0;
+    };
     const hasValidCell = open(x, y - 1) || open(x, y + 1) || open(x + 1, y) || open(x - 1, y);
     canReproduce = hasValidCell;
   }
 
   const canGive = config.sharingEnabled && carriedFood > 0;
 
-  const remembered = recall(organism.memory, organism.memorySpan, x, y, snapshot.tick, config);
+  const remembered = recall(organism.memory, organism.memorySpan, x, y, snapshot.tick, config, wrap ? width : 0);
 
   const sensed: SensedInputs = {
     currentEnergy: energy,

@@ -39,6 +39,7 @@ describe('Carry capacity trait', () => {
     expect(metabolismCost(two, { ...config, abilityUpkeep: 0.03, leapEnabled: false })).toBeCloseTo(0.28);
 
     const world = new World({
+      worldWrapEnabled: false, climateBeltsEnabled: false, hemisphericSeasonsEnabled: false, /* isolates the mechanism from the globe: exact costs and positions on a small flat world */ 
       seed: 1,
       initialOrganisms: 1,
       initialFoodPatches: 0,

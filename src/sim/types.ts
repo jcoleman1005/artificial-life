@@ -616,6 +616,12 @@ export interface SimulationConfig {
   elevationWaterChill: number; // Temperature lost standing in water
   elevationRiparianReach: number; // Cells from water over which the shore's wetness fades to nothing
   elevationFertilityMean: number; // Average fertility of dry land (the soil map is scaled to this); the old disc world averaged about 0.6
+  climateBeltsEnabled: boolean; // Latitude climate: wind belts and rain bands (rows from equator to poles); fronts steer by the belt wind
+  windBeltStrength: number; // Zonal belt wind at the belt's centre
+  windBeltPoleward: number; // Poleward / equatorward belt drift
+  rainBandStrength: number; // How strongly storms form on the wet latitude bands, 0..1
+  hemisphericSeasonsEnabled: boolean; // Southern half of the map is half a seasonal cycle behind the northern half
+  worldWrapEnabled: boolean; // East and west edges join (a cylinder); north and south stay polar edges
   dynamicWaterEnabled: boolean; // Tides and floods put shallow water over dry ground for a while; off: water never changes
   waterInterval: number; // Ticks between recomputing standing water
   tideAmplitude: number; // High-tide rise of the sea, in units of the height range

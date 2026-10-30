@@ -1,5 +1,6 @@
 import { PRNG } from './prng';
 import { valueNoise } from './terrain';
+import { neighbourIndex, wrapDx } from './globe';
 import type { SimulationConfig } from './types';
 
 /**
@@ -204,7 +205,7 @@ class MinHeap {
 const NEIGHBOURS: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 /** Connected land (4-neighbour) labelled; returns each cell's component (-1 for water) and the sizes. */
-function labelLand(isLand: Uint8Array, w: number, h: number): { label: Int32Array; sizes: number[] } {
+function labelLand(isLand: Uint8Array, w: number, h: number, wrap = false): { label: Int32Array; sizes: number[] } {
   const label = new Int32Array(w * h).fill(-1);
   const sizes: number[] = [];
   for (let start = 0; start < label.length; start++) {
@@ -219,10 +220,8 @@ function labelLand(isLand: Uint8Array, w: number, h: number): { label: Int32Arra
       const x = c % w;
       const y = (c - x) / w;
       for (const [dx, dy] of NEIGHBOURS) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        const ni = ny * w + nx;
+        const ni = neighbourIndex(x, y, dx, dy, w, h, wrap);
+        if (ni < 0) continue;
         if (isLand[ni] && label[ni] < 0) {
           label[ni] = id;
           stack.push(ni);
@@ -239,6 +238,7 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   const { gridWidth: w, gridHeight: h } = config;
   const n = w * h;
   const prng = new PRNG(`elevation:${String(config.seed)}`);
+  const wrap = config.worldWrapEnabled === true; // the east and west edges join
 
   // 1. Plates: centres spread over the map, about half of them continental.
   const count = Math.max(2, Math.floor(config.elevationPlateCount));
@@ -250,7 +250,7 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
       const x = prng.nextFloat(0, w);
       const y = prng.nextFloat(0, h);
       let gap = Infinity;
-      for (const c of centres) gap = Math.min(gap, Math.hypot(c.x - x, c.y - y));
+      for (const c of centres) gap = Math.min(gap, Math.hypot(wrapDx(c.x - x, w, wrap), c.y - y));
       if (gap > bestGap) {
         best = { x, y };
         bestGap = gap;
@@ -268,17 +268,17 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   }));
 
   // 2. Height: a soft blend of the plates' bases (nearest wins, borders ragged), mountains where plates meet, noise.
-  const warpX = valueNoise(w, h, 12, prng);
-  const warpY = valueNoise(w, h, 12, prng);
-  const rough = valueNoise(w, h, 9, prng);
-  const fine = valueNoise(w, h, 4, prng);
+  const warpX = valueNoise(w, h, 12, prng, wrap);
+  const warpY = valueNoise(w, h, 12, prng, wrap);
+  const rough = valueNoise(w, h, 9, prng, wrap);
+  const fine = valueNoise(w, h, 4, prng, wrap);
   const height = new Float64Array(n);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
       const px = x + (warpX[i] - 0.5) * 12;
       const py = y + (warpY[i] - 0.5) * 12;
-      const d = plates.map((p, k) => ({ k, d: Math.hypot(px - p.x, py - p.y) })).sort((a, b) => a.d - b.d || a.k - b.k);
+      const d = plates.map((p, k) => ({ k, d: Math.hypot(wrapDx(px - p.x, w, wrap), py - p.y) })).sort((a, b) => a.d - b.d || a.k - b.k);
       const d1 = d[0].d;
       let sum = 0;
       let weight = 0;
@@ -311,7 +311,7 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   let sea = sorted[Math.min(n - 1, Math.floor(seaFraction * n))];
   const isLand = new Uint8Array(n);
   for (let i = 0; i < n; i++) isLand[i] = height[i] > sea ? 1 : 0;
-  const { label, sizes } = labelLand(isLand, w, h);
+  const { label, sizes } = labelLand(isLand, w, h, wrap);
   const largest = sizes.length > 0 ? sizes.indexOf(Math.max(...sizes)) : -1;
   for (let i = 0; i < n; i++) {
     if (isLand[i] && sizes[label[i]] < config.elevationMinContinent && label[i] !== largest) {
@@ -330,7 +330,7 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   for (let i = 0; i < n; i++) {
     const x = i % w;
     const y = (i - x) / w;
-    const onEdge = x === 0 || y === 0 || x === w - 1 || y === h - 1;
+    const onEdge = wrap ? y === 0 || y === h - 1 : x === 0 || y === 0 || x === w - 1 || y === h - 1; // a cylinder drains at the poles only
     if (!isLand[i] || onEdge) {
       filled[i] = height[i];
       seen[i] = 1;
@@ -343,10 +343,8 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
     const x = c % w;
     const y = (c - x) / w;
     for (const [dx, dy] of NEIGHBOURS) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const ni = ny * w + nx;
+      const ni = neighbourIndex(x, y, dx, dy, w, h, wrap);
+      if (ni < 0) continue;
       if (seen[ni]) continue;
       seen[ni] = 1;
       filled[ni] = Math.max(height[ni], fh);
@@ -390,10 +388,8 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
       const x = c % w;
       const y = (c - x) / w;
       for (const [dx, dy] of NEIGHBOURS) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        const ni = ny * w + nx;
+        const ni = neighbourIndex(x, y, dx, dy, w, h, wrap);
+        if (ni < 0) continue;
         if (dist[ni] < 0) { dist[ni] = step; next.push(ni); }
       }
     }
@@ -408,12 +404,12 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   for (let i = 0; i < n; i++) if (isLand[i]) landHeights.push(height[i]);
   landHeights.sort((a, b) => a - b);
   const lowland = landHeights.length ? Math.max(0, Math.min(1, landHeights[Math.floor(landHeights.length / 2)])) : sea;
-  const continents = labelLand(isLand, w, h);
+  const continents = labelLand(isLand, w, h, wrap);
 
   // 7. Soil quality: wet ground (near water, and where flow gathers on flat land), thin on steep slopes, poorer when
   // high and cold, with patches of better and worse parent material. Scaled so dry land averages elevationFertilityMean.
   const maxFlow = Math.max(2, ...landFlows);
-  const soilNoise = valueNoise(w, h, 7, prng);
+  const soilNoise = valueNoise(w, h, 7, prng, wrap);
   const raw = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     if (water[i] > 0) continue;
@@ -422,9 +418,9 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
     const e = height[i];
     let steep = 0;
     for (const [dx, dy] of NEIGHBOURS) {
-      const nx = Math.max(0, Math.min(w - 1, x + dx));
-      const ny = Math.max(0, Math.min(h - 1, y + dy));
-      steep = Math.max(steep, Math.abs(height[ny * w + nx] - e));
+      const ni = neighbourIndex(x, y, dx, dy, w, h, wrap);
+      if (ni < 0) continue; // off the pole: no slope that way
+      steep = Math.max(steep, Math.abs(height[ni] - e));
     }
     const slope = Math.min(1, steep / 0.12);
     const shore = riparian[i] / 255;
@@ -449,7 +445,7 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   }
   const fertility = new Uint8Array(n);
   for (let i = 0; i < n; i++) if (water[i] === 0) fertility[i] = Math.round(Math.min(1, fmin + ((klo + khi) / 2) * raw[i]) * 255);
-  return new ElevationField(w, h, elevation, water, riparian, sea, plates, lowland, continents.label, continents.sizes, fertility, tideRiseOf(w, h, elevation, water, sea));
+  return new ElevationField(w, h, elevation, water, riparian, sea, plates, lowland, continents.label, continents.sizes, fertility, tideRiseOf(w, h, elevation, water, sea, wrap));
 }
 
 /**
@@ -457,7 +453,7 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
  * level) over the cells that connect to it, taking the highest ground crossed on the way. 65535 for cells the sea can
  * never reach and 0 for ocean. The result is made once; a tide is then one comparison per cell.
  */
-function tideRiseOf(w: number, h: number, elevation: Uint16Array, water: Uint8Array, sea: number): Uint16Array {
+function tideRiseOf(w: number, h: number, elevation: Uint16Array, water: Uint8Array, sea: number, wrap = false): Uint16Array {
   const n = w * h;
   const seaRaw = sea * ELEVATION_FULL;
   const reach = new Float64Array(n).fill(Infinity);
@@ -474,10 +470,8 @@ function tideRiseOf(w: number, h: number, elevation: Uint16Array, water: Uint8Ar
     const x = i % w;
     const y = (i - x) / w;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const j = ny * w + nx;
+      const j = neighbourIndex(x, y, dx, dy, w, h, wrap);
+      if (j < 0) continue;
       const rise = Math.max(r, Math.max(0, elevation[j] - seaRaw));
       if (rise < reach[j]) {
         reach[j] = rise;

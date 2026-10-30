@@ -1,4 +1,5 @@
 import type { PRNG } from './prng';
+import { wrapDx, wrapX } from './globe';
 import type {
   SimulationConfig,
   WeatherFront,
@@ -25,6 +26,50 @@ export class WeatherSimulation {
   public nextFrontId = 1;
   private readonly width: number;
   private readonly height: number;
+  /** The east and west edges join (worldWrapEnabled); set by `configure`. */
+  private wrap = false;
+  /** Latitude climate (climateBeltsEnabled): wind belts and rain bands by row; set by `configure`. */
+  private belts = false;
+  private beltStrength = 0.35;
+  private beltPoleward = 0.15;
+  private rainBands = 0.7;
+
+  /** Picks up the world's switches (the weather is built before, and restored apart from, the config). */
+  public configure(config: Readonly<SimulationConfig>): this {
+    this.wrap = config.worldWrapEnabled === true;
+    this.belts = config.climateBeltsEnabled === true;
+    this.beltStrength = config.windBeltStrength;
+    this.beltPoleward = config.windBeltPoleward;
+    this.rainBands = config.rainBandStrength;
+    return this;
+  }
+
+  /**
+   * Latitude of a row: 0 on the equator (the middle row) to 1 at the poles (the north and south edges).
+   */
+  public latitude(y: number): number {
+    return Math.min(1, Math.abs((2 * (y + 0.5)) / this.height - 1));
+  }
+
+  /**
+   * The wind the belts blow at a row (zero without belts): easterly trade winds in the tropics, westerlies in the
+   * middle latitudes and polar easterlies, with the poleward and equatorward drift that goes with each belt. Zonal
+   * wind is -sin(3 pi phi), so it is easterly (-x) at phi = 1/6, westerly at 1/2 and easterly at 5/6.
+   */
+  public beltWind(y: number): { wx: number; wy: number } {
+    if (!this.belts) return { wx: 0, wy: 0 };
+    const phi = this.latitude(y);
+    const s = Math.sin(3 * Math.PI * phi);
+    const north = y < this.height / 2; // the north pole is the top edge, so poleward is up
+    const poleward = -s * this.beltPoleward;
+    return { wx: -s * this.beltStrength, wy: north ? -poleward : poleward };
+  }
+
+  /** How wet a row is on the rain bands, 0..1: wet at the equator and mid-latitudes, dry in the subtropics and at the poles. */
+  public wetness(y: number): number {
+    const c = 0.5 + 0.5 * Math.cos((2 * Math.PI * this.latitude(y)) / 0.55);
+    return 0.15 + 0.85 * c;
+  }
 
   constructor(
     width: number,
@@ -46,7 +91,13 @@ export class WeatherSimulation {
    * Advances the weather simulation by one tick using seeded PRNG.
    * Deterministic: only called when weatherEnabled is true.
    */
-  public step(tick: number, prng: PRNG, config: Readonly<SimulationConfig>, season: 'plenty' | 'lean' | null): void {
+  public step(
+    tick: number,
+    prng: PRNG,
+    config: Readonly<SimulationConfig>,
+    season: 'plenty' | 'lean' | null,
+    seasonAtRow?: (y: number) => 'plenty' | 'lean' | null
+  ): void {
     // 1. Prevailing wind drift (smooth pseudo-walk every 50 ticks)
     if (tick % 50 === 0) {
       let angle = Math.atan2(this.wind.wy, this.wind.wx);
@@ -61,16 +112,22 @@ export class WeatherSimulation {
     // 2. Advance active weather fronts
     const surviving: WeatherFront[] = [];
     for (const f of this.fronts) {
+      if (this.belts) {
+        // Storms are steered by the belt wind where they are, so they track along the belts.
+        const bw = this.beltWind(Math.max(0, Math.min(this.height - 1, f.y)));
+        f.vx += (bw.wx * 0.8 - f.vx) * 0.03;
+        f.vy += (bw.wy * 0.8 - f.vy) * 0.03;
+      }
       f.x += f.vx;
       f.y += f.vy;
+      if (this.wrap) f.x = wrapX(f.x, this.width, true);
       f.lifetime--;
 
-      // Check bounds: keep if still alive and within proximity of grid
+      // Check bounds: keep if still alive and within proximity of grid (a cylinder has no east or west edge)
       const margin = f.radius + 5;
       if (
         f.lifetime > 0 &&
-        f.x >= -margin &&
-        f.x <= this.width + margin &&
+        (this.wrap || (f.x >= -margin && f.x <= this.width + margin)) &&
         f.y >= -margin &&
         f.y <= this.height + margin
       ) {
@@ -84,14 +141,15 @@ export class WeatherSimulation {
       this.fronts.length < config.weatherMaxFronts &&
       prng.next() < 1 / Math.max(1, config.weatherSpawnInterval)
     ) {
-      this.spawnFront(prng, season);
+      if (this.belts) this.spawnBeltFront(prng, season, seasonAtRow);
+      else this.spawnFront(prng, season);
     }
 
     // 4. Precipitate rain into soil moisture grid
     for (const f of this.fronts) {
       if (f.type !== 'rain_storm') continue;
-      const minX = Math.max(0, Math.floor(f.x - f.radius));
-      const maxX = Math.min(this.width - 1, Math.ceil(f.x + f.radius));
+      const minX = this.wrap ? Math.floor(f.x - f.radius) : Math.max(0, Math.floor(f.x - f.radius));
+      const maxX = this.wrap ? Math.ceil(f.x + f.radius) : Math.min(this.width - 1, Math.ceil(f.x + f.radius));
       const minY = Math.max(0, Math.floor(f.y - f.radius));
       const maxY = Math.min(this.height - 1, Math.ceil(f.y + f.radius));
       const r2 = f.radius * f.radius;
@@ -104,7 +162,7 @@ export class WeatherSimulation {
           if (d2 <= r2) {
             const d = Math.sqrt(d2);
             const intensity = f.intensity * (1 - d / f.radius);
-            const cellIdx = cy * this.width + cx;
+            const cellIdx = cy * this.width + (this.wrap ? wrapX(cx, this.width, true) : cx);
             const inc = Math.round(intensity * config.weatherAbsorptionRate * 255);
             this.moisture[cellIdx] = Math.min(255, this.moisture[cellIdx] + inc);
           }
@@ -178,12 +236,52 @@ export class WeatherSimulation {
   }
 
   /**
+   * A new front on the globe: it appears anywhere along the row it is born in (rain storms prefer the wet
+   * latitudes, by `rainBandStrength`), drifts off the belt wind there, and has the season of its own hemisphere.
+   */
+  private spawnBeltFront(prng: PRNG, season: 'plenty' | 'lean' | null, seasonAtRow?: (y: number) => 'plenty' | 'lean' | null): void {
+    const r = prng.nextFloat(10, 18);
+    const x = prng.nextFloat(0, this.width);
+    // Rain prefers the wet bands: accept a row with probability (1 - s) + s * wetness.
+    let y = prng.nextFloat(0, this.height);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (prng.next() < 1 - this.rainBands + this.rainBands * this.wetness(y)) break;
+      y = prng.nextFloat(0, this.height);
+    }
+    const bw = this.beltWind(y);
+    const speed = prng.nextFloat(0.15, 0.35);
+    const here = seasonAtRow ? seasonAtRow(y) : season;
+    const roll = prng.next();
+    let type: WeatherFrontType = 'rain_storm';
+    if (here === 'lean') {
+      if (roll < 0.5) type = 'cold_front';
+      else if (roll < 0.8) type = 'rain_storm';
+      else type = 'heat_wave';
+    } else {
+      if (roll < 0.5) type = 'rain_storm';
+      else if (roll < 0.8) type = 'heat_wave';
+      else type = 'cold_front';
+    }
+    this.fronts.push({
+      id: this.nextFrontId++,
+      type,
+      x: Number(x.toFixed(2)),
+      y: Number(y.toFixed(2)),
+      vx: Number((bw.wx * 0.8 + prng.nextGaussian(0, 0.03)).toFixed(3)),
+      vy: Number((bw.wy * 0.8 * (0.5 + speed) + prng.nextGaussian(0, 0.03)).toFixed(3)),
+      radius: Number(r.toFixed(1)),
+      intensity: Number(prng.nextFloat(0.6, 1.0).toFixed(2)),
+      lifetime: Math.round(prng.nextFloat(180, 350)),
+    });
+  }
+
+  /**
    * Local temperature at (x, y) in [-1.0, 1.0].
    */
   public getTemperature(x: number, y: number, season: 'plenty' | 'lean' | null): number {
     let t = season === 'lean' ? -0.1 : 0.1;
     for (const f of this.fronts) {
-      const dx = x - f.x;
+      const dx = wrapDx(x - f.x, this.width, this.wrap);
       const dy = y - f.y;
       const d2 = dx * dx + dy * dy;
       if (d2 <= f.radius * f.radius) {
@@ -203,7 +301,7 @@ export class WeatherSimulation {
     let rain = 0;
     for (const f of this.fronts) {
       if (f.type !== 'rain_storm') continue;
-      const dx = x - f.x;
+      const dx = wrapDx(x - f.x, this.width, this.wrap);
       const dy = y - f.y;
       const d2 = dx * dx + dy * dy;
       if (d2 <= f.radius * f.radius) {
@@ -228,8 +326,14 @@ export class WeatherSimulation {
   public getWind(x: number, y: number): { wx: number; wy: number } {
     let wx = this.wind.wx;
     let wy = this.wind.wy;
+    if (this.belts) {
+      // The belts set the wind by latitude; the wandering prevailing wind rides on top at half strength.
+      const bw = this.beltWind(y);
+      wx = bw.wx + 0.5 * wx;
+      wy = bw.wy + 0.5 * wy;
+    }
     for (const f of this.fronts) {
-      const dx = x - f.x;
+      const dx = wrapDx(x - f.x, this.width, this.wrap);
       const dy = y - f.y;
       const d2 = dx * dx + dy * dy;
       if (d2 <= f.radius * f.radius) {

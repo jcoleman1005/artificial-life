@@ -1,4 +1,5 @@
 import type { ElevationField } from './elevation';
+import { wrapX } from './globe';
 import type { PRNG } from './prng';
 import { founderGenes, geneTableKeys, inheritGenes, type GeneTable } from './genes';
 import type {
@@ -227,6 +228,7 @@ export class SoilField {
     }
 
     // 2. Spatial diffusion (4-neighbor)
+    const wrap = config.worldWrapEnabled === true;
     if (dRate > 0) {
       this.diffBuffer.set(n);
       const buf = this.diffBuffer;
@@ -239,12 +241,15 @@ export class SoilField {
           let flux = 0;
           let validNeighbors = 0;
 
-          if (x > 0 && fert[idx - 1] > 0) {
-            flux += buf[idx - 1] - curr;
+          // On a cylinder the west edge meets the east edge, so nutrients flow round.
+          const west = x > 0 ? idx - 1 : wrap ? idx + w - 1 : -1;
+          const east = x < w - 1 ? idx + 1 : wrap ? idx - w + 1 : -1;
+          if (west >= 0 && fert[west] > 0) {
+            flux += buf[west] - curr;
             validNeighbors++;
           }
-          if (x < w - 1 && fert[idx + 1] > 0) {
-            flux += buf[idx + 1] - curr;
+          if (east >= 0 && fert[east] > 0) {
+            flux += buf[east] - curr;
             validNeighbors++;
           }
           if (y > 0 && fert[idx - w] > 0) {
@@ -423,6 +428,7 @@ export function stepPlants(ctx: PlantStepContext): void {
   const { config, tick, prng, patches, field, counters } = ctx;
   const { gridWidth: w, gridHeight: h } = config;
   const lightLean = 1 / Math.max(1, config.leanSlowdown);
+  const wrap = config.worldWrapEnabled === true;
 
   const living: { key: string; index: number; patch: FoodPatch; plant: Plant }[] = [];
   const occupied = new Uint8Array(w * h);
@@ -442,7 +448,7 @@ export function stepPlants(ctx: PlantStepContext): void {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         if (dx === 0 && dy === 0) continue;
-        const nx = x + dx;
+        const nx = wrapX(x + dx, w, wrap);
         const ny = y + dy;
         if (nx >= 0 && ny >= 0 && nx < w && ny < h && occupied[ny * w + nx]) neighbours++;
       }
@@ -559,7 +565,7 @@ export function stepPlants(ctx: PlantStepContext): void {
         sx += Math.round(wind.wx * config.weatherSeedDrift);
         sy += Math.round(wind.wy * config.weatherSeedDrift);
       }
-      seeds.push({ x: sx, y: sy, from: index, parent: plant });
+      seeds.push({ x: wrapX(sx, w, wrap), y: sy, from: index, parent: plant });
     }
     patch.stock = Math.floor(plant.biomass);
   }

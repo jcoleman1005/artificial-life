@@ -14,6 +14,7 @@ import { carrionYield, killChance } from './traits';
 import { isParentOf, isParentOrChild } from './family';
 import { canSwimDeep, maxEnergyOf, thresholdOf } from './lifehistory';
 import { carryCapacityOf, isMature } from './growth';
+import { wrapX } from './globe';
 
 export const WEIGHT_MIN = -2.0;
 export const WEIGHT_MAX = 2.0;
@@ -129,15 +130,18 @@ export function getLegalActions(
   const { x, y } = organism;
 
   const width = snapshot.gridWidth;
+  // On a cylinder the columns wrap: a column off one edge is the one at the other.
+  const wrap = config.worldWrapEnabled === true;
+  const col = (cx: number) => wrapX(cx, width, wrap);
   const inBounds = (cx: number, cy: number) =>
-    cx >= 0 && cx < width && cy >= 0 && cy < snapshot.gridHeight;
+    wrap ? cy >= 0 && cy < snapshot.gridHeight : cx >= 0 && cx < width && cy >= 0 && cy < snapshot.gridHeight;
   // Deep water is a wall unless this body can swim it.
   const swimsDeep = canSwimDeep(organism, config);
   const isWall = (cx: number, cy: number) =>
-    !inBounds(cx, cy) || (snapshot.obstacleGrid[cy * width + cx] === 1 && !(swimsDeep && snapshot.deepGrid?.[cy * width + cx] === 1));
+    !inBounds(cx, cy) || (snapshot.obstacleGrid[cy * width + col(cx)] === 1 && !(swimsDeep && snapshot.deepGrid?.[cy * width + col(cx)] === 1));
   const occupantAt = (cx: number, cy: number) => {
     if (!inBounds(cx, cy)) return undefined;
-    const index = snapshot.organismGrid[cy * width + cx];
+    const index = snapshot.organismGrid[cy * width + col(cx)];
     return index >= 0 ? snapshot.organisms[index] : undefined;
   };
 
@@ -158,7 +162,7 @@ export function getLegalActions(
   }
 
   for (const move of candidateMoves) {
-    const targetX = x + move.dx;
+    const targetX = col(x + move.dx);
     const targetY = y + move.dy;
     if (isWall(targetX, targetY)) continue;
 
@@ -198,7 +202,7 @@ export function getLegalActions(
       { type: 'LEAP_WEST', dx: -1, dy: 0 },
     ];
     for (const leap of candidateLeaps) {
-      const landX = x + 2 * leap.dx;
+      const landX = col(x + 2 * leap.dx);
       const landY = y + 2 * leap.dy;
       if (!occupantAt(x + leap.dx, y + leap.dy)) continue; // only over an organism
       if (isWall(landX, landY) || occupantAt(landX, landY)) continue;
@@ -232,7 +236,7 @@ export function getLegalActions(
     ];
 
     for (const repro of candidateRepros) {
-      const targetX = x + repro.dx;
+      const targetX = col(x + repro.dx);
       const targetY = y + repro.dy;
 
       // Cannot place child outside world bounds
@@ -270,7 +274,7 @@ export function getLegalActions(
     ];
 
     for (const give of candidateGives) {
-      const targetX = x + give.dx;
+      const targetX = col(x + give.dx);
       const targetY = y + give.dy;
       const recipientIndex =
         targetX >= 0 && targetX < snapshot.gridWidth && targetY >= 0 && targetY < snapshot.gridHeight

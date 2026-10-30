@@ -259,7 +259,7 @@ describe('Artificial Life Core Mechanics', () => {
   });
 
   it('5. Fair conflict resolution when two organisms claim the same cell', () => {
-    const world = new World({ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
+    const world = new World({ worldWrapEnabled: false, climateBeltsEnabled: false, hemisphericSeasonsEnabled: false, /* isolates the mechanism from the globe: exact costs and positions on a small flat world */ elevationEnabled: false, /* isolates the mechanism from continents and water */ 
       seed: 1234,
       gridWidth: 10,
       gridHeight: 10,

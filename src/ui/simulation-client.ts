@@ -2,6 +2,7 @@ import { DEFAULT_CONFIG } from '../sim/config';
 import type { HistorySample } from '../sim/history';
 import { TerrainField } from '../sim/terrain';
 import { ElevationField } from '../sim/elevation';
+import { WeatherSimulation } from '../sim/weather';
 import { EVENT_LOG_SIZE, type WorldEvent } from '../sim/events';
 import type { HeatmapKind } from '../sim/activity';
 import type { BrainTrace } from '../sim/brain-trace';
@@ -250,32 +251,8 @@ export class SimulationClient implements WorldView {
         this.deathPulses = message.deathPulses ?? [];
         if (message.weather) {
           const w = message.weather;
-          this.weather = {
-            fronts: w.fronts,
-            getWind: (x: number, y: number) => {
-              let wx = w.wind.wx;
-              let wy = w.wind.wy;
-              for (const f of w.fronts) {
-                const dx = x - f.x;
-                const dy = y - f.y;
-                const d2 = dx * dx + dy * dy;
-                if (d2 <= f.radius * f.radius) {
-                  const dist = Math.sqrt(d2);
-                  const inf = f.intensity * (1 - dist / f.radius);
-                  if (dist > 0.1) {
-                    wx += (-dy / dist) * 0.2 * inf;
-                    wy += (dx / dist) * 0.2 * inf;
-                  }
-                }
-              }
-              const speed = Math.hypot(wx, wy);
-              if (speed > 1.0) {
-                wx /= speed;
-                wy /= speed;
-              }
-              return { wx, wy };
-            },
-          };
+          // The same latitude and wrap rules as the sim, so the wind arrows follow the belts and storms reach across the seam.
+          this.weather = new WeatherSimulation(this.config.gridWidth, this.config.gridHeight, w.fronts.map((f) => ({ ...f })), { ...w.wind }).configure(this.config);
         } else {
           this.weather = null;
         }
