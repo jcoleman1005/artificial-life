@@ -114,16 +114,16 @@ export class SoilField {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
-        if (elevation !== null && elevation.isWater(i) && config.marineEnabled) {
+        if (elevation !== null && elevation.isPermanentWater(i) && config.marineEnabled) {
           // Marine plants: light fades with depth, so the shallows are richest. Deep water is in `obstacles` but still grows plants.
           this.marine ??= new Uint8Array(w * h);
           this.marine[i] = 1;
-          const f0 = config.marineFertility * (1 - (1 - config.marineDeepLight) * Math.min(1, elevation.depth01(i)));
+          const f0 = config.marineFertility * (1 - (1 - config.marineDeepLight) * Math.min(1, elevation.water[i] / 255));
           this.fertility[i] = f0;
           this.nutrients[i] = f0;
           continue;
         }
-        if (obstacles.has(`${x},${y}`) || (elevation !== null && elevation.isWater(i))) continue; // rock and (without marine plants) water grow nothing
+        if (obstacles.has(`${x},${y}`) || (elevation !== null && elevation.isPermanentWater(i))) continue; // rock and (without marine plants) water grow nothing
         if (regions.length === 0) {
           // No discs: everywhere is equally fertile, or with elevation the soil quality made from water, slope and height.
           const f0 = elevation !== null ? elevation.fertility[i] / 255 : 1;

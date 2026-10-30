@@ -283,6 +283,9 @@ export class SimulationHost {
   private terrainSentFor: ReturnType<World['getTerrain']> = null;
   private terrainSentVersion = -1;
   private terrainSentAt = 0;
+  /** The same for tide and flood water: sent when it has changed, at most about once a second. */
+  private waterSentVersion = -1;
+  private waterSentAt = 0;
 
   private postStatic(only?: Viewer): void {
     const { world } = this;
@@ -291,6 +294,8 @@ export class SimulationHost {
       this.terrainSentFor = world.getTerrain();
       this.terrainSentVersion = this.terrainSentFor?.version ?? -1;
       this.terrainSentAt = this.env.now();
+      this.waterSentVersion = world.getElevation()?.version ?? -1;
+      this.waterSentAt = this.env.now();
     }
     const message: FromWorker = {
       kind: 'static',
@@ -383,7 +388,22 @@ export class SimulationHost {
       withPanels &&
       (this.terrainSentFor !== terrain || this.terrainSentVersion !== terrain.version) &&
       this.env.now() - this.terrainSentAt >= 1000;
-    const base = { ...this.baseFrame(fromStep), ...(terrainDue ? { terrain: terrain.exportState() } : {}) };
+    const elevation = this.world.getElevation();
+    const waterDue =
+      elevation !== null &&
+      withPanels &&
+      this.world.config.dynamicWaterEnabled &&
+      this.waterSentVersion !== elevation.version &&
+      this.env.now() - this.waterSentAt >= 1000;
+    const base = {
+      ...this.baseFrame(fromStep),
+      ...(terrainDue ? { terrain: terrain.exportState() } : {}),
+      ...(waterDue ? { water: Array.from(elevation.dynDepth) } : {}),
+    };
+    if (waterDue) {
+      this.waterSentVersion = elevation.version;
+      this.waterSentAt = this.env.now();
+    }
     if (terrainDue) {
       this.terrainSentFor = terrain;
       this.terrainSentVersion = terrain.version;

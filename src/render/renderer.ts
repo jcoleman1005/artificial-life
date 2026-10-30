@@ -137,6 +137,7 @@ export class CanvasRenderer {
   /** The sea, rivers, lakes and relief, painted once (the field is static) at one pixel a cell and scaled up. */
   private elevationLayer: HTMLCanvasElement | null = null;
   private elevationLayerFor: ElevationField | null = null;
+  private elevationLayerVersion = -1;
   private terrainWorn = 0;
   private colorMode: ColorMode = 'tag';
   private speciesOf: ((organismId: string) => number) | null = null;
@@ -1212,7 +1213,7 @@ export class CanvasRenderer {
   private drawElevation(ctx: CanvasRenderingContext2D, cellSize: number): void {
     const field = this.world.elevation;
     if (!field) return;
-    if (this.elevationLayerFor !== field || !this.elevationLayer) {
+    if (this.elevationLayerFor !== field || this.elevationLayerVersion !== field.version || !this.elevationLayer) {
       const { width, height } = field;
       const layer = document.createElement('canvas');
       layer.width = width;
@@ -1275,6 +1276,7 @@ export class CanvasRenderer {
       lctx.putImageData(image, 0, 0);
       this.elevationLayer = layer;
       this.elevationLayerFor = field;
+      this.elevationLayerVersion = field.version;
     }
     ctx.save();
     ctx.imageSmoothingEnabled = true;

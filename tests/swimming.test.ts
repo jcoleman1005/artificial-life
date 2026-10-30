@@ -179,6 +179,6 @@ describe('Switches', () => {
     for (let t = 0; t < 50; t++) world.step();
     const e = world.getElevation()!;
     for (const o of world.organisms.values()) expect(o.swim).toBeUndefined();
-    for (const p of world.foodPatches.values()) expect(e.isWater(p.y * e.width + p.x)).toBe(false);
+    for (const p of world.foodPatches.values()) expect(e.isPermanentWater(p.y * e.width + p.x)).toBe(false);
   });
 });

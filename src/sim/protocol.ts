@@ -249,6 +249,8 @@ export type FromWorker =
       };
       /** Worn terrain, sent when it has changed (at most about once a second; absent with terrain off). */
       readonly terrain?: TerrainState;
+      /** Tide and flood water standing on dry ground, depth 1..255 per cell, sent when it has changed (at most about once a second; absent with dynamic water off). */
+      readonly water?: readonly number[];
       /** Species id of each organism, in the same order as `organisms` (0: none; absent with speciesEnabled off or from older servers). */
       readonly speciesIds?: readonly number[];
       /** Ticks run in the last second (measured in the worker). */

@@ -35,6 +35,8 @@ export interface ElevationState {
   readonly lowland?: number;
   readonly elevation: readonly number[];
   readonly water: readonly number[];
+  /** Standing tide and flood water per cell (absent from older saves and servers). */
+  readonly dyn?: readonly number[];
 }
 
 export class ElevationField {
@@ -56,16 +58,44 @@ export class ElevationField {
     public readonly continent: Int32Array = new Int32Array(0),
     public readonly continentSizes: readonly number[] = [],
     /** Soil quality 0..255 meaning 0..1 (0 under water): wet, flat, low, good ground is rich. */
-    public readonly fertility: Uint8Array = new Uint8Array(0)
-  ) {}
-
-  public isWater(index: number): boolean {
-    return this.water[index] > 0;
+    public readonly fertility: Uint8Array = new Uint8Array(0),
+    /**
+     * Dynamic water: the rise of the sea (in height units, 0..1) that floods each dry cell connected to the ocean
+     * through lower ground; 65535 where it never would. Made once, so a tide is only a comparison per cell.
+     */
+    public readonly tideRise: Uint16Array = new Uint16Array(0)
+  ) {
+    this.dynDepth = new Uint8Array(width * height);
   }
 
-  /** Water depth 0..1 (0 on land). */
+  /** Water standing on dry cells now (tide and flood), depth 1..255 meaning 0..1; 0 where dry. Changes with the weather and the tide, not saved. */
+  public dynDepth: Uint8Array;
+  /** Bumped when dynDepth changes, so a host can send it and a page redraw only then. */
+  public version = 0;
+
+  /** Replaces the standing dynamic water (the page receives it from the sim); returns whether anything changed. */
+  public setDynamic(depth: ArrayLike<number>): boolean {
+    let changed = false;
+    for (let i = 0; i < this.dynDepth.length; i++) {
+      const d = depth[i] ?? 0;
+      if (this.dynDepth[i] !== d) {
+        this.dynDepth[i] = d;
+        changed = true;
+      }
+    }
+    if (changed) this.version++;
+    return changed;
+  }
+
+  public isWater(index: number): boolean {
+    return this.water[index] > 0 || this.dynDepth[index] > 0;
+  }
+
+  /** Water depth 0..1 (0 on land), counting a tide or flood standing on the cell. */
   public depth01(index: number): number {
-    return this.water[index] / 255;
+    const d = this.water[index];
+    const dyn = this.dynDepth[index];
+    return (d > dyn ? d : dyn) / 255;
   }
 
   /** Deep water cannot be crossed (until a body can swim). */
@@ -89,6 +119,11 @@ export class ElevationField {
     return this.elevation[index] / ELEVATION_FULL;
   }
 
+  /** The permanent water only (a tide or flood is not): the cells that are always water, however the tide stands. */
+  public isPermanentWater(index: number): boolean {
+    return this.water[index] > 0;
+  }
+
   public exportView(): ElevationState {
     return {
       width: this.width,
@@ -97,12 +132,13 @@ export class ElevationField {
       lowland: this.lowland,
       elevation: Array.from(this.elevation),
       water: Array.from(this.water),
+      dyn: Array.from(this.dynDepth),
     };
   }
 
   /** A page only draws the field: the riparian lift and plates are not needed there. */
   public static forView(state: ElevationState): ElevationField {
-    return new ElevationField(
+    const view = new ElevationField(
       state.width,
       state.height,
       Uint16Array.from(state.elevation),
@@ -112,6 +148,8 @@ export class ElevationField {
       [],
       state.lowland ?? 0
     );
+    if (state.dyn) view.setDynamic(state.dyn);
+    return view;
   }
 }
 
@@ -411,7 +449,45 @@ export function generateElevation(config: Readonly<SimulationConfig>): Elevation
   }
   const fertility = new Uint8Array(n);
   for (let i = 0; i < n; i++) if (water[i] === 0) fertility[i] = Math.round(Math.min(1, fmin + ((klo + khi) / 2) * raw[i]) * 255);
-  return new ElevationField(w, h, elevation, water, riparian, sea, plates, lowland, continents.label, continents.sizes, fertility);
+  return new ElevationField(w, h, elevation, water, riparian, sea, plates, lowland, continents.label, continents.sizes, fertility, tideRiseOf(w, h, elevation, water, sea));
+}
+
+/**
+ * For every dry cell, the smallest rise of the sea that floods it: a priority flood from the ocean (water below sea
+ * level) over the cells that connect to it, taking the highest ground crossed on the way. 65535 for cells the sea can
+ * never reach and 0 for ocean. The result is made once; a tide is then one comparison per cell.
+ */
+function tideRiseOf(w: number, h: number, elevation: Uint16Array, water: Uint8Array, sea: number): Uint16Array {
+  const n = w * h;
+  const seaRaw = sea * ELEVATION_FULL;
+  const reach = new Float64Array(n).fill(Infinity);
+  const heap = new MinHeap();
+  for (let i = 0; i < n; i++) {
+    if (water[i] > 0 && elevation[i] <= seaRaw) {
+      reach[i] = 0;
+      heap.push(0, i);
+    }
+  }
+  while (heap.size > 0) {
+    const [r, i] = heap.pop();
+    if (r > reach[i]) continue;
+    const x = i % w;
+    const y = (i - x) / w;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const j = ny * w + nx;
+      const rise = Math.max(r, Math.max(0, elevation[j] - seaRaw));
+      if (rise < reach[j]) {
+        reach[j] = rise;
+        heap.push(rise, j);
+      }
+    }
+  }
+  const out = new Uint16Array(n).fill(ELEVATION_FULL);
+  for (let i = 0; i < n; i++) out[i] = Number.isFinite(reach[i]) ? Math.min(ELEVATION_FULL, Math.round(reach[i])) : ELEVATION_FULL;
+  return out;
 }
 
 /** The factor on a move's cost for the slope between two cells: uphill costs more, downhill a little less. */

@@ -616,6 +616,15 @@ export interface SimulationConfig {
   elevationWaterChill: number; // Temperature lost standing in water
   elevationRiparianReach: number; // Cells from water over which the shore's wetness fades to nothing
   elevationFertilityMean: number; // Average fertility of dry land (the soil map is scaled to this); the old disc world averaged about 0.6
+  dynamicWaterEnabled: boolean; // Tides and floods put shallow water over dry ground for a while; off: water never changes
+  waterInterval: number; // Ticks between recomputing standing water
+  tideAmplitude: number; // High-tide rise of the sea, in units of the height range
+  tidePeriod: number; // Ticks from one high tide to the next
+  tideMaxDepth: number; // Deepest tide water over dry ground, 0..1 (under the deep threshold)
+  floodRate: number; // How quickly the flood stage follows the rain, per water step
+  floodBankfull: number; // Flood stage below which rivers stay in their beds
+  floodReach: number; // Share of the riparian fringe that goes under at full flood
+  floodMaxDepth: number; // Deepest flood water, 0..1
   landSensingEnabled: boolean; // Brain inputs moveSlope, moveWater, moveRough, cover; off freezes them (bit-identical to before)
   swimGeneEnabled: boolean; // Inherited swimming (trait 57), only with elevation; off: deep water is a wall for all
   swimFounder: number;

@@ -97,6 +97,15 @@ export const DEFAULT_CONFIG: Readonly<SimulationConfig> = {
   elevationRiparianReach: 5, // wetness fades out over five cells from water
   elevationFertilityMean: 0.6, // about the old disc world's total food, now spread by water, slope and height
   elevationFertilityMin: 0.04,
+  dynamicWaterEnabled: true, // tides lift the sea over low coast, and rain-fed floods rise over river plains; off: water never changes
+  waterInterval: 5, // ticks between recomputing standing water
+  tideAmplitude: 0.02, // the sea rises this much of the height range at high tide
+  tidePeriod: 400, // ticks from one high tide to the next
+  tideMaxDepth: 0.06, // water over a flooded coast cell is at most this deep (under the deep threshold, so it can be waded)
+  floodRate: 0.02, // how fast the flood stage follows the rain (0..1 per water step)
+  floodBankfull: 0.25, // rain stage below which rivers stay in their beds
+  floodReach: 0.2, // at full flood, ground within this share of the river's wet fringe goes under
+  floodMaxDepth: 0.05, // flood water is at most this deep
   landSensingEnabled: true, // four brain inputs: slope, water and roughness of the cell a move enters, and cover underfoot (zero when their field is off)
   swimGeneEnabled: true, // inherited swimming (trait 57); only with elevation. Off: nobody can cross deep water
   swimFounder: 0, // founders cannot swim; it has to arise by mutation near the shore

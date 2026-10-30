@@ -1,6 +1,6 @@
 import { LineageTracker, type AncestorNode } from './lineage';
 import { EnergyLedger, type LedgerReport } from './ledger';
-import { ElevationField, elevationTemperature, generateElevation, slopeMoveFactor, swimMoveFactor, wadeMoveFactor } from './elevation';
+import { ELEVATION_FULL, ElevationField, elevationTemperature, generateElevation, slopeMoveFactor, swimMoveFactor, wadeMoveFactor } from './elevation';
 import { TerrainField, coverExposure, generateTerrain, roughnessMoveFactor, type TerrainState } from './terrain';
 import { PRNG } from './prng';
 import { DIRECTION_OFFSETS } from './types';
@@ -143,6 +143,8 @@ export interface WorldState {
   readonly terrain?: TerrainState;
   /** Live soil fertility (absent in saves from before dynamic fertility, or with it off; such saves load with it off). */
   readonly soilFertility?: readonly number[];
+  /** Flood stage 0..1 (dynamic water on). */
+  readonly floodStage?: number;
   /** Active death pulses (absent in saves before predator-prey arms race, or when empty). */
   readonly deathPulses?: readonly DeathPulse[];
 }
@@ -295,6 +297,8 @@ export class World {
   /** Cells of deep water, which are also in `obstacles` (nothing can cross them yet); the page draws these as water, not rock. */
   public readonly deepWater = new Set<string>();
   private deepGridCache: Uint8Array | null = null;
+  /** How far the rain has swelled the rivers, 0..1: follows the weather's soil moisture and drains slowly. Saved with dynamic water. */
+  private floodStage = 0;
 
   public selectedOrganismId: string | null = null;
   private cachedMetrics: WorldMetrics | null = null;
@@ -360,6 +364,7 @@ export class World {
     this.elevationField = null;
     this.deepWater.clear();
     this.deepGridCache = null;
+    this.floodStage = 0;
     this.lineageTracker = new LineageTracker();
     this.nextOrganismSeq = 0;
     this.obstacles.clear();
@@ -700,6 +705,7 @@ export class World {
       ...(this.config.nutrientCycleEnabled ? { soilNutrients: Array.from(this.soil().nutrients) } : {}),
       ...(this.config.terrainEnabled ? { terrain: this.getTerrain()!.exportState() } : {}),
       ...(this.config.fertilityDynamicEnabled ? { soilFertility: Array.from(this.soil().fertility) } : {}),
+      ...(this.config.dynamicWaterEnabled && this.config.elevationEnabled ? { floodStage: this.floodStage } : {}),
       ...(this.deathPulses.length > 0 ? { deathPulses: this.deathPulses.map((dp) => ({ ...dp })) } : {}),
     };
   }
@@ -734,6 +740,9 @@ export class World {
     for (const k of WORLD_COUNTERS) world[k] = state.counters[k] ?? 0;
     // Saves from before dynamic fertility load with it off (their fertility was the fixed map).
     if (!state.soilFertility && (state.config as Partial<SimulationConfig>).fertilityDynamicEnabled === undefined) world.config.fertilityDynamicEnabled = false;
+    // Saves from before dynamic water load with it off (their water never changed).
+    if ((state.config as Partial<SimulationConfig>).dynamicWaterEnabled === undefined) world.config.dynamicWaterEnabled = false;
+    world.floodStage = state.floodStage ?? 0;
     // Saves from before elevation load with it off (their world had no continents).
     if ((state.config as Partial<SimulationConfig>).elevationEnabled === undefined) world.config.elevationEnabled = false;
     // Saves from before terrain load with it off (their world was made without it).
@@ -750,6 +759,7 @@ export class World {
         if (restoredElevation.isDeep(i, world.config)) world.deepWater.add(`${i % world.config.gridWidth},${Math.floor(i / world.config.gridWidth)}`);
       }
     }
+    world.updateWater(true);
     world.foodRegions.length = 0;
     world.foodRegions.push(...state.foodRegions.map((r) => ({ ...r })));
     world.foodPatches.clear();
@@ -2069,6 +2079,50 @@ export class World {
     return (this.deepGridCache = grid);
   }
 
+  /**
+   * Tides and floods: shallow water standing on dry ground for a while. The tide lifts the sea over low coast
+   * connected to it (`tideRise`); the flood stage follows the weather's soil moisture and puts the wet fringe of
+   * rivers and lakes under water in proportion. Deep water, the obstacles and the plants' medium are not touched:
+   * a tide or flood only changes how dry cells cost to enter and how cold they are. Recomputed every
+   * `waterInterval` ticks; a pure function of the tick, the flood stage and the fixed map.
+   */
+  private updateWater(force = false): void {
+    const c = this.config;
+    const e = this.elevationField;
+    if (!e || !c.dynamicWaterEnabled || !c.elevationEnabled) return;
+    const interval = Math.max(1, Math.floor(c.waterInterval));
+    if (!force && this.tick % interval !== 0) return;
+    // A restored world rebuilds the water as of the last update, from the saved stage, so it continues identically.
+    const at = force ? this.tick - (this.tick % interval) : this.tick;
+    // Rain swells the rivers; they drain when it stops.
+    if (!force && this.weather && c.weatherEnabled) {
+      const m = this.weather.moisture;
+      let wet = 0;
+      for (let i = 0; i < m.length; i++) if (m[i] > 128) wet += m[i] - 128;
+      const target = Math.min(1, wet / m.length / 45);
+      this.floodStage += (target - this.floodStage) * c.floodRate;
+    }
+    const tide = c.tideAmplitude * (0.5 + 0.5 * Math.sin((2 * Math.PI * at) / Math.max(1, c.tidePeriod)));
+    const tideRaw = tide * ELEVATION_FULL;
+    const span = Math.max(1e-9, c.tideAmplitude * ELEVATION_FULL);
+    // Below the bank-full stage the rivers stay in their beds.
+    const stage = Math.max(0, (this.floodStage - c.floodBankfull) / Math.max(1e-9, 1 - c.floodBankfull));
+    const threshold = 1 - stage * c.floodReach;
+    const next = new Uint8Array(e.width * e.height);
+    for (let i = 0; i < next.length; i++) {
+      if (e.water[i] > 0) continue;
+      let depth = 0;
+      const rise = e.tideRise[i];
+      if (rise < tideRaw) depth = c.tideMaxDepth * Math.min(1, (tideRaw - rise) / span + 0.1);
+      if (stage > 0) {
+        const ripar = e.riparian[i] / 255;
+        if (ripar >= threshold && ripar > 0 && e.upland01(i) < 0.2) depth = Math.max(depth, c.floodMaxDepth * stage * ripar);
+      }
+      next[i] = depth > 0 ? Math.max(1, Math.round(depth * 255)) : 0;
+    }
+    e.setDynamic(next);
+  }
+
   /** The land fields as read-only references for the brain's land inputs. */
   private landView(): LandView {
     return {
@@ -2317,6 +2371,8 @@ export class World {
       gridWidth,
       gridHeight,
     } = this.config;
+
+    this.updateWater();
 
     // Worn ground drifts back toward the original terrain.
     if (this.config.terrainEnabled && this.config.terrainWearEnabled) {
